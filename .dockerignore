@@ -1,0 +1,28 @@
+# Git
+.git
+.gitignore
+
+# Python caches
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.import_linter_cache
+
+# Virtual environments
+.venv
+venv
+
+# IDE
+.idea
+.vscode
+
+# Docs and tooling configs not needed at runtime
+docs
+.github
+*.md
+.commitlintrc*

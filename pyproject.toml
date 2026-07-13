@@ -55,3 +55,9 @@ name = "retrieval_qa and depth_dive must not import api or ingestion"
 type = "forbidden"
 source_modules = ["retrieval_qa", "depth_dive"]
 forbidden_modules = ["api", "ingestion"]
+
+[[tool.importlinter.contracts]]
+name = "ingestion must not import api"
+type = "forbidden"
+source_modules = ["ingestion"]
+forbidden_modules = ["api"]
