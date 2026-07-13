@@ -40,7 +40,7 @@ feat(retrieval-qa): add recall@k retrieval evaluation job
 
 fix(retrieval-qa): correct chunk boundary off-by-one in paper chunker
 
-docs: add ADR-0009 for structured groundedness response schema
+docs: describe structured groundedness response schema in coding standards
 
 chore: bump fastapi to 0.115
 

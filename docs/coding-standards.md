@@ -9,7 +9,7 @@ This project hand-rolls its RAG pipeline specifically so retrieval mechanics sta
 ## Typing
 
 - **`mypy --strict`** — every function has typed parameters and return values. No implicit `Any`. This is enforced in CI (see `tech-stack.md`), not just a style suggestion.
-- Pydantic v2 models are the boundary type for all I/O — API requests/responses, and Harness A's internal `HarnessAResponse` (ADR-0009). Don't pass bare dicts across module boundaries where a typed model should exist.
+- Pydantic v2 models are the boundary type for all I/O — API requests/responses, and Harness A's internal `HarnessAResponse`. Don't pass bare dicts across module boundaries where a typed model should exist.
 - Prefer precise types over `str`/`dict` catch-alls (e.g. a `PassageId` type alias over a bare `str`, if it's used consistently enough to warrant one).
 
 ## Docstrings
@@ -40,13 +40,13 @@ def chunk_paper(document: IngestedDocument) -> list[Chunk]:
 
 - **pytest**, one test module per source module, mirroring the package structure (`retrieval_qa/retrieval.py` → `tests/retrieval_qa/test_retrieval.py`).
 - Test names describe behavior, not implementation: `test_recall_at_k_flags_missing_expected_passage`, not `test_eval_function`.
-- Retrieval-relevant tests (chunking, embedding calls, query logic) are the ones gated by the retrieval eval CI job (ADR-0007) — keep this code path identifiable (e.g. consistent module naming) so path-based CI gating stays accurate as the codebase grows.
+- Retrieval-relevant tests (chunking, embedding calls, query logic) are the ones most likely to be gated by a future retrieval-evaluation CI job — keep this code path identifiable (e.g. consistent module naming) so path-based CI gating stays accurate as the codebase grows.
 - Mock hosted API calls (embeddings, inference) in unit tests — real API calls belong in the retrieval eval job specifically, not scattered across the general test suite.
 
 ## Error handling
 
 - Raise specific, named exceptions rather than bare `Exception` — e.g. `IngestionError`, `RetrievalError`, `GroundingFailure` — so callers (and CI test assertions) can distinguish failure modes.
-- Harness A's contract (ADR-0009): when the system prompt can't ground an answer in the injected context, this is a **valid response** (`grounded=False` with a "not found" answer), not an exception. Reserve exceptions for genuine failures (API errors, malformed documents), not "no good answer found."
+- Harness A's contract: when the system prompt can't ground an answer in the injected context, this is a **valid response** (`grounded=False` with a "not found" answer), not an exception. Reserve exceptions for genuine failures (API errors, malformed documents), not "no good answer found."
 
 ## Linting and formatting
 
