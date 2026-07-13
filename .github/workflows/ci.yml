@@ -1,0 +1,131 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  # 1. THE DETECTOR JOB
+  detect-changes:
+    name: Check modified packages
+    runs-on: ubuntu-latest
+    outputs:
+      # Exposes the list of changed packages as a JSON array output
+      packages: ${{ steps.filter.outputs.changes }}
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          # If global config changes, we force ALL packages to test.
+          # Otherwise, a package only runs if its specific folder changes.
+          filters: |
+            core:
+              - 'core/**'
+              - 'pyproject.toml'
+              - 'uv.lock'
+              - '.github/workflows/ci.yml'
+            retrieval_qa:
+              - 'retrieval_qa/**'
+              - 'pyproject.toml'
+              - 'uv.lock'
+              - '.github/workflows/ci.yml'
+            depth_dive:
+              - 'depth_dive/**'
+              - 'pyproject.toml'
+              - 'uv.lock'
+              - '.github/workflows/ci.yml'
+            api:
+              - 'api/**'
+              - 'pyproject.toml'
+              - 'uv.lock'
+              - '.github/workflows/ci.yml'
+            ingestion:
+              - 'ingestion/**'
+              - 'pyproject.toml'
+              - 'uv.lock'
+              - '.github/workflows/ci.yml'
+
+  # 2. THE QUALITY JOB (DYNAMIC MATRIX)
+  quality:
+    name: ${{ matrix.package }} — lint, typecheck, tests
+    needs: detect-changes
+    # Only spin up this job if the detector found relevant code changes
+    if: ${{ needs.detect-changes.outputs.packages != '[]' && needs.detect-changes.outputs.packages != '' }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Converts the string output '["api", "core"]' into a live GitHub Actions matrix
+        package: ${{ fromJSON(needs.detect-changes.outputs.packages) }}
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          version: "0.11.24"
+          enable-cache: true
+          
+      - name: Sync dependencies
+        run: uv sync
+        
+      - name: Ruff lint
+        run: uv run ruff check ${{ matrix.package }}
+        
+      - name: Ruff format
+        run: uv run ruff format --check ${{ matrix.package }}
+        
+      - name: Mypy
+        run: uv run mypy ${{ matrix.package }}
+        
+      - name: Pytest
+        run: uv run pytest ${{ matrix.package }}
+
+  # 3. MODULE BOUNDARIES
+  boundaries:
+    name: import-linter module boundaries
+    needs: detect-changes
+    # Run the architectural linter if any code or core setup changes
+    if: ${{ needs.detect-changes.outputs.packages != '[]' && needs.detect-changes.outputs.packages != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          version: "0.11.24"
+          enable-cache: true
+          
+      - name: Sync dependencies
+        run: uv sync
+        
+      - name: Import-linter
+        run: uv run lint-imports
+
+  # 4. COMMIT LINT
+  commitlint:
+    name: commit message format
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Lint commit messages
+        uses: wagoid/commitlint-github-action@b948419dd99f3fd78a6548d48f94e3df7f6bf3ed # v6.2.1
+        with:
+          configFile: commitlint.config.mjs
