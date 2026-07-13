@@ -1,0 +1,15 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "retrieval-qa"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = ["core"]
+
+[tool.uv.sources]
+core = { workspace = true }
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/retrieval_qa"]

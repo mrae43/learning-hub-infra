@@ -1,0 +1,57 @@
+[project]
+name = "learning-hub"
+version = "0.1.0"
+requires-python = ">=3.12"
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = ["core", "retrieval_qa", "depth_dive", "api", "ingestion"]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.6",
+    "mypy>=1.11",
+    "pytest>=8",
+    "import-linter>=2.1",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "C4", "RUF"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["core", "retrieval_qa", "depth_dive", "api", "ingestion"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+mypy_path = ["core/src", "retrieval_qa/src", "depth_dive/src", "api/src", "ingestion/src"]
+explicit_package_bases = true
+
+[tool.pytest.ini_options]
+addopts = "--strict-markers --import-mode=importlib"
+
+[tool.importlinter]
+root_packages = ["core", "retrieval_qa", "depth_dive", "api", "ingestion"]
+
+[[tool.importlinter.contracts]]
+name = "retrieval_qa and depth_dive must not import each other"
+type = "independence"
+modules = ["retrieval_qa", "depth_dive"]
+
+[[tool.importlinter.contracts]]
+name = "core must not import retrieval_qa, depth_dive, api, or ingestion"
+type = "forbidden"
+source_modules = ["core"]
+forbidden_modules = ["retrieval_qa", "depth_dive", "api", "ingestion"]
+
+[[tool.importlinter.contracts]]
+name = "retrieval_qa and depth_dive must not import api or ingestion"
+type = "forbidden"
+source_modules = ["retrieval_qa", "depth_dive"]
+forbidden_modules = ["api", "ingestion"]

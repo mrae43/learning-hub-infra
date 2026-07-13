@@ -1,0 +1,17 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "api"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = ["core", "retrieval-qa", "depth-dive"]
+
+[tool.uv.sources]
+core = { workspace = true }
+retrieval-qa = { workspace = true }
+depth-dive = { workspace = true }
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/api"]
