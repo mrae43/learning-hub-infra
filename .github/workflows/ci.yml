@@ -129,3 +129,23 @@ jobs:
         uses: wagoid/commitlint-github-action@b948419dd99f3fd78a6548d48f94e3df7f6bf3ed # v6.2.1
         with:
           configFile: commitlint.config.mjs
+
+  # 5. AGGREGATE GATE (single predictable check name for ruleset)
+  ci-passed:
+    name: CI passed
+    if: always()
+    needs: [detect-changes, quality, boundaries, commitlint]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check all prerequisites passed
+        env:
+          DETECT: ${{ needs.detect-changes.result }}
+          QUALITY: ${{ needs.quality.result }}
+          BOUNDARIES: ${{ needs.boundaries.result }}
+          COMMITLINT: ${{ needs.commitlint.result }}
+        run: |
+          for result in "$DETECT" "$QUALITY" "$BOUNDARIES" "$COMMITLINT"; do
+            if [ "$result" = "failure" ] || [ "$result" = "cancelled" ]; then
+              exit 1
+            fi
+          done
