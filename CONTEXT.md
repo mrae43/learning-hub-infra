@@ -10,6 +10,9 @@ The synthesis system that consumes Retrieval QA's retrieval layer and produces D
 ## Document-Type Chunker
 A structure-aware chunking strategy specific to each ingested document type, rather than one fixed-size splitter applied uniformly. Papers chunk along section/subsection boundaries, books along chapter/heading boundaries, documentation along page/API-entry boundaries. Chosen as a separation-of-concerns principle for the hand-rolled pipeline (see ADR-0003) — each document type owns its own chunking logic rather than sharing a generic splitter.
 
+## Chunk
+The atomic retrievable unit of an ingested document, produced by a Document-Type Chunker. Has stable identity, an ordered position within its source document, and content; once embedded, it becomes retrievable as Injected Context and citable in a Retrieval QA response. Distinct from a "Captured Passage" — a captured passage is user-selected and grounds Depth Dive; a chunk is system-produced and grounds Retrieval QA.
+
 ## Ingested Corpus
 The full set of user-uploaded papers, books, and documentation, stored in a single **global** vector database (not siloed per document or per session). Retrieval QA retrieves across the entire ingested corpus by default — cross-document QA (e.g. "compare how paper X and paper Y define attention") is in scope, not a special mode.
 
