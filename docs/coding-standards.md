@@ -45,7 +45,7 @@ def chunk_paper(document: IngestedDocument) -> list[Chunk]:
 
 ## Error handling
 
-- Raise specific, named exceptions rather than bare `Exception` — e.g. `IngestionError`, `RetrievalError`, `GroundingFailure` — so callers (and CI test assertions) can distinguish failure modes.
+- Raise specific, named exceptions rather than bare `Exception` — e.g. `IngestionError`, `RetrievalError` — so callers (and CI test assertions) can distinguish failure modes.
 - Harness A's contract: when the system prompt can't ground an answer in the injected context, this is a **valid response** (`grounded=False` with a "not found" answer), not an exception. Reserve exceptions for genuine failures (API errors, malformed documents), not "no good answer found."
 
 ## Linting and formatting
