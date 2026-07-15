@@ -6,6 +6,7 @@ build-backend = "hatchling.build"
 name = "depth-dive"
 version = "0.1.0"
 requires-python = ">=3.12"
+license = "MIT"
 dependencies = ["core"]
 
 [tool.uv.sources]
