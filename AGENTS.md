@@ -3,7 +3,7 @@
 
 ## Current state
 
-This repository is **scaffolded but pre-implementation**. ADRs, stack decisions, coding standards, and the monorepo layout are in place, plus the build/CI scaffolding: root + per-module `pyproject.toml` (uv workspace), `uv.lock`, `.github/workflows/` (`pr-checks.yml`, `release.yml`), `commitlint.config.js`, and empty package skeletons (`src/<name>/__init__.py` + `tests/<name>/test_smoke.py`). **No implementation source code yet** — the `__init__.py` files are placeholders. The toolchain is configured and green: `uv sync` installs ruff/mypy/pytest/import-linter and builds the workspace members; `uv run ruff check`, `uv run ruff format --check`, `uv run mypy`, `uv run lint-imports`, and `uv run pytest` all pass on the scaffold.
+This repository is in **early implementation (tracer bullet complete)**. ADRs, stack decisions, coding standards, and the monorepo layout are in place, plus the build/CI scaffolding: root + per-module `pyproject.toml` (uv workspace), `uv.lock`, `.github/workflows/` (`ci.yml`, `cd.yml`, `security.yml`, `dependabot-auto-merge.yml`), `commitlint.config.mjs`, and `Dockerfile`. Four of five packages have real implementation code (~2300 lines total); only `depth_dive/` still has just placeholders. The toolchain is green: `uv sync` installs all deps; `uv run ruff check`, `uv run ruff format --check`, `uv run mypy`, `uv run lint-imports`, and `uv run pytest` all pass.
 
 ## Authoritative sources — read before acting
 
@@ -88,8 +88,8 @@ Rules:
 
 ## What does not exist yet
 
-- Implementation source code — the `src/<name>/__init__.py` files are empty placeholders; internal sub-packages (`chunking/`, `retrieval/`, `generation/`, `web_search/`, `types/`, `routes/`, etc.) are created alongside the first file that needs them.
-- `Dockerfile`, `.env.example` (the `release.yml` Docker build job is structural and will work once a `Dockerfile` lands).
-- Runtime dependencies in member `pyproject.toml` files (Pydantic, SQLAlchemy, pgvector, FastAPI, etc.) — add each alongside the first implementation commit that needs it, per the bootstrap order below.
+- **Retrieval QA query logic** — `retrieval_qa/src/retrieval_qa/retrieval/` is not yet created; there is no `POST /query` endpoint or similarity-search pipeline.
+- **Depth Dive implementation** — `depth_dive/src/depth_dive/generation/` and `web_search/` are still placeholders.
+- **`api/routes/__init__.py`** — route modules are imported directly in `server.py`; no package init file exists.
 
-When adding the first implementation files, bootstrap in the order implied by the monorepo layout: `core/` → `retrieval_qa/` → `api/` → `ingestion/` → `depth_dive/`.
+Bootstrap order is already complete for the first four packages (`core/` → `retrieval_qa/` → `api/` → `ingestion/`). `depth_dive/` is the remaining package to implement.
