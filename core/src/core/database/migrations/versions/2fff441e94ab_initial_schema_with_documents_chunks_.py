@@ -85,7 +85,12 @@ def upgrade() -> None:
         sa.Column("position", sa.Integer(), nullable=False),
         sa.Column("content", sa.String(), nullable=False),
         sa.Column("token_count", sa.Integer(), nullable=False),
-        sa.Column("type_metadata", sa.JSON(), nullable=False),
+        sa.Column(
+            "type_metadata",
+            sa.JSON(),
+            server_default=sa.text("'{}'::jsonb"),
+            nullable=False,
+        ),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
