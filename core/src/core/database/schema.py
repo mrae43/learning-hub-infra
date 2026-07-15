@@ -21,6 +21,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    Text,
     UniqueConstraint,
     text,
 )
@@ -54,7 +55,7 @@ class Document(Base):
         primary_key=True,
         default=_uuid7_stdlib,
     )
-    title: Mapped[str]
+    title: Mapped[str] = mapped_column(Text())
     document_type: Mapped[DocumentType] = mapped_column(
         ENUM(
             DocumentType,
@@ -63,7 +64,7 @@ class Document(Base):
             values_callable=lambda enum: [e.value for e in enum],
         ),
     )
-    source_filename: Mapped[str]
+    source_filename: Mapped[str] = mapped_column(Text())
     status: Mapped[DocumentStatus] = mapped_column(
         ENUM(
             DocumentStatus,
