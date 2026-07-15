@@ -6,12 +6,21 @@ build-backend = "hatchling.build"
 name = "api"
 version = "0.1.0"
 requires-python = ">=3.12"
-dependencies = ["core", "retrieval-qa", "depth-dive"]
+dependencies = [
+    "core",
+    "retrieval-qa",
+    "depth-dive",
+    "ingestion",
+    "fastapi>=0.111",
+    "uvicorn>=0.30",
+    "python-multipart>=0.0.9",
+]
 
 [tool.uv.sources]
 core = { workspace = true }
 retrieval-qa = { workspace = true }
 depth-dive = { workspace = true }
+ingestion = { workspace = true }
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/api"]

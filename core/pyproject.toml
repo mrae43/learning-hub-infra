@@ -6,7 +6,16 @@ build-backend = "hatchling.build"
 name = "core"
 version = "0.1.0"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "pydantic>=2",
+    "pydantic-settings>=2",
+    "sqlalchemy>=2",
+    "alembic>=1.13",
+    "pgvector>=0.3",
+    "psycopg2-binary>=2.9",
+    "openai>=1.35",
+    "uuid-utils>=0.10",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/core"]

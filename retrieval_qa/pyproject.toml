@@ -6,7 +6,10 @@ build-backend = "hatchling.build"
 name = "retrieval-qa"
 version = "0.1.0"
 requires-python = ">=3.12"
-dependencies = ["core"]
+dependencies = [
+    "core",
+    "pypdf>=4.2",
+]
 
 [tool.uv.sources]
 core = { workspace = true }
