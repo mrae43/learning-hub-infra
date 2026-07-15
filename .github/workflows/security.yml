@@ -76,7 +76,7 @@ jobs:
           enable-cache: true
 
       - name: Sync dependencies
-        run: uv sync
+        run: uv sync --all-packages
 
       - name: Check licenses
-        run: uv run pip-licenses --allow-only="MIT;MIT License;Apache-2.0;Apache-2.0 OR BSD-2-Clause;BSD-2-Clause;BSD-3-Clause;BSD License;Mozilla Public License 2.0 (MPL 2.0);PSF;PSF-2.0;Unlicense;ISC"
+        run: uv run pip-licenses --allow-only="Apache Software License;Apache Software License; MIT License;Apache-2.0;Apache-2.0 OR BSD-2-Clause;BSD License;BSD-2-Clause;BSD-3-Clause;GNU Library or Lesser General Public License (LGPL);ISC;MIT;MIT AND PSF-2.0;MIT License;MIT-CMU;MPL-2.0 AND MIT;Mozilla Public License 2.0 (MPL 2.0);PSF-2.0;Unlicense"

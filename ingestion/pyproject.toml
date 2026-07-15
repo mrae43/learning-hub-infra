@@ -6,7 +6,12 @@ build-backend = "hatchling.build"
 name = "ingestion"
 version = "0.1.0"
 requires-python = ">=3.12"
-dependencies = ["core", "retrieval-qa"]
+license = "MIT"
+dependencies = [
+    "core",
+    "retrieval-qa",
+    "fastapi>=0.111",
+]
 
 [tool.uv.sources]
 core = { workspace = true }

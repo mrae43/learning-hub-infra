@@ -36,5 +36,4 @@ ENV PATH="/app/.venv/bin:$PATH"
 
 USER app
 
-# TODO: replace with the real entrypoint once api/main.py is implemented.
-CMD ["python", "-c", "print('Learning Hub scaffold container is running')"]
+CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
