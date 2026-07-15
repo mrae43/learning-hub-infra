@@ -77,7 +77,7 @@ jobs:
           enable-cache: true
           
       - name: Sync dependencies
-        run: uv sync
+        run: uv sync --all-packages
         
       - name: Ruff lint
         run: uv run ruff check ${{ matrix.package }}
@@ -108,7 +108,7 @@ jobs:
           enable-cache: true
           
       - name: Sync dependencies
-        run: uv sync
+        run: uv sync --all-packages
         
       - name: Import-linter
         run: uv run lint-imports
