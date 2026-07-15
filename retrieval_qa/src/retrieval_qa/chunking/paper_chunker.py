@@ -5,9 +5,9 @@ emitting ``PaperChunkMetadata`` for each chunk.
 """
 
 import re
-from dataclasses import dataclass
 from io import BytesIO
 
+from pydantic import BaseModel, ConfigDict
 from pypdf import PdfReader
 
 from core.types.chunk import PaperChunkMetadata
@@ -23,9 +23,10 @@ _SECTION_PATTERN = re.compile(
 )
 
 
-@dataclass
-class PaperChunk:
+class PaperChunk(BaseModel):
     """A single chunk produced by the paper chunker."""
+
+    model_config = ConfigDict(extra="forbid")
 
     content: str
     metadata: PaperChunkMetadata
