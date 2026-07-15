@@ -9,7 +9,6 @@ from fastapi import APIRouter, BackgroundTasks, Form, HTTPException, Request, Re
 from core.config.settings import settings
 from core.database.connection import db_session
 from core.database.schema import Document
-from core.exceptions import IngestionError
 from core.types.document import DocumentStatusResponse, DocumentType
 from ingestion.tasks import schedule_ingestion
 
@@ -75,8 +74,6 @@ async def ingest_document(
             session.flush()
             document_id: UUID = document.document_id
             response_body = DocumentStatusResponse.model_validate(document)
-    except IngestionError as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Failed to create document: {exc}") from exc
 

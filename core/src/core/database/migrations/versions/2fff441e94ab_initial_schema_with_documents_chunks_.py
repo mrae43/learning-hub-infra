@@ -47,13 +47,13 @@ def upgrade() -> None:
     op.create_table(
         "documents",
         sa.Column("document_id", sa.Uuid(), nullable=False),
-        sa.Column("title", sa.String(), nullable=False),
+        sa.Column("title", sa.Text(), nullable=False),
         sa.Column(
             "document_type",
             document_type_enum,
             nullable=False,
         ),
-        sa.Column("source_filename", sa.String(), nullable=False),
+        sa.Column("source_filename", sa.Text(), nullable=False),
         sa.Column(
             "status",
             document_status_enum,
@@ -85,7 +85,12 @@ def upgrade() -> None:
         sa.Column("position", sa.Integer(), nullable=False),
         sa.Column("content", sa.String(), nullable=False),
         sa.Column("token_count", sa.Integer(), nullable=False),
-        sa.Column("type_metadata", sa.JSON(), nullable=False),
+        sa.Column(
+            "type_metadata",
+            sa.JSON(),
+            server_default=sa.text("'{}'::jsonb"),
+            nullable=False,
+        ),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
