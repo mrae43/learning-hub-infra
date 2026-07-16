@@ -1,11 +1,13 @@
-"""Shared fixtures for api tests."""
+"""Shared fixtures and utilities for api tests."""
 
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from unittest.mock import MagicMock
 
 import pytest
 from fastapi.testclient import TestClient
+
+IngestAPaper = Callable[[str], str]
 
 
 @pytest.fixture
@@ -60,6 +62,25 @@ def mock_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     from api.server import create_app
 
     return TestClient(create_app())
+
+
+@pytest.fixture
+def ingest_a_paper(client: TestClient, sample_paper_pdf: bytes) -> IngestAPaper:
+    """Fixture returning a callable that ingests a paper and awaits ready."""
+
+    def _ingest(title: str = "Paper") -> str:
+        response = client.post(
+            "/ingest",
+            files={"file": ("sample.pdf", sample_paper_pdf, "application/pdf")},
+            data={"title": title, "document_type": "paper"},
+        )
+        assert response.status_code == 202
+        document_id = response.json()["document_id"]
+        status = client.get(f"/documents/{document_id}").json()["status"]
+        assert status == "ready", f"document never reached ready: {status}"
+        return str(document_id)
+
+    return _ingest
 
 
 def _default_fake_client(*args: object, **kwargs: object) -> MagicMock:
