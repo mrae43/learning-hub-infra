@@ -7,7 +7,7 @@ import pytest
 
 from api.controllers.qa_controller import run_query
 from core.exceptions import UpstreamBadResponse, UpstreamUnavailable
-from core.types.responses import HarnessAResponse
+from core.types.responses import CitedPassage, HarnessAResponse
 
 
 def _fake_embeddings_client(vector: list[float], side_effect: object | None = None) -> MagicMock:
@@ -37,8 +37,8 @@ def _vector(value: float = 0.5) -> list[float]:
 def test_run_query_grounds_when_retrieval_returns_chunks(monkeypatch: pytest.MonkeyPatch) -> None:
     """Relevant chunks yield grounded=True with cited_passages populated."""
     retrieved_chunks = [
-        MagicMock(chunk_id=uuid4(), text="pgvector supports HNSW indexes."),
-        MagicMock(chunk_id=uuid4(), text="Cosine distance uses the <=> operator."),
+        CitedPassage(chunk_id=uuid4(), text="pgvector supports HNSW indexes."),
+        CitedPassage(chunk_id=uuid4(), text="Cosine distance uses the <=> operator."),
     ]
 
     fake_session = MagicMock()
@@ -238,7 +238,7 @@ def test_run_query_propagates_upstream_bad_response_from_inference(
 
 def test_run_query_passes_chunks_to_llm_prompt(monkeypatch: pytest.MonkeyPatch) -> None:
     """The injected-context prompt embeds referenced chunk text into the user message."""
-    retrieved = [MagicMock(chunk_id=uuid4(), text="chunk A text")]
+    retrieved = [CitedPassage(chunk_id=uuid4(), text="chunk A text")]
 
     monkeypatch.setattr(
         "api.controllers.qa_controller.retrieve_relevant_chunks",

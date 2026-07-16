@@ -19,27 +19,12 @@ The cosine distance operator ``<=>`` matches the HNSW index's
 ``vector_cosine_ops`` opclass declared in the Alembic migration (ADR-0014).
 """
 
-from uuid import UUID
-
-from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.exc import InterfaceError, OperationalError
 from sqlalchemy.orm import Session
 
 from core.exceptions import UpstreamUnavailable
-
-
-class RetrievedChunk(BaseModel):
-    """A retrieved chunk with the fields needed downstream.
-
-    ``text`` mirrors ``CitedPassage.text`` (full chunk content) so the QA
-    controller can build both the prompt and the response from one shape
-    without re-fetching.
-    """
-
-    chunk_id: UUID
-    text: str
-
+from core.types.responses import CitedPassage
 
 _RETRIEVE_SQL = text(
     """
@@ -66,7 +51,7 @@ def retrieve_relevant_chunks(
     model_name: str,
     ef_search: int,
     top_k: int,
-) -> list[RetrievedChunk]:
+) -> list[CitedPassage]:
     """Retrieve the top-k closest chunks for ``query_vector`` by cosine distance.
 
     Issues ``SET LOCAL hnsw.ef_search`` inside the caller's transaction and
@@ -104,12 +89,12 @@ def retrieve_relevant_chunks(
     except (OperationalError, InterfaceError) as exc:
         raise UpstreamUnavailable(f"Database unreachable: {exc}") from exc
     rows = result.fetchall()
-    chunks: list[RetrievedChunk] = []
+    chunks: list[CitedPassage] = []
     for row in rows:
         chunk_id = row._mapping["chunk_id"]
         text_content = row._mapping["text"]
-        chunks.append(RetrievedChunk(chunk_id=chunk_id, text=text_content))
+        chunks.append(CitedPassage(chunk_id=chunk_id, text=text_content))
     return chunks
 
 
-__all__ = ["RetrievedChunk", "retrieve_relevant_chunks"]
+__all__ = ["CitedPassage", "retrieve_relevant_chunks"]
