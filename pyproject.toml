@@ -16,7 +16,7 @@ dev = [
     "pytest>=8",
     "import-linter>=2.1",
     "pip-licenses>=5",
-    "httpx>=0.27",
+    "httpx2>=2.0.0",
     "reportlab>=4.0",
     "types-reportlab>=4.0",
 ]

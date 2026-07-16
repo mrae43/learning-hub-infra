@@ -62,6 +62,22 @@ jobs:
     # Only spin up this job if the detector found relevant code changes
     if: ${{ needs.detect-changes.outputs.packages != '[]' && needs.detect-changes.outputs.packages != '' }}
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: learning_hub
+          POSTGRES_PASSWORD: learning_hub
+          POSTGRES_DB: learning_hub
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U learning_hub -d learning_hub"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql+psycopg2://learning_hub:learning_hub@localhost:5432/learning_hub
     strategy:
       fail-fast: false
       matrix:

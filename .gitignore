@@ -14,10 +14,9 @@ build/
 # Virtual environments
 .venv/
 venv/
-.env/
 
-# Keep .env.example (not ignored)
-.env.example
+# Environment files (.env.example is tracked by design)
+.env
 
 # IDE
 .vscode/
