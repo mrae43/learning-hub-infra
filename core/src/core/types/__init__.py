@@ -11,6 +11,7 @@ from core.types.document import (
     DocumentStatusResponse,
     DocumentType,
 )
+from core.types.retrieval_config import RetrievalConfig
 
 __all__ = [
     "BookChunkMetadata",
@@ -20,4 +21,5 @@ __all__ = [
     "DocumentType",
     "DocumentationChunkMetadata",
     "PaperChunkMetadata",
+    "RetrievalConfig",
 ]
