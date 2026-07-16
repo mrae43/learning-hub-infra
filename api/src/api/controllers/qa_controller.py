@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session
 
 from core.clients.embeddings_client import EmbeddingsClient
 from core.clients.llm_client import LLMClient
+from core.types.chat import ChatMessage
 from core.types.responses import CitedPassage, HarnessAResponse
 from retrieval_qa.retrieval.query import RetrievedChunk, retrieve_relevant_chunks
 
@@ -36,7 +37,7 @@ _SYSTEM_PROMPT = (
 def _build_messages(
     query: str,
     chunks: Sequence[RetrievedChunk],
-) -> list[dict[str, str]]:
+) -> list[ChatMessage]:
     """Assemble the chat-completions message list for the inference call.
 
     Args:
@@ -57,8 +58,8 @@ def _build_messages(
     user_parts.append(f"Question: {query}")
     user_message = "\n\n".join(p for p in user_parts if p)
     return [
-        {"role": "system", "content": _SYSTEM_PROMPT},
-        {"role": "user", "content": user_message},
+        ChatMessage(role="system", content=_SYSTEM_PROMPT),
+        ChatMessage(role="user", content=user_message),
     ]
 
 

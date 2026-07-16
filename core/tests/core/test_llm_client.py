@@ -7,6 +7,7 @@ from openai import APIConnectionError, APIStatusError
 
 from core.clients.llm_client import LLMClient
 from core.exceptions import UpstreamBadResponse, UpstreamUnavailable
+from core.types.chat import ChatMessage
 
 
 def _fake_completion(content: str) -> MagicMock:
@@ -45,7 +46,7 @@ def test_chat_returns_message_content(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(client, "_get_client", lambda: fake_openai)
 
     result = client.chat(
-        messages=[{"role": "user", "content": "What is the answer?"}],
+        messages=[ChatMessage(role="user", content="What is the answer?")],
     )
 
     assert result == "The answer is 42."
@@ -72,7 +73,7 @@ def test_chat_raises_upstream_unavailable_on_connection_error(
     monkeypatch.setattr(client, "_get_client", lambda: fake_openai)
 
     with pytest.raises(UpstreamUnavailable):
-        client.chat(messages=[{"role": "user", "content": "x"}])
+        client.chat(messages=[ChatMessage(role="user", content="x")])
 
 
 def test_chat_raises_upstream_bad_response_on_api_status_error(
@@ -86,7 +87,7 @@ def test_chat_raises_upstream_bad_response_on_api_status_error(
     monkeypatch.setattr(client, "_get_client", lambda: fake_openai)
 
     with pytest.raises(UpstreamBadResponse):
-        client.chat(messages=[{"role": "user", "content": "x"}])
+        client.chat(messages=[ChatMessage(role="user", content="x")])
 
 
 def test_chat_raises_upstream_bad_response_when_choices_empty(
@@ -102,7 +103,7 @@ def test_chat_raises_upstream_bad_response_when_choices_empty(
     monkeypatch.setattr(client, "_get_client", lambda: fake_openai)
 
     with pytest.raises(UpstreamBadResponse):
-        client.chat(messages=[{"role": "user", "content": "x"}])
+        client.chat(messages=[ChatMessage(role="user", content="x")])
 
 
 def test_chat_raises_upstream_bad_response_when_content_missing(
@@ -119,4 +120,4 @@ def test_chat_raises_upstream_bad_response_when_content_missing(
     monkeypatch.setattr(client, "_get_client", lambda: fake_openai)
 
     with pytest.raises(UpstreamBadResponse):
-        client.chat(messages=[{"role": "user", "content": "x"}])
+        client.chat(messages=[ChatMessage(role="user", content="x")])

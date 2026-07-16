@@ -7,12 +7,12 @@ narrow: one model, plain chat-completions shape, no streaming/tools.
 """
 
 from collections.abc import Sequence
-from typing import Any
 
 from openai import APIConnectionError, APIStatusError, OpenAI
 
 from core.config.settings import settings
 from core.exceptions import UpstreamBadResponse, UpstreamUnavailable
+from core.types.chat import ChatMessage
 
 
 class LLMClient:
@@ -39,11 +39,11 @@ class LLMClient:
             self._client = OpenAI(api_key=self._api_key)
         return self._client
 
-    def chat(self, messages: Sequence[dict[str, Any]]) -> str:
+    def chat(self, messages: Sequence[ChatMessage]) -> str:
         """Generate a completion synchronously and return the message content.
 
         Args:
-            messages: OpenAI chat-completions message list (role/content).
+            messages: Chat messages (role/content) to send to the model.
 
         Returns:
             The first choice's message content as a string.
@@ -57,10 +57,7 @@ class LLMClient:
         try:
             completion = self._get_client().chat.completions.create(
                 model=self._model,
-                # The OpenAI SDK expects its own TypedDict union for messages;
-                # we accept plain dicts at our boundary (ADR-0003 hand-rolled
-                # pipeline) and pass them through to the SDK.
-                messages=list(messages),  # type: ignore[arg-type]
+                messages=[m.model_dump() for m in messages],  # type: ignore[misc]
             )
         except APIConnectionError as exc:
             raise UpstreamUnavailable(f"Inference API unreachable: {exc}") from exc

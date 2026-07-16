@@ -258,9 +258,9 @@ def test_run_query_passes_chunks_to_llm_prompt(monkeypatch: pytest.MonkeyPatch) 
 
     llm_client.chat.assert_called_once()
     sent_messages = llm_client.chat.call_args.args[0]
-    user_msg = next(m for m in sent_messages if m["role"] == "user")
-    assert "chunk A text" in user_msg["content"]
-    assert "what are chunks?" in user_msg["content"]
+    user_msg = next(m for m in sent_messages if m.role == "user")
+    assert "chunk A text" in user_msg.content
+    assert "what are chunks?" in user_msg.content
 
 
 def test_run_query_no_chunks_prompt_does_not_include_passage_text(
@@ -285,6 +285,6 @@ def test_run_query_no_chunks_prompt_does_not_include_passage_text(
 
     llm_client.chat.assert_called_once()
     sent_messages = llm_client.chat.call_args.args[0]
-    user_msg = next(m for m in sent_messages if m["role"] == "user")
-    assert "topic the corpus does not cover" in user_msg["content"]
-    assert "Passages:" not in user_msg["content"]
+    user_msg = next(m for m in sent_messages if m.role == "user")
+    assert "topic the corpus does not cover" in user_msg.content
+    assert "Passages:" not in user_msg.content

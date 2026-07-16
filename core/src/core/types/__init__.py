@@ -1,5 +1,6 @@
 """Shared Pydantic boundary types."""
 
+from core.types.chat import ChatMessage
 from core.types.chunk import (
     BookChunkMetadata,
     DocumentationChunkMetadata,
@@ -13,6 +14,7 @@ from core.types.document import (
 
 __all__ = [
     "BookChunkMetadata",
+    "ChatMessage",
     "DocumentStatus",
     "DocumentStatusResponse",
     "DocumentType",
