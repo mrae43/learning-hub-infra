@@ -25,6 +25,7 @@ from core.clients.embeddings_client import EmbeddingsClient
 from core.clients.llm_client import LLMClient
 from core.types.chat import ChatMessage
 from core.types.responses import CitedPassage, HarnessAResponse
+from core.types.retrieval_config import RetrievalConfig
 from retrieval_qa.retrieval.query import retrieve_relevant_chunks
 
 _SYSTEM_PROMPT = (
@@ -69,9 +70,7 @@ def run_query(
     session: Session,
     embeddings_client: EmbeddingsClient,
     llm_client: LLMClient,
-    model_name: str,
-    ef_search: int,
-    top_k: int,
+    config: RetrievalConfig,
 ) -> HarnessAResponse:
     """Run the full Harness A query flow and return a ``HarnessAResponse``.
 
@@ -82,10 +81,7 @@ def run_query(
             session's transaction.
         embeddings_client: Client used to embed the query (1536-dim).
         llm_client: Client used to generate the answer.
-        model_name: Active embedding model name (provenance filter on
-            ``embeddings.model_name``).
-        ef_search: HNSW query-time candidate-list size.
-        top_k: Maximum number of chunks to retrieve.
+        config: Retrieval configuration (model name, ef_search, top_k).
 
     Returns:
         A ``HarnessAResponse`` with ``answer`` always populated,
@@ -104,9 +100,7 @@ def run_query(
     chunks = retrieve_relevant_chunks(
         query_vector=query_vector,
         session=session,
-        model_name=model_name,
-        ef_search=ef_search,
-        top_k=top_k,
+        config=config,
     )
 
     messages = _build_messages(query, chunks)

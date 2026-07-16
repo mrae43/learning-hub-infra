@@ -8,6 +8,7 @@ from core.clients.llm_client import LLMClient
 from core.config.settings import settings
 from core.database.connection import db_session
 from core.types.responses import HarnessARequest, HarnessAResponse
+from core.types.retrieval_config import RetrievalConfig
 
 router = APIRouter(tags=["query"])
 
@@ -34,7 +35,9 @@ def query(body: HarnessARequest) -> HarnessAResponse:
                 api_key=settings.openai_api_key,
                 model=settings.inference_model,
             ),
-            model_name=settings.embedding_model,
-            ef_search=settings.hnsw_ef_search,
-            top_k=settings.query_top_k,
+            config=RetrievalConfig(
+                model_name=settings.embedding_model,
+                ef_search=settings.hnsw_ef_search,
+                top_k=settings.query_top_k,
+            ),
         )

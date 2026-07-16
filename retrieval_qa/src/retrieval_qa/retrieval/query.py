@@ -25,6 +25,7 @@ from sqlalchemy.orm import Session
 
 from core.exceptions import UpstreamUnavailable
 from core.types.responses import CitedPassage
+from core.types.retrieval_config import RetrievalConfig
 
 _RETRIEVE_SQL = text(
     """
@@ -48,9 +49,7 @@ def retrieve_relevant_chunks(
     *,
     query_vector: list[float],
     session: Session,
-    model_name: str,
-    ef_search: int,
-    top_k: int,
+    config: RetrievalConfig,
 ) -> list[CitedPassage]:
     """Retrieve the top-k closest chunks for ``query_vector`` by cosine distance.
 
@@ -62,9 +61,7 @@ def retrieve_relevant_chunks(
         session: SQLAlchemy session bound to the documents database. The
             ``SET LOCAL`` is scoped to the current transaction, so callers
             should not commit before consuming the results.
-        model_name: Embedding model name to filter on (provenance column).
-        ef_search: HNSW candidate-list size for this query.
-        top_k: Maximum number of chunks to return.
+        config: Retrieval configuration (model name, ef_search, top_k).
 
     Returns:
         Chunks in ascending cosine-distance order. An empty list signals the
@@ -80,10 +77,10 @@ def retrieve_relevant_chunks(
         result = session.execute(
             _RETRIEVE_SQL,
             {
-                "ef_search": ef_search,
-                "model_name": model_name,
+                "ef_search": config.ef_search,
+                "model_name": config.model_name,
                 "query_vector": str(query_vector),
-                "top_k": top_k,
+                "top_k": config.top_k,
             },
         )
     except (OperationalError, InterfaceError) as exc:

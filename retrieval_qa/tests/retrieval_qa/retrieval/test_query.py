@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from core.database.schema import Chunk, Document, Embedding
 from core.types.document import DocumentStatus, DocumentType
 from core.types.responses import CitedPassage
+from core.types.retrieval_config import RetrievalConfig
 from retrieval_qa.retrieval.query import retrieve_relevant_chunks
 
 
@@ -64,9 +65,7 @@ def test_retrieve_returns_closest_chunks_by_cosine(test_session: Session) -> Non
     results = retrieve_relevant_chunks(
         query_vector=near,
         session=test_session,
-        model_name="text-embedding-3-small",
-        ef_search=40,
-        top_k=2,
+        config=RetrievalConfig(model_name="text-embedding-3-small", ef_search=40, top_k=2),
     )
 
     assert len(results) == 2
@@ -89,9 +88,7 @@ def test_retrieve_returns_full_chunk_text_not_truncated(test_session: Session) -
     results = retrieve_relevant_chunks(
         query_vector=vector,
         session=test_session,
-        model_name="text-embedding-3-small",
-        ef_search=40,
-        top_k=1,
+        config=RetrievalConfig(model_name="text-embedding-3-small", ef_search=40, top_k=1),
     )
 
     assert len(results) == 1
@@ -111,9 +108,7 @@ def test_retrieve_respects_top_k_limit(test_session: Session) -> None:
     results = retrieve_relevant_chunks(
         query_vector=vector,
         session=test_session,
-        model_name="text-embedding-3-small",
-        ef_search=40,
-        top_k=3,
+        config=RetrievalConfig(model_name="text-embedding-3-small", ef_search=40, top_k=3),
     )
 
     assert len(results) == 3
@@ -141,9 +136,7 @@ def test_retrieve_only_returns_chunks_from_ready_documents(
     results = retrieve_relevant_chunks(
         query_vector=vector,
         session=test_session,
-        model_name="text-embedding-3-small",
-        ef_search=40,
-        top_k=5,
+        config=RetrievalConfig(model_name="text-embedding-3-small", ef_search=40, top_k=5),
     )
 
     assert len(results) == 1
@@ -162,9 +155,7 @@ def test_retrieve_scopes_embeddings_to_model_name(test_session: Session) -> None
     results = retrieve_relevant_chunks(
         query_vector=[0.5] * 1536,
         session=test_session,
-        model_name="some-other-model",
-        ef_search=40,
-        top_k=5,
+        config=RetrievalConfig(model_name="some-other-model", ef_search=40, top_k=5),
     )
 
     assert results == []
@@ -175,9 +166,7 @@ def test_retrieve_empty_corpus_returns_empty_list(test_session: Session) -> None
     results = retrieve_relevant_chunks(
         query_vector=[0.5] * 1536,
         session=test_session,
-        model_name="text-embedding-3-small",
-        ef_search=40,
-        top_k=5,
+        config=RetrievalConfig(model_name="text-embedding-3-small", ef_search=40, top_k=5),
     )
     assert results == []
 
@@ -224,9 +213,7 @@ def test_retrieve_issues_set_local_ef_search_inside_transaction(
         retrieve_relevant_chunks(
             query_vector=vector,
             session=test_session,
-            model_name="text-embedding-3-small",
-            ef_search=123,
-            top_k=1,
+            config=RetrievalConfig(model_name="text-embedding-3-small", ef_search=123, top_k=1),
         )
     finally:
         event.remove(test_session.bind, "before_cursor_execute", _before_cursor_execute)
@@ -254,9 +241,7 @@ def test_retrieve_returns_empty_list_when_query_vector_wrong_dim(
         retrieve_relevant_chunks(
             query_vector=[0.5] * 10,  # wrong dim
             session=test_session,
-            model_name="text-embedding-3-small",
-            ef_search=40,
-            top_k=1,
+            config=RetrievalConfig(model_name="text-embedding-3-small", ef_search=40, top_k=1),
         )
 
 
@@ -276,7 +261,5 @@ def test_retrieve_wraps_db_connection_error_as_upstream_unavailable() -> None:
         retrieve_relevant_chunks(
             query_vector=[0.5] * 1536,
             session=fake_session,
-            model_name="text-embedding-3-small",
-            ef_search=40,
-            top_k=1,
+            config=RetrievalConfig(model_name="text-embedding-3-small", ef_search=40, top_k=1),
         )

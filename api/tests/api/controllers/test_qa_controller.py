@@ -1,5 +1,6 @@
 """Unit tests for the QA controller (clients + retrieval mocked)."""
 
+from typing import cast
 from unittest.mock import MagicMock
 from uuid import uuid4
 
@@ -8,6 +9,7 @@ import pytest
 from api.controllers.qa_controller import run_query
 from core.exceptions import UpstreamBadResponse, UpstreamUnavailable
 from core.types.responses import CitedPassage, HarnessAResponse
+from core.types.retrieval_config import RetrievalConfig
 
 
 def _fake_embeddings_client(vector: list[float], side_effect: object | None = None) -> MagicMock:
@@ -52,9 +54,7 @@ def test_run_query_grounds_when_retrieval_returns_chunks(monkeypatch: pytest.Mon
         session=fake_session,
         embeddings_client=_fake_embeddings_client(_vector()),
         llm_client=_fake_llm_client("Cosine distance via <=> against an HNSW index."),
-        model_name="text-embedding-3-small",
-        ef_search=40,
-        top_k=5,
+        config=RetrievalConfig(model_name="text-embedding-3-small", ef_search=40, top_k=5),
     )
 
     assert isinstance(response, HarnessAResponse)
@@ -78,9 +78,7 @@ def test_run_query_not_grounded_when_retrieval_empty(monkeypatch: pytest.MonkeyP
         session=MagicMock(),
         embeddings_client=_fake_embeddings_client(_vector()),
         llm_client=_fake_llm_client("I couldn't find anything relevant in the corpus."),
-        model_name="text-embedding-3-small",
-        ef_search=40,
-        top_k=5,
+        config=RetrievalConfig(model_name="text-embedding-3-small", ef_search=40, top_k=5),
     )
 
     assert response.grounded is False
@@ -100,9 +98,7 @@ def test_run_query_answer_field_always_populated(monkeypatch: pytest.MonkeyPatch
         session=MagicMock(),
         embeddings_client=_fake_embeddings_client(_vector()),
         llm_client=_fake_llm_client("firm refusal text"),
-        model_name="text-embedding-3-small",
-        ef_search=40,
-        top_k=5,
+        config=RetrievalConfig(model_name="text-embedding-3-small", ef_search=40, top_k=5),
     )
 
     assert response.answer == "firm refusal text"
@@ -128,15 +124,14 @@ def test_run_query_embeds_query_before_retrieval(monkeypatch: pytest.MonkeyPatch
         session=MagicMock(),
         embeddings_client=embeddings_client,
         llm_client=_fake_llm_client("answer"),
-        model_name="text-embedding-3-small",
-        ef_search=42,
-        top_k=3,
+        config=RetrievalConfig(model_name="text-embedding-3-small", ef_search=42, top_k=3),
     )
 
     embeddings_client.embed.assert_called_once_with(["what is logits?"])
-    assert captured["model_name"] == "text-embedding-3-small"
-    assert captured["ef_search"] == 42
-    assert captured["top_k"] == 3
+    config = cast(RetrievalConfig, captured["config"])
+    assert config.model_name == "text-embedding-3-small"
+    assert config.ef_search == 42
+    assert config.top_k == 3
     assert captured["query_vector"] == _vector(0.7)
 
 
@@ -158,9 +153,7 @@ def test_run_query_propagates_upstream_unavailable_from_embeddings(
                 side_effect=UpstreamUnavailable("down"),
             ),
             llm_client=_fake_llm_client("answer"),
-            model_name="text-embedding-3-small",
-            ef_search=40,
-            top_k=5,
+            config=RetrievalConfig(model_name="text-embedding-3-small", ef_search=40, top_k=5),
         )
 
 
@@ -182,9 +175,7 @@ def test_run_query_propagates_upstream_bad_response_from_embeddings(
                 side_effect=UpstreamBadResponse("bad"),
             ),
             llm_client=_fake_llm_client("answer"),
-            model_name="text-embedding-3-small",
-            ef_search=40,
-            top_k=5,
+            config=RetrievalConfig(model_name="text-embedding-3-small", ef_search=40, top_k=5),
         )
 
 
@@ -206,9 +197,7 @@ def test_run_query_propagates_upstream_unavailable_from_inference(
                 "answer",
                 side_effect=UpstreamUnavailable("down"),
             ),
-            model_name="text-embedding-3-small",
-            ef_search=40,
-            top_k=5,
+            config=RetrievalConfig(model_name="text-embedding-3-small", ef_search=40, top_k=5),
         )
 
 
@@ -230,9 +219,7 @@ def test_run_query_propagates_upstream_bad_response_from_inference(
                 "answer",
                 side_effect=UpstreamBadResponse("bad"),
             ),
-            model_name="text-embedding-3-small",
-            ef_search=40,
-            top_k=5,
+            config=RetrievalConfig(model_name="text-embedding-3-small", ef_search=40, top_k=5),
         )
 
 
@@ -251,9 +238,7 @@ def test_run_query_passes_chunks_to_llm_prompt(monkeypatch: pytest.MonkeyPatch) 
         session=MagicMock(),
         embeddings_client=_fake_embeddings_client(_vector()),
         llm_client=llm_client,
-        model_name="text-embedding-3-small",
-        ef_search=40,
-        top_k=5,
+        config=RetrievalConfig(model_name="text-embedding-3-small", ef_search=40, top_k=5),
     )
 
     llm_client.chat.assert_called_once()
@@ -278,9 +263,7 @@ def test_run_query_no_chunks_prompt_does_not_include_passage_text(
         session=MagicMock(),
         embeddings_client=_fake_embeddings_client(_vector()),
         llm_client=llm_client,
-        model_name="text-embedding-3-small",
-        ef_search=40,
-        top_k=5,
+        config=RetrievalConfig(model_name="text-embedding-3-small", ef_search=40, top_k=5),
     )
 
     llm_client.chat.assert_called_once()
