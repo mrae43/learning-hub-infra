@@ -86,6 +86,9 @@ def test_session(test_engine: Engine) -> Generator[Session, None, None]:
     Drops and recreates all tables before each test so tests are isolated.
     """
     Base.metadata.drop_all(bind=test_engine)
+    with test_engine.connect() as conn:
+        conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+        conn.commit()
     _create_enums(test_engine)
     Base.metadata.create_all(bind=test_engine)
     session = sessionmaker(bind=test_engine)()
@@ -135,8 +138,12 @@ def _create_enums(engine: Engine) -> None:
         conn.commit()
 
 
+@pytest.fixture
 def override_route_db_session(test_engine: Engine, monkeypatch: pytest.MonkeyPatch) -> None:
     """Make API route ``db_session`` contexts yield sessions on the test engine."""
+    with test_engine.connect() as conn:
+        conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+        conn.commit()
     _create_enums(test_engine)
     Base.metadata.create_all(bind=test_engine)
     SessionFactory = sessionmaker(bind=test_engine)
