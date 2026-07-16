@@ -86,6 +86,7 @@ def test_session(test_engine: Engine) -> Generator[Session, None, None]:
     Drops and recreates all tables before each test so tests are isolated.
     """
     Base.metadata.drop_all(bind=test_engine)
+    _create_enums(test_engine)
     Base.metadata.create_all(bind=test_engine)
     session = sessionmaker(bind=test_engine)()
     try:
@@ -114,9 +115,29 @@ def sample_paper_pdf() -> bytes:
     return buffer.read()
 
 
-@pytest.fixture
+def _create_enums(engine: Engine) -> None:
+    """Create PostgreSQL ENUM types that have ``create_type=False`` in the schema."""
+    enums = {
+        "document_type": ["paper", "book", "documentation"],
+        "document_status": ["validating", "chunking", "embedding", "ready", "failed"],
+    }
+    with engine.connect() as conn:
+        for name, values in enums.items():
+            vals = ", ".join(f"'{v}'" for v in values)
+            conn.execute(
+                text(
+                    f"DO $$ BEGIN "
+                    f"CREATE TYPE {name} AS ENUM ({vals}); "
+                    f"EXCEPTION WHEN duplicate_object THEN NULL; "
+                    f"END $$"
+                )
+            )
+        conn.commit()
+
+
 def override_route_db_session(test_engine: Engine, monkeypatch: pytest.MonkeyPatch) -> None:
     """Make API route ``db_session`` contexts yield sessions on the test engine."""
+    _create_enums(test_engine)
     Base.metadata.create_all(bind=test_engine)
     SessionFactory = sessionmaker(bind=test_engine)
 
