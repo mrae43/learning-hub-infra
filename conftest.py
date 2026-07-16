@@ -21,9 +21,11 @@ from sqlalchemy.orm import Session, sessionmaker
 # in sys.modules before per-package test collection runs.  Without this a test
 # package whose name mirrors a source package (e.g. ``tests/retrieval_qa``)
 # would shadow the installed package under importlib import mode.
+import api.controllers.qa_controller
 import api.server  # noqa: F401
 import ingestion.tasks  # noqa: F401
-import retrieval_qa.chunking.paper_chunker  # noqa: F401
+import retrieval_qa.chunking.paper_chunker
+import retrieval_qa.retrieval.query  # noqa: F401
 
 # Pre-import the workspace packages so their installed (src/) versions are
 # cached in sys.modules before per-package test collection runs. Without this,
@@ -141,6 +143,7 @@ def _create_enums(engine: Engine) -> None:
 @pytest.fixture
 def override_route_db_session(test_engine: Engine, monkeypatch: pytest.MonkeyPatch) -> None:
     """Make API route ``db_session`` contexts yield sessions on the test engine."""
+    Base.metadata.drop_all(bind=test_engine)
     with test_engine.connect() as conn:
         conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
         conn.commit()
@@ -162,4 +165,5 @@ def override_route_db_session(test_engine: Engine, monkeypatch: pytest.MonkeyPat
 
     monkeypatch.setattr("api.routes.ingest.db_session", _test_db_session)
     monkeypatch.setattr("api.routes.documents.db_session", _test_db_session)
+    monkeypatch.setattr("api.routes.retrieval_qa.db_session", _test_db_session)
     monkeypatch.setattr("ingestion.tasks.SessionLocal", SessionFactory)
