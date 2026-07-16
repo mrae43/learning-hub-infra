@@ -17,6 +17,9 @@ class Settings(BaseSettings):
         embedding_model: Active embedding model ID. All models used during MVP
             must produce 1536-dim vectors (ADR-0014).
         hnsw_ef_search: Query-time HNSW search candidate list size.
+        query_top_k: Number of chunks the retrieval step fetches per query
+            (server-side infra knob, not client-controlled per ADR-0014).
+        inference_model: Active chat-completion model ID for generation.
         max_upload_bytes: Maximum accepted upload size in bytes.
         allowed_file_extensions: Lower-case file extensions accepted for upload.
     """
@@ -33,6 +36,8 @@ class Settings(BaseSettings):
     openai_api_key: str | None = None
     embedding_model: str = "text-embedding-3-small"
     hnsw_ef_search: int = 40
+    query_top_k: int = 5
+    inference_model: str = "gpt-4o-mini"
     max_upload_bytes: int = 100 * 1024 * 1024  # 100 MB placeholder
     allowed_file_extensions: set[str] = {"pdf"}
 

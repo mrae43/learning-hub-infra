@@ -2,7 +2,7 @@
 
 from collections.abc import Sequence
 
-from openai import AsyncOpenAI, OpenAI
+from openai import APIConnectionError, APIStatusError, AsyncOpenAI, OpenAI
 
 from core.config.settings import settings
 from core.exceptions import UpstreamBadResponse, UpstreamUnavailable
@@ -42,21 +42,24 @@ class EmbeddingsClient:
             One 1536-dim vector per input string.
 
         Raises:
-            UpstreamBadResponse: The API returned an unexpected response.
+            UpstreamBadResponse: The API returned an unexpected response or a
+                bad HTTP status (4xx/5xx). Maps to 502.
             UpstreamUnavailable: The API could not be reached or timed out.
+                Maps to 503.
         """
         try:
             response = self._get_client().embeddings.create(
                 input=list(texts),
                 model=self._model,
             )
-        except Exception as exc:  # pragma: no cover - exercised only with live API
-            # Network-level failures surface as a wrapped OpenAI error.
+        except APIConnectionError as exc:
             raise UpstreamUnavailable(f"Embeddings API unreachable: {exc}") from exc
+        except APIStatusError as exc:
+            raise UpstreamBadResponse(f"Embeddings API returned bad status: {exc}") from exc
 
         try:
             return [item.embedding for item in response.data]
-        except Exception as exc:
+        except (AttributeError, IndexError) as exc:
             raise UpstreamBadResponse(
                 f"Embeddings API returned unexpected response shape: {exc}"
             ) from exc
@@ -70,12 +73,14 @@ class EmbeddingsClient:
                 input=list(texts),
                 model=self._model,
             )
-        except Exception as exc:  # pragma: no cover
+        except APIConnectionError as exc:
             raise UpstreamUnavailable(f"Embeddings API unreachable: {exc}") from exc
+        except APIStatusError as exc:
+            raise UpstreamBadResponse(f"Embeddings API returned bad status: {exc}") from exc
 
         try:
             return [item.embedding for item in response.data]
-        except Exception as exc:
+        except (AttributeError, IndexError) as exc:
             raise UpstreamBadResponse(
                 f"Embeddings API returned unexpected response shape: {exc}"
             ) from exc
