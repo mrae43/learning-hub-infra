@@ -3,7 +3,7 @@
 
 ## Current state
 
-This repository is in **early implementation (tracer bullet complete)**. ADRs, stack decisions, coding standards, and the monorepo layout are in place, plus the build/CI scaffolding: root + per-module `pyproject.toml` (uv workspace), `uv.lock`, `.github/workflows/` (`ci.yml`, `cd.yml`, `security.yml`, `dependabot-auto-merge.yml`), `commitlint.config.mjs`, and `Dockerfile`. Four of five packages have real implementation code (~2300 lines total); only `depth_dive/` still has just placeholders. The toolchain is green: `uv sync` installs all deps; `uv run ruff check`, `uv run ruff format --check`, `uv run mypy`, `uv run lint-imports`, and `uv run pytest` all pass.
+This repository is in **early implementation (tracer bullet complete)**. ADRs, stack decisions, coding standards, and the monorepo layout are in place, plus the build/CI scaffolding: root + per-module `pyproject.toml` (uv workspace), `uv.lock`, `.github/workflows/` (`ci.yml`, `cd.yml`, `security.yml`, `dependabot-auto-merge.yml`), `commitlint.config.mjs`, and `Dockerfile`. Four of five packages have real implementation code (~3650 lines total); only `depth_dive/` still has just placeholders. The toolchain is green: `uv sync` installs all deps; `uv run ruff check`, `uv run ruff format --check`, `uv run mypy`, `uv run lint-imports`, and `uv run pytest` all pass.
 
 ## Authoritative sources — read before acting
 
@@ -99,8 +99,7 @@ Rules:
 
 ## What does not exist yet
 
-- **Retrieval QA query logic** — `retrieval_qa/src/retrieval_qa/retrieval/` is not yet created; there is no `POST /query` endpoint or similarity-search pipeline.
 - **Depth Dive implementation** — `depth_dive/src/depth_dive/generation/` and `web_search/` are still placeholders.
 - **`api/routes/__init__.py`** — route modules are imported directly in `server.py`; no package init file exists.
 
-Bootstrap order is already complete for the first four packages (`core/` → `retrieval_qa/` → `api/` → `ingestion/`). `depth_dive/` is the remaining package to implement.
+Bootstrap order is complete for the first four packages (`core/` → `retrieval_qa/` (query logic included) → `api/` → `ingestion/`). `depth_dive/` is the remaining package to implement.
