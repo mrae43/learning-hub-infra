@@ -7,7 +7,8 @@ from sqlalchemy.orm import Session
 
 from core.database.schema import Chunk, Document, Embedding
 from core.types.document import DocumentStatus, DocumentType
-from retrieval_qa.retrieval.query import RetrievedChunk, retrieve_relevant_chunks
+from core.types.responses import CitedPassage
+from retrieval_qa.retrieval.query import retrieve_relevant_chunks
 
 
 def _seed_paper(
@@ -75,7 +76,7 @@ def test_retrieve_returns_closest_chunks_by_cosine(test_session: Session) -> Non
 
 
 def test_retrieve_returns_full_chunk_text_not_truncated(test_session: Session) -> None:
-    """RetrievedChunk.text carries the full chunk content."""
+    """CitedPassage.text carries the full chunk content."""
     long_text = "word " * 200
     vector = [0.5] * 1536
     _seed_paper(
@@ -181,14 +182,14 @@ def test_retrieve_empty_corpus_returns_empty_list(test_session: Session) -> None
     assert results == []
 
 
-def test_retrieved_chunk_is_pydantic_model_with_chunk_id_and_text() -> None:
-    """RetrievedChunk exposes chunk_id (UUID) and text (str) fields."""
+def test_cited_passage_is_pydantic_model_with_chunk_id_and_text() -> None:
+    """CitedPassage exposes chunk_id (UUID) and text (str) fields."""
     from uuid import UUID
 
-    fields = set(RetrievedChunk.model_fields)
+    fields = set(CitedPassage.model_fields)
     assert fields == {"chunk_id", "text"}
-    assert RetrievedChunk.model_fields["chunk_id"].annotation is UUID
-    assert RetrievedChunk.model_fields["text"].annotation is str
+    assert CitedPassage.model_fields["chunk_id"].annotation is UUID
+    assert CitedPassage.model_fields["text"].annotation is str
 
 
 def test_retrieve_issues_set_local_ef_search_inside_transaction(

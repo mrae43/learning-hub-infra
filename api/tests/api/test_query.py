@@ -18,6 +18,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from core.exceptions import UpstreamBadResponse, UpstreamUnavailable
+from core.types.responses import CitedPassage
 
 
 def _default_fake_llm_client(*args: object, **kwargs: object) -> MagicMock:
@@ -34,9 +35,9 @@ def _refusal_fake_llm_client(*args: object, **kwargs: object) -> MagicMock:
     return client
 
 
-def _fake_chunk(*, text: str = "chunk text") -> MagicMock:
-    """Build a MagicMock chunk shaped like ``RetrievedChunk``."""
-    return MagicMock(chunk_id=uuid.uuid4(), text=text)
+def _fake_chunk(*, text: str = "chunk text") -> CitedPassage:
+    """Build a CitedPassage chunk for test fixtures."""
+    return CitedPassage(chunk_id=uuid.uuid4(), text=text)
 
 
 # ============================================================

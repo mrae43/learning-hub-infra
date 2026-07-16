@@ -25,7 +25,7 @@ from core.clients.embeddings_client import EmbeddingsClient
 from core.clients.llm_client import LLMClient
 from core.types.chat import ChatMessage
 from core.types.responses import CitedPassage, HarnessAResponse
-from retrieval_qa.retrieval.query import RetrievedChunk, retrieve_relevant_chunks
+from retrieval_qa.retrieval.query import retrieve_relevant_chunks
 
 _SYSTEM_PROMPT = (
     "You answer the user's question using only the provided passages. "
@@ -36,7 +36,7 @@ _SYSTEM_PROMPT = (
 
 def _build_messages(
     query: str,
-    chunks: Sequence[RetrievedChunk],
+    chunks: Sequence[CitedPassage],
 ) -> list[ChatMessage]:
     """Assemble the chat-completions message list for the inference call.
 
@@ -112,10 +112,9 @@ def run_query(
     messages = _build_messages(query, chunks)
     answer = llm_client.chat(messages)
 
-    cited_passages = [CitedPassage(chunk_id=chunk.chunk_id, text=chunk.text) for chunk in chunks]
     return HarnessAResponse(
         answer=answer,
-        cited_passages=cited_passages,
+        cited_passages=list(chunks),
         grounded=bool(chunks),
     )
 
