@@ -70,7 +70,17 @@ These docs are **not** auto-loaded into session context. Only this `AGENTS.md` i
 
 ## Mandatory verification before completing any task
 
-Every code change — even a one-line edit — must pass the relevant checks before you declare the task done. Run these with `uv run` from the repo root:
+Every code change — even a one-line edit — must pass the relevant checks before you declare the task done.
+
+**First step — always sync the workspace:**
+
+```bash
+uv sync --all-packages
+```
+
+Editable installs (`.pth` files) only discover modules that exist at sync time. Any new source file, new module, or changed dependency requires a re-sync before imports resolve. This is the single most common cause of `ModuleNotFoundError` during local development, and it wastes tokens when the agent retries instead of syncing.
+
+Then run the relevant checks from the repo root with `uv run`:
 
 | Check | When to run | Command |
 |-------|-------------|---------|
@@ -82,7 +92,8 @@ Every code change — even a one-line edit — must pass the relevant checks bef
 
 Rules:
 - All required checks must **pass** before reporting a task complete. If a check fails, fix it — do not hand off a broken state.
-- If you add a new runtime dependency to a member `pyproject.toml`, run `uv sync` first to update the lockfile, then run all checks.
+- If you add a new source file or module, run `uv sync --all-packages` before attempting to import or test it.
+- If you add a new runtime dependency to a member `pyproject.toml`, run `uv sync --all-packages` first to update the lockfile, then run all checks.
 - If `ruff format --check` fails, run `uv run ruff format .` to fix, then re-verify.
 - Do not add `# type: ignore` or `noqa` comments to silence errors without justification in a preceding line or PR description.
 
