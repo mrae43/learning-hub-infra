@@ -10,6 +10,13 @@ from fastapi.testclient import TestClient
 IngestAPaper = Callable[[str], str]
 
 
+def _patch_clients(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Patch embeddings + LLM clients with defaults for all test fixtures."""
+    monkeypatch.setattr("ingestion.tasks.EmbeddingsClient", _default_fake_client)
+    monkeypatch.setattr("api.routes.retrieval_qa.EmbeddingsClient", _default_fake_client)
+    monkeypatch.setattr("api.routes.retrieval_qa.LLMClient", _default_fake_llm_refusal_client)
+
+
 @pytest.fixture
 def client(override_route_db_session: object, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     """A TestClient with DB sessions and embeddings client mocked.
@@ -22,9 +29,7 @@ def client(override_route_db_session: object, monkeypatch: pytest.MonkeyPatch) -
     # the ingestion task and the query route get a mocked embeddings + LLM
     # client. Tests override ``LLMClient`` / ``EmbeddingsClient`` to swap
     # behaviour (e.g. make them raise, or return a grounded answer).
-    monkeypatch.setattr("ingestion.tasks.EmbeddingsClient", _default_fake_client)
-    monkeypatch.setattr("api.routes.retrieval_qa.EmbeddingsClient", _default_fake_client)
-    monkeypatch.setattr("api.routes.retrieval_qa.LLMClient", _default_fake_llm_client)
+    _patch_clients(monkeypatch)
     from api.server import create_app
 
     return TestClient(create_app())
@@ -39,9 +44,7 @@ def mock_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     call raise, or retrieval is monkeypatched away). Lets the HTTP-level
     behaviour run without a real Postgres+pgvector instance.
     """
-    monkeypatch.setattr("ingestion.tasks.EmbeddingsClient", _default_fake_client)
-    monkeypatch.setattr("api.routes.retrieval_qa.EmbeddingsClient", _default_fake_client)
-    monkeypatch.setattr("api.routes.retrieval_qa.LLMClient", _default_fake_llm_client)
+    _patch_clients(monkeypatch)
 
     @contextmanager
     def _mock_db_session() -> Generator[MagicMock, None, None]:
@@ -93,8 +96,8 @@ def _default_fake_client(*args: object, **kwargs: object) -> MagicMock:
     return client
 
 
-def _default_fake_llm_client(*args: object, **kwargs: object) -> MagicMock:
-    """A mocked LLM client returning a fixed grounded/refusal answer."""
+def _default_fake_llm_refusal_client(*args: object, **kwargs: object) -> MagicMock:
+    """A mocked LLM client returning a fixed refusal (not-grounded) answer."""
     client = MagicMock()
     client.chat.return_value = "I could not find anything relevant in the corpus."
     return client
