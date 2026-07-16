@@ -117,6 +117,7 @@ def sample_paper_pdf() -> bytes:
 @pytest.fixture
 def override_route_db_session(test_engine: Engine, monkeypatch: pytest.MonkeyPatch) -> None:
     """Make API route ``db_session`` contexts yield sessions on the test engine."""
+    Base.metadata.create_all(bind=test_engine)
     SessionFactory = sessionmaker(bind=test_engine)
 
     @contextmanager
