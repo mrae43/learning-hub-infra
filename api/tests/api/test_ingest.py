@@ -1,5 +1,7 @@
 """Integration tests for the POST /ingest route."""
 
+import uuid
+from collections.abc import Callable
 from unittest.mock import MagicMock
 
 import pytest
@@ -124,3 +126,32 @@ def test_ingest_pipeline_failure_marks_failed(
     body = status_response.json()
     assert body["status"] == "failed"
     assert body["error_message"] is not None
+
+
+def _default_fake_llm_client(*args: object, **kwargs: object) -> MagicMock:
+    """A mocked LLM client that returns a fixed grounded answer."""
+    client = MagicMock()
+    client.chat.return_value = "Grounded answer derived from retrieved passages."
+    return client
+
+
+def test_ingest_then_query_end_to_end(
+    client: TestClient,
+    ingest_a_paper: Callable[[str], str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Ingest a paper, then query it expecting grounded=true with cited passages."""
+    monkeypatch.setattr("api.routes.retrieval_qa.LLMClient", _default_fake_llm_client)
+
+    ingest_a_paper("RAG Paper")
+
+    response = client.post("/query", json={"query": "Tell me about retrieval strategies."})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["grounded"] is True
+    assert len(body["cited_passages"]) >= 1
+    for passage in body["cited_passages"]:
+        uuid.UUID(passage["chunk_id"])
+        assert isinstance(passage["text"], str)
+        assert passage["text"]
+    assert body["answer"]

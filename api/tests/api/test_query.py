@@ -11,6 +11,7 @@ Two fixture variants are used:
 """
 
 import uuid
+from collections.abc import Callable
 from unittest.mock import MagicMock
 
 import pytest
@@ -36,20 +37,6 @@ def _refusal_fake_llm_client(*args: object, **kwargs: object) -> MagicMock:
 def _fake_chunk(*, text: str = "chunk text") -> MagicMock:
     """Build a MagicMock chunk shaped like ``RetrievedChunk``."""
     return MagicMock(chunk_id=uuid.uuid4(), text=text)
-
-
-def _ingest_a_paper(client: TestClient, sample_paper_pdf: bytes, title: str = "Paper") -> str:
-    """Helper: POST /ingest, wait for status=ready, return document_id."""
-    response = client.post(
-        "/ingest",
-        files={"file": ("sample.pdf", sample_paper_pdf, "application/pdf")},
-        data={"title": title, "document_type": "paper"},
-    )
-    assert response.status_code == 202
-    document_id = response.json()["document_id"]
-    status = client.get(f"/documents/{document_id}").json()["status"]
-    assert status == "ready", f"document never reached ready: {status}"
-    return str(document_id)
 
 
 # ============================================================
@@ -241,12 +228,12 @@ def test_query_grounds_with_mocked_retrieval(
 
 def test_query_end_to_end_grounds_with_real_chunks(
     client: TestClient,
-    sample_paper_pdf: bytes,
+    ingest_a_paper: Callable[[str], str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A relevant query against a ready corpus returns 200 grounded=true with citations."""
     monkeypatch.setattr("api.routes.retrieval_qa.LLMClient", _default_fake_llm_client)
-    _ingest_a_paper(client, sample_paper_pdf, title="RAG Paper")
+    ingest_a_paper("RAG Paper")
 
     response = client.post("/query", json={"query": "Tell me about retrieval strategies."})
 
@@ -263,7 +250,7 @@ def test_query_end_to_end_grounds_with_real_chunks(
 
 def test_query_end_to_end_irrelevant_returns_not_grounded(
     client: TestClient,
-    sample_paper_pdf: bytes,
+    ingest_a_paper: Callable[[str], str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Asking an irrelevant question yields 200 grounded=false with empty passages."""
@@ -274,7 +261,7 @@ def test_query_end_to_end_irrelevant_returns_not_grounded(
         "api.controllers.qa_controller.retrieve_relevant_chunks",
         lambda **kwargs: [],
     )
-    _ingest_a_paper(client, sample_paper_pdf, title="RAG Paper")
+    ingest_a_paper("RAG Paper")
 
     response = client.post("/query", json={"query": "What is the capital of France?"})
 
