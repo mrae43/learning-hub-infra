@@ -3,7 +3,7 @@
 
 ## Current state
 
-This repository is in **early implementation (tracer bullet complete)**. ADRs, stack decisions, coding standards, and the monorepo layout are in place, plus the build/CI scaffolding: root + per-module `pyproject.toml` (uv workspace), `uv.lock`, `.github/workflows/` (`ci.yml`, `cd.yml`, `security.yml`, `dependabot-auto-merge.yml`), `commitlint.config.mjs`, and `Dockerfile`. Four of five packages have real implementation code (~3650 lines total); only `depth_dive/` still has just placeholders. The toolchain is green: `uv sync` installs all deps; `uv run ruff check`, `uv run ruff format --check`, `uv run mypy`, `uv run lint-imports`, and `uv run pytest` all pass.
+This repository is in **early implementation (tracer bullet complete)**. ADRs, stack decisions, coding standards, and the monorepo layout are in place, plus the build/CI scaffolding: root + per-module `pyproject.toml` (uv workspace), `uv.lock`, `.github/workflows/` (`ci.yml`, `cd.yml`, `security.yml`, `dependabot-auto-merge.yml`), `commitlint.config.mjs`, and `Dockerfile`. Four of five packages have real implementation code (~4720 lines total); only `depth_dive/` still has just placeholders. The toolchain is green: `uv sync` installs all deps; `uv run ruff check`, `uv run ruff format --check`, `uv run mypy`, `uv run lint-imports`, and `uv run pytest` all pass.
 
 ## Authoritative sources — read before acting
 
@@ -20,7 +20,7 @@ These docs are **not** auto-loaded into session context. Only this `AGENTS.md` i
 
 **Before choosing or adding a library, model, or external service:**
 - `docs/tech-stack.md` — MVP stack and staged post-MVP milestones.
-- `docs/adr/` — read the ADR(s) most relevant to the area (e.g., ADR-0001 inference, ADR-0002 pgvector, ADR-0003 hand-rolled RAG, ADR-0004 embeddings, ADR-0006 background ingestion). Treat ADRs as **constraints, not suggestions**. If a decision contradicts an ADR, stop and propose a new/updated ADR rather than silently deviating.
+- `docs/adr/` — read the ADR(s) most relevant to the area (e.g., ADR-0001 inference, ADR-0002 pgvector, ADR-0003 hand-rolled RAG, ADR-0004 embeddings, ADR-0006 background ingestion, ADR-0012 depth-dive-web-search-agentic, ADR-0013 depth-dive-search-failure-retry-fallback, ADR-0014 data-schema-api-contracts-harness-a). Treat ADRs as **constraints, not suggestions**. If a decision contradicts an ADR, stop and propose a new/updated ADR rather than silently deviating.
 
 **Before writing a commit message:**
 - `docs/commit-instructions.md` — Conventional Commits format and allowed types.
@@ -40,12 +40,12 @@ These docs are **not** auto-loaded into session context. Only this `AGENTS.md` i
   - Inference: Claude/OpenAI (ADR-0001).
 - **Database:** PostgreSQL + `pgvector` extension (ADR-0002). Qdrant is deferred.
 - **Background ingestion:** FastAPI `BackgroundTasks` (ADR-0006). No Redis/Celery/arq in MVP.
-- **Module boundaries:** `retrieval_qa` and `depth_dive` may depend on `core`, but **never on each other** (ADR-0011). Enforced via `import-linter` in `pr-checks.yml` (contracts declared in the root `pyproject.toml`).
+- **Module boundaries:** `retrieval_qa` and `depth_dive` may depend on `core`, but **never on each other** (ADR-0011). Enforced via `import-linter` in `ci.yml` (contracts declared in the root `pyproject.toml`).
 - **Commits:** Conventional Commits, enforced in CI (ADR-0010). Allowed types: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`, `ci`, `perf`. No local pre-commit hook yet.
 
 ## Coding standards to apply now
 
-- `mypy --strict` is configured in the root `pyproject.toml` (with `mypy_path` + `explicit_package_bases` for the src layout); enforced in `pr-checks.yml`.
+- `mypy --strict` is configured in the root `pyproject.toml` (with `mypy_path` + `explicit_package_bases` for the src layout); enforced in `ci.yml`.
 - All public functions/classes use Google-style docstrings.
 - Pydantic v2 models are the boundary type for all I/O.
 - Use named exceptions (`IngestionError`, `RetrievalError`, etc.), not bare `Exception`.

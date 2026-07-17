@@ -2,7 +2,7 @@
 
 A RAG-powered study tool that turns uploaded papers, books, and documentation into interactive learning sessions — retrieval QA (Harness A) and dual-coding Depth Dives (Harness B).
 
-> **Status:** Early implementation — tracer bullet complete. Four of five packages (`core/`, `retrieval_qa/`, `api/`, `ingestion/`) have implementation code (~3650 lines total). Only `depth_dive/` remains as a scaffold. Ingestion pipeline (upload PDF → chunk → embed → store in pgvector with HNSW index), Harness A query pipeline (`POST /query`), and three API endpoints (`POST /ingest`, `GET /documents/{id}`, `POST /query`) are operational. See [docs/](./docs/) for architecture decisions and plans.
+> **Status:** Early implementation — tracer bullet complete. Four of five packages (`core/`, `retrieval_qa/`, `api/`, `ingestion/`) have implementation code (~4720 lines total). Only `depth_dive/` remains as a scaffold. Ingestion pipeline (upload PDF → chunk → embed → store in pgvector with HNSW index), Harness A query pipeline (`POST /query`), and three API endpoints (`POST /ingest`, `GET /documents/{id}`, `POST /query`) are operational. See [docs/](./docs/) for architecture decisions and plans.
 
 ## Architecture
 
