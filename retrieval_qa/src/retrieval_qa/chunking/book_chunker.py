@@ -4,13 +4,13 @@ Extracts text from a book and splits it into chapter/heading-aware chunks,
 emitting ``BookChunkMetadata`` for each chunk.
 """
 
+import os
 import re
+import xml.etree.ElementTree as ET
 import zipfile
 from html.parser import HTMLParser
 from io import BytesIO
 
-# ebooklib ships without type stubs; suppress the strict import-untyped error.
-from ebooklib import epub  # type: ignore[import-untyped]
 from pydantic import BaseModel, ConfigDict
 from pypdf import PdfReader
 
@@ -179,26 +179,78 @@ def _extract_text_from_pdf(pdf_bytes: bytes) -> str:
     return "\n\n".join(parts)
 
 
+_OPF_NS = "http://www.idpf.org/2007/opf"
+
+
+def _opf_root_path(container_xml: str) -> str:
+    """Parse META-INF/container.xml and return the full-path of the OPF."""
+    root = ET.fromstring(container_xml)
+    ns = {"c": "urn:oasis:names:tc:opendocument:xmlns:container"}
+    elem = root.find(".//c:rootfile", ns)
+    if elem is None:
+        raise IngestionError("EPUB container.xml missing rootfile element")
+    return elem.get("full-path", "")
+
+
+def _parse_opf(opf_content: str) -> tuple[list[str], dict[str, str]]:
+    """Parse content.opf, return (spine idref list, manifest {id -> href})."""
+    root = ET.fromstring(opf_content)
+    has_ns = root.tag.startswith(f"{{{_OPF_NS}}}")
+
+    if has_ns:
+        manifest_items = root.findall(f".//{{{_OPF_NS}}}manifest/{{{_OPF_NS}}}item")
+        spine_refs = root.findall(f".//{{{_OPF_NS}}}spine/{{{_OPF_NS}}}itemref")
+    else:
+        manifest_items = root.findall(".//manifest/item")
+        spine_refs = root.findall(".//spine/itemref")
+
+    item_map: dict[str, str] = {}
+    for item in manifest_items:
+        item_id = item.get("id", "")
+        href = item.get("href", "")
+        if item_id:
+            item_map[item_id] = href
+
+    spine_order: list[str] = []
+    for ref in spine_refs:
+        idref = ref.get("idref", "")
+        if idref:
+            spine_order.append(idref)
+
+    return spine_order, item_map
+
+
 def _extract_text_from_epub(epub_bytes: bytes) -> str:
     """Extract text from an EPUB byte stream."""
     try:
-        book = epub.read_epub(BytesIO(epub_bytes))
+        with zipfile.ZipFile(BytesIO(epub_bytes)) as archive:
+            container_xml = archive.read("META-INF/container.xml").decode("utf-8")
+            opf_path = _opf_root_path(container_xml)
+            opf_dir = os.path.dirname(opf_path)
+
+            opf_content = archive.read(opf_path).decode("utf-8")
+            spine_order, item_map = _parse_opf(opf_content)
+
+            parts: list[str] = []
+            for item_id in spine_order:
+                href = item_map.get(item_id)
+                if href is None:
+                    continue
+                file_path = os.path.normpath(os.path.join(opf_dir, href)) if opf_dir else href
+                try:
+                    raw = archive.read(file_path).decode("utf-8")
+                except KeyError:
+                    raw = archive.read(href).decode("utf-8")
+
+                extractor = _HTMLTextExtractor()
+                extractor.feed(raw)
+                text = extractor.get_text()
+                if text:
+                    parts.append(text)
+
+            return "\n\n".join(parts)
     except Exception as exc:
         raise IngestionError(f"Failed to parse EPUB: {exc}") from exc
-
-    extractor = _HTMLTextExtractor()
-    parts: list[str] = []
-    for item in book.get_items():
-        if isinstance(item, epub.EpubHtml):
-            body = item.get_body_content().decode("utf-8")
-            extractor.feed(body)
-            text = extractor.get_text()
-            if text:
-                parts.append(text)
-            # Reset extractor state for the next HTML item.
-            extractor = _HTMLTextExtractor()
-
-    return "\n\n".join(parts)
 
 
 def _detect_format(file_bytes: bytes) -> str:

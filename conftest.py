@@ -7,12 +7,12 @@ If the database is unavailable, the fixtures skip the test.
 
 import io
 import os
+import zipfile
 from collections.abc import Generator
 from contextlib import contextmanager
 from urllib.parse import urlparse
 
 import pytest
-from ebooklib import epub  # type: ignore[import-untyped]  # ebooklib ships without type stubs
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 from sqlalchemy import Engine, create_engine, text
@@ -143,31 +143,71 @@ def sample_book_pdf() -> bytes:
 @pytest.fixture
 def sample_book_epub() -> bytes:
     """Generate a small EPUB with two chapters for chunking."""
-    book = epub.EpubBook()
-    book.set_identifier("book-test-001")
-    book.set_title("Sample Book")
-    book.set_language("en")
-    book.add_author("Test Author")
-
-    chapter1 = epub.EpubHtml(title="Chapter 1", file_name="chap_1.xhtml", lang="en")
-    chapter1.content = (
-        "<h1>Chapter 1</h1>"
-        "<p>The ancient city of Rome was built on seven hills.</p>"
-        "<h2>Summary</h2>"
-        "<p>Rome has seven hills.</p>"
-    )
-    chapter2 = epub.EpubHtml(title="Chapter 2", file_name="chap_2.xhtml", lang="en")
-    chapter2.content = "<h1>Chapter 2</h1><p>The Roman Forum was the center of public life.</p>"
-
-    book.add_item(chapter1)
-    book.add_item(chapter2)
-    book.toc = [chapter1, chapter2]
-    book.add_item(epub.EpubNcx())
-    book.add_item(epub.EpubNav())
-    book.spine = ["nav", chapter1, chapter2]
-
     buffer = io.BytesIO()
-    epub.write_epub(buffer, book, {})
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+        # mimetype must be first, stored (not compressed).
+        zf.writestr("mimetype", "application/epub+zip", compress_type=zipfile.ZIP_STORED)
+        # Container XML
+        zf.writestr(
+            "META-INF/container.xml",
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            '<container version="1.0"'
+            ' xmlns="urn:oasis:names:tc:opendocument:xmlns:container">'
+            "<rootfiles>"
+            '<rootfile full-path="OEBPS/content.opf"'
+            ' media-type="application/oebps-package+xml"/>'
+            "</rootfiles>"
+            "</container>",
+        )
+        # Content.opf — no NCX needed for this simple case
+        zf.writestr(
+            "OEBPS/content.opf",
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            '<package xmlns="http://www.idpf.org/2007/opf"'
+            ' unique-identifier="bookid" version="2.0">'
+            "<metadata>"
+            '<dc:title xmlns:dc="http://purl.org/dc/elements/1.1/">Sample Book</dc:title>'
+            '<dc:identifier xmlns:dc="http://purl.org/dc/elements/1.1/"'
+            ' id="bookid">book-test-001</dc:identifier>'
+            '<dc:language xmlns:dc="http://purl.org/dc/elements/1.1/">en</dc:language>'
+            "</metadata>"
+            "<manifest>"
+            '<item id="chap1" href="chap_1.xhtml"'
+            ' media-type="application/xhtml+xml"/>'
+            '<item id="chap2" href="chap_2.xhtml"'
+            ' media-type="application/xhtml+xml"/>'
+            "</manifest>"
+            "<spine>"
+            '<itemref idref="chap1"/>'
+            '<itemref idref="chap2"/>'
+            "</spine>"
+            "</package>",
+        )
+        # Chapter files
+        zf.writestr(
+            "OEBPS/chap_1.xhtml",
+            '<?xml version="1.0" encoding="utf-8"?>'
+            "<!DOCTYPE html>"
+            '<html xmlns="http://www.w3.org/1999/xhtml">'
+            "<head><title>Chapter 1</title></head>"
+            "<body>"
+            "<h1>Chapter 1</h1>"
+            "<p>The ancient city of Rome was built on seven hills.</p>"
+            "<h2>Summary</h2>"
+            "<p>Rome has seven hills.</p>"
+            "</body></html>",
+        )
+        zf.writestr(
+            "OEBPS/chap_2.xhtml",
+            '<?xml version="1.0" encoding="utf-8"?>'
+            "<!DOCTYPE html>"
+            '<html xmlns="http://www.w3.org/1999/xhtml">'
+            "<head><title>Chapter 2</title></head>"
+            "<body>"
+            "<h1>Chapter 2</h1>"
+            "<p>The Roman Forum was the center of public life.</p>"
+            "</body></html>",
+        )
     buffer.seek(0)
     return buffer.read()
 
