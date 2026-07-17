@@ -4,16 +4,51 @@ from collections.abc import Sequence
 from typing import assert_never
 from uuid import UUID
 
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from core.clients.embeddings_client import EmbeddingsClient
 from core.database.schema import Chunk, Document, Embedding
 from core.exceptions import IngestionError
+from core.types.chunk import (
+    BookChunkMetadata,
+    DocumentationChunkMetadata,
+    PaperChunkMetadata,
+)
 from core.types.document import DocumentStatus, DocumentType
 from retrieval_qa.chunking.book_chunker import BookChunk, chunk_book
 from retrieval_qa.chunking.paper_chunker import PaperChunk, chunk_paper
 
 _Chunk = PaperChunk | BookChunk
+
+
+def _validate_type_metadata(
+    document_type: DocumentType,
+    type_metadata: dict[str, object],
+) -> None:
+    """Validate type_metadata against the Pydantic model for the document type.
+
+    This is the second layer of enforcement (the first being Pydantic
+    construction in the chunker itself).  Running it here, just before the
+    SQLAlchemy write, ensures that no code path — even one that bypasses the
+    chunker — can persist invalid metadata to the JSONB column.
+
+    Raises ``IngestionError`` when validation fails.
+    """
+    try:
+        match document_type:
+            case DocumentType.PAPER:
+                PaperChunkMetadata.model_validate(type_metadata)
+            case DocumentType.BOOK:
+                BookChunkMetadata.model_validate(type_metadata)
+            case DocumentType.DOCUMENTATION:
+                DocumentationChunkMetadata.model_validate(type_metadata)
+            case _ as unreachable:
+                assert_never(unreachable)
+    except ValidationError as exc:
+        raise IngestionError(
+            f"type_metadata validation failed for {document_type.value}: {exc}"
+        ) from exc
 
 
 def _chunk_inputs(
@@ -114,6 +149,7 @@ def run_ingestion(
 
         db_chunks: list[Chunk] = []
         for position, (content, type_metadata, token_count) in enumerate(chunk_inputs):
+            _validate_type_metadata(document_type, type_metadata)
             chunk = Chunk(
                 document_id=document_id,
                 position=position,

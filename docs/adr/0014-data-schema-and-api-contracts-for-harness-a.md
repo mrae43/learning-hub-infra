@@ -74,7 +74,12 @@ Schema-level chunk metadata is JSONB; the *shape contract* is enforced in Python
 - `BookChunkMetadata{chapter: int, heading: str | None}`
 - `DocumentationChunkMetadata{page: str, section: str | None}`
 
-All three with `model_config = ConfigDict(extra="forbid")` — a chunker bug surfacing an unknown key fails at the application write boundary, before persisting unvalidated JSONB. The chunker implementations (in `retrieval_qa/chunking/`, per `ai-system-tree.md`) and the retrieval code (in `retrieval_qa/retrieval/`) both import from `core/types/`; both depend on `core`, never on each other (ADR-0011 preserved).
+All three with `model_config = ConfigDict(extra="forbid")` — a chunker bug surfacing an unknown key fails at the application write boundary, before persisting unvalidated JSONB. Enforcement is **two-layer**:
+
+1. **Chunker construction** — each chunker builds the Pydantic model directly (e.g. `BookChunkMetadata(chapter=..., heading=...)`), which validates types and rejects unknown keys at Python object construction time.
+2. **Pipeline re-validation** — the ingestion pipeline's `_validate_type_metadata()` function in `ingestion/pipeline.py` calls `model_validate()` on the serialized dict just before the SQLAlchemy `Chunk(row)` write. This catches any code path that constructs `type_metadata` as a raw dict without passing through the Pydantic constructor.
+
+The chunker implementations (in `retrieval_qa/chunking/`, per `ai-system-tree.md`) and the retrieval code (in `retrieval_qa/retrieval/`) both import from `core/types/`; both depend on `core`, never on each other (ADR-0011 preserved).
 
 Rejected alternatives:
 - **Pure JSONB with no Python contract** (Option A) — leaves the contract implicit in two places' heads; a chunker bug that writes `{page: "seven"}` (page as string) lands in the DB silently.
