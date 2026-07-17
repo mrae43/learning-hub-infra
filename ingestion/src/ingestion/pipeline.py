@@ -1,6 +1,7 @@
 """Background ingestion pipeline for uploaded documents."""
 
 from collections.abc import Sequence
+from typing import assert_never
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -8,7 +9,7 @@ from sqlalchemy.orm import Session
 from core.clients.embeddings_client import EmbeddingsClient
 from core.database.schema import Chunk, Document, Embedding
 from core.exceptions import IngestionError
-from core.types.document import DocumentStatus
+from core.types.document import DocumentStatus, DocumentType
 from retrieval_qa.chunking.book_chunker import BookChunk, chunk_book
 from retrieval_qa.chunking.paper_chunker import PaperChunk, chunk_paper
 
@@ -27,21 +28,24 @@ def _chunk_inputs(
 
 
 def _chunk_document(
-    document_type: str,
+    document_type: DocumentType,
     file_bytes: bytes,
 ) -> list[tuple[str, dict[str, object], int]]:
     """Return (content, type_metadata, token_count) tuples for a document.
 
-    Dispatches to the document-type-specific chunker. Unknown types are
-    deliberately rejected so the schema stays document-type-aware.
+    Dispatches to the document-type-specific chunker. The ``match`` /
+    ``assert_never`` pair provides compile-time exhaustiveness: adding a new
+    ``DocumentType`` member produces a type-check error at every dispatch site.
     """
-    if document_type == "paper":
-        return _chunk_inputs(chunk_paper(file_bytes))
-
-    if document_type == "book":
-        return _chunk_inputs(chunk_book(file_bytes))
-
-    raise IngestionError(f"Chunker not implemented for document type: {document_type}")
+    match document_type:
+        case DocumentType.PAPER:
+            return _chunk_inputs(chunk_paper(file_bytes))
+        case DocumentType.BOOK:
+            return _chunk_inputs(chunk_book(file_bytes))
+        case DocumentType.DOCUMENTATION:
+            raise IngestionError(f"Chunker not implemented for document type: {document_type}")
+        case _ as unreachable:
+            assert_never(unreachable)
 
 
 def _embed_chunks(
@@ -71,7 +75,7 @@ def _embed_chunks(
 def run_ingestion(
     document_id: UUID,
     title: str,
-    document_type: str,
+    document_type: DocumentType,
     source_filename: str,
     file_bytes: bytes,
     session: Session,
@@ -88,7 +92,7 @@ def run_ingestion(
     Args:
         document_id: UUID of the document row created at upload time.
         title: Document title supplied by the user.
-        document_type: Lower-case document type (e.g. ``"paper"``).
+        document_type: Document type (e.g. ``DocumentType.PAPER``).
         source_filename: Original upload filename.
         file_bytes: Raw uploaded file contents.
         session: SQLAlchemy session bound to the documents database.

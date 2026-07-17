@@ -40,7 +40,7 @@ def test_pipeline_happy_path_reaches_ready(
     run_ingestion(
         document_id=document.document_id,
         title="Sample Paper",
-        document_type="paper",
+        document_type=DocumentType.PAPER,
         source_filename="sample.pdf",
         file_bytes=sample_paper_pdf,
         session=test_session,
@@ -91,7 +91,7 @@ def test_pipeline_failure_marks_failed_with_error(
         run_ingestion(
             document_id=document.document_id,
             title="Failing Paper",
-            document_type="paper",
+            document_type=DocumentType.PAPER,
             source_filename="fail.pdf",
             file_bytes=sample_paper_pdf,
             session=test_session,
@@ -123,7 +123,7 @@ def test_pipeline_book_happy_path_reaches_ready(
     run_ingestion(
         document_id=document.document_id,
         title="Sample Book",
-        document_type="book",
+        document_type=DocumentType.BOOK,
         source_filename="sample.pdf",
         file_bytes=sample_book_pdf,
         session=test_session,
@@ -169,7 +169,7 @@ def test_pipeline_rejects_unsupported_document_type(
         run_ingestion(
             document_id=document.document_id,
             title="Unknown",
-            document_type="documentation",
+            document_type=DocumentType.DOCUMENTATION,
             source_filename="docs.md",
             file_bytes=b"contents",
             session=test_session,
@@ -194,7 +194,7 @@ def test_reingestion_creates_new_document_id(
     run_ingestion(
         document_id=first.document_id,
         title="Paper",
-        document_type="paper",
+        document_type=DocumentType.PAPER,
         source_filename="sample.pdf",
         file_bytes=sample_paper_pdf,
         session=test_session,
@@ -217,7 +217,7 @@ def test_reingestion_creates_new_document_id(
     run_ingestion(
         document_id=second.document_id,
         title="Paper",
-        document_type="paper",
+        document_type=DocumentType.PAPER,
         source_filename="sample.pdf",
         file_bytes=sample_paper_pdf,
         session=test_session,

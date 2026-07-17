@@ -14,13 +14,13 @@ from core.config.settings import settings
 from core.database.connection import SessionLocal
 from core.database.schema import Document
 from core.exceptions import IngestionError
-from core.types.document import DocumentStatus
+from core.types.document import DocumentStatus, DocumentType
 from ingestion.pipeline import run_ingestion
 
 
 def _execute_ingestion_task(
     document_id: UUID,
-    document_type: str,
+    document_type: DocumentType,
     source_filename: str,
     file_bytes: bytes,
 ) -> None:
@@ -75,7 +75,7 @@ def _execute_ingestion_task(
 def schedule_ingestion(
     background_tasks: BackgroundTasks,
     document_id: UUID,
-    document_type: str,
+    document_type: DocumentType,
     source_filename: str,
     file_bytes: bytes,
 ) -> None:
@@ -84,7 +84,7 @@ def schedule_ingestion(
     Args:
         background_tasks: FastAPI's background task container.
         document_id: UUID of the newly created document row.
-        document_type: Lower-case document type string.
+        document_type: Document type (e.g. ``DocumentType.PAPER``).
         source_filename: Original upload filename.
         file_bytes: Raw uploaded file contents.
     """
