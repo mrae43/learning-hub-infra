@@ -16,7 +16,9 @@ from unittest.mock import MagicMock
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
 
+from core.database.schema import Chunk
 from core.exceptions import UpstreamBadResponse, UpstreamUnavailable
 from core.types.responses import CitedPassage
 
@@ -286,3 +288,71 @@ def test_query_end_to_end_empty_corpus_returns_not_grounded(
     assert body["grounded"] is False
     assert body["cited_passages"] == []
     assert body["answer"]
+
+
+def test_query_end_to_end_cross_document_returns_book_citation(
+    client: TestClient,
+    test_session: Session,
+    ingest_a_paper: Callable[[str], str],
+    ingest_a_book: Callable[[str], str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A query answered by the book returns a cited passage from the book."""
+    monkeypatch.setattr("api.routes.retrieval_qa.LLMClient", _default_fake_llm_client)
+    # Raise top_k so the tied fake embeddings return chunks from both documents.
+    monkeypatch.setattr("api.routes.retrieval_qa.settings.query_top_k", 100)
+
+    paper_id = ingest_a_paper("RAG Paper")
+    book_id = ingest_a_book("Roman History")
+
+    book_chunk_ids = {
+        str(chunk.chunk_id)
+        for chunk in test_session.query(Chunk).filter(Chunk.document_id == book_id).all()
+    }
+    paper_chunk_ids = {
+        str(chunk.chunk_id)
+        for chunk in test_session.query(Chunk).filter(Chunk.document_id == paper_id).all()
+    }
+
+    response = client.post("/query", json={"query": "Tell me about Rome."})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["grounded"] is True
+    cited_ids = {passage["chunk_id"] for passage in body["cited_passages"]}
+    assert cited_ids & book_chunk_ids
+    assert not (cited_ids - paper_chunk_ids - book_chunk_ids)
+
+
+def test_query_end_to_end_cross_document_returns_paper_citation(
+    client: TestClient,
+    test_session: Session,
+    ingest_a_paper: Callable[[str], str],
+    ingest_a_book: Callable[[str], str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A query answered by the paper returns a cited passage from the paper."""
+    monkeypatch.setattr("api.routes.retrieval_qa.LLMClient", _default_fake_llm_client)
+    # Raise top_k so the tied fake embeddings return chunks from both documents.
+    monkeypatch.setattr("api.routes.retrieval_qa.settings.query_top_k", 100)
+
+    paper_id = ingest_a_paper("RAG Paper")
+    book_id = ingest_a_book("Roman History")
+
+    book_chunk_ids = {
+        str(chunk.chunk_id)
+        for chunk in test_session.query(Chunk).filter(Chunk.document_id == book_id).all()
+    }
+    paper_chunk_ids = {
+        str(chunk.chunk_id)
+        for chunk in test_session.query(Chunk).filter(Chunk.document_id == paper_id).all()
+    }
+
+    response = client.post("/query", json={"query": "Tell me about retrieval strategies."})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["grounded"] is True
+    cited_ids = {passage["chunk_id"] for passage in body["cited_passages"]}
+    assert cited_ids & paper_chunk_ids
+    assert not (cited_ids - paper_chunk_ids - book_chunk_ids)

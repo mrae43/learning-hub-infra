@@ -45,6 +45,40 @@ def test_ingest_pipeline_transitions_to_ready(
     assert status == "ready"
 
 
+def test_ingest_book_pipeline_transitions_to_ready(
+    client: TestClient,
+    sample_book_pdf: bytes,
+) -> None:
+    """A book upload reaches ready after the background task runs."""
+    response = client.post(
+        "/ingest",
+        files={"file": ("sample.pdf", sample_book_pdf, "application/pdf")},
+        data={"title": "Sample Book", "document_type": "book"},
+    )
+    assert response.status_code == 202
+    document_id = response.json()["document_id"]
+
+    status = client.get(f"/documents/{document_id}").json()["status"]
+    assert status == "ready"
+
+
+def test_ingest_book_epub_pipeline_transitions_to_ready(
+    client: TestClient,
+    sample_book_epub: bytes,
+) -> None:
+    """An EPUB book upload reaches ready after the background task runs."""
+    response = client.post(
+        "/ingest",
+        files={"file": ("sample.epub", sample_book_epub, "application/epub+zip")},
+        data={"title": "Sample Book", "document_type": "book"},
+    )
+    assert response.status_code == 202
+    document_id = response.json()["document_id"]
+
+    status = client.get(f"/documents/{document_id}").json()["status"]
+    assert status == "ready"
+
+
 def test_ingest_oversized_file_returns_413(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
@@ -150,6 +184,31 @@ def test_ingest_then_query_end_to_end(
     body = response.json()
     assert body["grounded"] is True
     assert len(body["cited_passages"]) >= 1
+    for passage in body["cited_passages"]:
+        uuid.UUID(passage["chunk_id"])
+        assert isinstance(passage["text"], str)
+        assert passage["text"]
+    assert body["answer"]
+
+
+def test_ingest_book_then_query_end_to_end(
+    client: TestClient,
+    ingest_a_book: Callable[[str], str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Ingest a book, then query it expecting grounded=true with cited passages."""
+    monkeypatch.setattr("api.routes.retrieval_qa.LLMClient", _default_fake_llm_client)
+    # Raise top_k so all tied fake-embedding chunks are returned.
+    monkeypatch.setattr("api.routes.retrieval_qa.settings.query_top_k", 100)
+
+    ingest_a_book("Roman History")
+
+    response = client.post("/query", json={"query": "Tell me about Rome."})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["grounded"] is True
+    assert len(body["cited_passages"]) >= 1
+    assert any("Rome" in passage["text"] for passage in body["cited_passages"])
     for passage in body["cited_passages"]:
         uuid.UUID(passage["chunk_id"])
         assert isinstance(passage["text"], str)

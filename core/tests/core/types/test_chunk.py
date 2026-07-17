@@ -39,6 +39,12 @@ def test_book_chunk_metadata_rejects_extra_fields() -> None:
         BookChunkMetadata.model_validate({"chapter": 1, "heading": None, "sneaky": True})
 
 
+def test_book_chunk_metadata_rejects_string_chapter() -> None:
+    """BookChunkMetadata rejects a string chapter value at the write boundary."""
+    with pytest.raises(ValidationError):
+        BookChunkMetadata.model_validate({"chapter": "three", "heading": None})
+
+
 def test_documentation_chunk_metadata_valid() -> None:
     """DocumentationChunkMetadata accepts valid page/section metadata."""
     meta = DocumentationChunkMetadata(page="api-reference", section="auth")

@@ -9,7 +9,21 @@ from core.clients.embeddings_client import EmbeddingsClient
 from core.database.schema import Chunk, Document, Embedding
 from core.exceptions import IngestionError
 from core.types.document import DocumentStatus
-from retrieval_qa.chunking.paper_chunker import chunk_paper
+from retrieval_qa.chunking.book_chunker import BookChunk, chunk_book
+from retrieval_qa.chunking.paper_chunker import PaperChunk, chunk_paper
+
+_Chunk = PaperChunk | BookChunk
+
+
+def _chunk_inputs(
+    chunks: Sequence[_Chunk],
+) -> list[tuple[str, dict[str, object], int]]:
+    """Convert chunker output to the (content, type_metadata, token_count) shape.
+
+    Both paper and book chunkers expose the same interface, so this helper
+    avoids repeating the tuple construction.
+    """
+    return [(chunk.content, chunk.metadata.model_dump(), chunk.token_count) for chunk in chunks]
 
 
 def _chunk_document(
@@ -18,13 +32,14 @@ def _chunk_document(
 ) -> list[tuple[str, dict[str, object], int]]:
     """Return (content, type_metadata, token_count) tuples for a document.
 
-    Only paper chunking is implemented in MVP; other document types are
-    deliberately rejected so the schema stays document-type-aware without
-    guessing at chunkers that are out of scope.
+    Dispatches to the document-type-specific chunker. Unknown types are
+    deliberately rejected so the schema stays document-type-aware.
     """
     if document_type == "paper":
-        chunks = chunk_paper(file_bytes)
-        return [(chunk.content, chunk.metadata.model_dump(), chunk.token_count) for chunk in chunks]
+        return _chunk_inputs(chunk_paper(file_bytes))
+
+    if document_type == "book":
+        return _chunk_inputs(chunk_book(file_bytes))
 
     raise IngestionError(f"Chunker not implemented for document type: {document_type}")
 
