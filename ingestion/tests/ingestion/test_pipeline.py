@@ -106,6 +106,52 @@ def test_pipeline_failure_marks_failed_with_error(
     assert chunks == []
 
 
+def test_pipeline_book_happy_path_reaches_ready(
+    test_session: Session,
+    fake_embeddings_client: MagicMock,
+    sample_book_pdf: bytes,
+) -> None:
+    """A book ingestion advances validating -> chunking -> embedding -> ready."""
+    document = Document(
+        title="Sample Book",
+        document_type=DocumentType.BOOK,
+        source_filename="sample.pdf",
+    )
+    test_session.add(document)
+    test_session.flush()
+
+    run_ingestion(
+        document_id=document.document_id,
+        title="Sample Book",
+        document_type="book",
+        source_filename="sample.pdf",
+        file_bytes=sample_book_pdf,
+        session=test_session,
+        embeddings_client=fake_embeddings_client,
+        model_name="text-embedding-3-small",
+    )
+
+    test_session.commit()
+    refreshed = test_session.get(Document, document.document_id)
+    assert refreshed is not None
+    assert refreshed.status == DocumentStatus.READY
+    assert refreshed.error_message is None
+
+    chunks = (
+        test_session.query(Chunk)
+        .filter(Chunk.document_id == document.document_id)
+        .order_by(Chunk.position)
+        .all()
+    )
+    assert len(chunks) >= 1
+    for chunk in chunks:
+        assert "chapter" in chunk.type_metadata
+        assert isinstance(chunk.type_metadata["chapter"], int)
+
+    embeddings = test_session.query(Embedding).all()
+    assert len(embeddings) == len(chunks)
+
+
 def test_pipeline_rejects_unsupported_document_type(
     test_session: Session,
     fake_embeddings_client: MagicMock,
@@ -113,8 +159,8 @@ def test_pipeline_rejects_unsupported_document_type(
     """A document type without a chunker raises IngestionError."""
     document = Document(
         title="Unknown",
-        document_type=DocumentType.BOOK,
-        source_filename="book.epub",
+        document_type=DocumentType.DOCUMENTATION,
+        source_filename="docs.md",
     )
     test_session.add(document)
     test_session.flush()
@@ -123,8 +169,8 @@ def test_pipeline_rejects_unsupported_document_type(
         run_ingestion(
             document_id=document.document_id,
             title="Unknown",
-            document_type="book",
-            source_filename="book.epub",
+            document_type="documentation",
+            source_filename="docs.md",
             file_bytes=b"contents",
             session=test_session,
             embeddings_client=fake_embeddings_client,

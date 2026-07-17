@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 import pytest
 from fastapi.testclient import TestClient
 
-IngestAPaper = Callable[[str], str]
+IngestADocument = Callable[[str], str]
 
 
 def _patch_clients(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -68,7 +68,7 @@ def mock_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
 
 
 @pytest.fixture
-def ingest_a_paper(client: TestClient, sample_paper_pdf: bytes) -> IngestAPaper:
+def ingest_a_paper(client: TestClient, sample_paper_pdf: bytes) -> IngestADocument:
     """Fixture returning a callable that ingests a paper and awaits ready."""
 
     def _ingest(title: str = "Paper") -> str:
@@ -76,6 +76,25 @@ def ingest_a_paper(client: TestClient, sample_paper_pdf: bytes) -> IngestAPaper:
             "/ingest",
             files={"file": ("sample.pdf", sample_paper_pdf, "application/pdf")},
             data={"title": title, "document_type": "paper"},
+        )
+        assert response.status_code == 202
+        document_id = response.json()["document_id"]
+        status = client.get(f"/documents/{document_id}").json()["status"]
+        assert status == "ready", f"document never reached ready: {status}"
+        return str(document_id)
+
+    return _ingest
+
+
+@pytest.fixture
+def ingest_a_book(client: TestClient, sample_book_pdf: bytes) -> IngestADocument:
+    """Fixture returning a callable that ingests a book and awaits ready."""
+
+    def _ingest(title: str = "Book") -> str:
+        response = client.post(
+            "/ingest",
+            files={"file": ("sample.pdf", sample_book_pdf, "application/pdf")},
+            data={"title": title, "document_type": "book"},
         )
         assert response.status_code == 202
         document_id = response.json()["document_id"]

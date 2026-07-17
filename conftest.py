@@ -12,6 +12,7 @@ from contextlib import contextmanager
 from urllib.parse import urlparse
 
 import pytest
+from ebooklib import epub  # type: ignore[import-untyped]  # ebooklib ships without type stubs
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 from sqlalchemy import Engine, create_engine, text
@@ -24,6 +25,7 @@ from sqlalchemy.orm import Session, sessionmaker
 import api.controllers.qa_controller
 import api.server  # noqa: F401
 import ingestion.tasks  # noqa: F401
+import retrieval_qa.chunking.book_chunker
 import retrieval_qa.chunking.paper_chunker
 import retrieval_qa.retrieval.query  # noqa: F401
 
@@ -116,6 +118,56 @@ def sample_paper_pdf() -> bytes:
     canva.drawString(72, 440, "The results show improved recall at k.")
     canva.showPage()
     canva.save()
+    buffer.seek(0)
+    return buffer.read()
+
+
+@pytest.fixture
+def sample_book_pdf() -> bytes:
+    """Generate a small PDF with chapter headings for chunking."""
+    buffer = io.BytesIO()
+    canva = canvas.Canvas(buffer, pagesize=letter)
+    canva.drawString(72, 720, "Chapter 1")
+    canva.drawString(72, 700, "The ancient city of Rome was built on seven hills.")
+    canva.drawString(72, 680, "Summary")
+    canva.drawString(72, 660, "Rome has seven hills.")
+    canva.showPage()
+    canva.drawString(72, 720, "Chapter 2")
+    canva.drawString(72, 700, "The Roman Forum was the center of public life.")
+    canva.showPage()
+    canva.save()
+    buffer.seek(0)
+    return buffer.read()
+
+
+@pytest.fixture
+def sample_book_epub() -> bytes:
+    """Generate a small EPUB with two chapters for chunking."""
+    book = epub.EpubBook()
+    book.set_identifier("book-test-001")
+    book.set_title("Sample Book")
+    book.set_language("en")
+    book.add_author("Test Author")
+
+    chapter1 = epub.EpubHtml(title="Chapter 1", file_name="chap_1.xhtml", lang="en")
+    chapter1.content = (
+        "<h1>Chapter 1</h1>"
+        "<p>The ancient city of Rome was built on seven hills.</p>"
+        "<h2>Summary</h2>"
+        "<p>Rome has seven hills.</p>"
+    )
+    chapter2 = epub.EpubHtml(title="Chapter 2", file_name="chap_2.xhtml", lang="en")
+    chapter2.content = "<h1>Chapter 2</h1><p>The Roman Forum was the center of public life.</p>"
+
+    book.add_item(chapter1)
+    book.add_item(chapter2)
+    book.toc = [chapter1, chapter2]
+    book.add_item(epub.EpubNcx())
+    book.add_item(epub.EpubNav())
+    book.spine = ["nav", chapter1, chapter2]
+
+    buffer = io.BytesIO()
+    epub.write_epub(buffer, book, {})
     buffer.seek(0)
     return buffer.read()
 
