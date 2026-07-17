@@ -83,6 +83,70 @@ class _HTMLTextExtractor(HTMLParser):
         return re.sub(r"\n\s*\n+", "\n\n", text).strip()
 
 
+class _SectionExtractor(HTMLParser):
+    """Parse XHTML into heading-delimited sections.
+
+    Records ``(heading_level, heading_text, body_text)`` tuples where
+    *heading_level* is 1--6 for ``<h1>``--``<h6>`` (``None`` for preamble
+    before the first heading).
+    """
+
+    _HEADING_TAGS = frozenset({"h1", "h2", "h3", "h4", "h5", "h6"})
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.sections: list[tuple[int | None, str | None, str]] = []
+        self._current_level: int | None = None
+        self._current_heading: str | None = None
+        self._current_parts: list[str] = []
+        self._skip = False
+        self._in_heading = False
+        self._heading_parts: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag in {"script", "style", "head"}:
+            self._skip = True
+        elif tag in self._HEADING_TAGS:
+            self._flush_body_section()
+            self._in_heading = True
+            self._current_level = int(tag[1])
+            self._heading_parts = []
+        elif tag in {"p", "div", "li", "br"}:
+            self._current_parts.append("\n")
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in {"script", "style", "head"}:
+            self._skip = False
+        elif tag in self._HEADING_TAGS:
+            self._in_heading = False
+            heading_text = "".join(self._heading_parts).strip()
+            self._current_heading = heading_text if heading_text else None
+        elif tag in {"p", "div", "li"}:
+            self._current_parts.append("\n")
+
+    def handle_data(self, data: str) -> None:
+        if self._skip:
+            return
+        if self._in_heading:
+            self._heading_parts.append(data)
+        else:
+            self._current_parts.append(data)
+
+    def _flush_body_section(self) -> None:
+        text = "".join(self._current_parts)
+        text = re.sub(r"\n\s*\n+", "\n\n", text).strip()
+        if text:
+            self.sections.append((self._current_level, self._current_heading, text))
+        self._current_parts = []
+        self._current_heading = None
+        self._current_level = None
+
+    def get_sections(self) -> list[tuple[int | None, str | None, str]]:
+        """Return the list of ``(level, heading, body)`` tuples extracted."""
+        self._flush_body_section()
+        return self.sections
+
+
 def _count_tokens(text: str) -> int:
     """Approximate token count for chunk sizing.
 
@@ -229,8 +293,40 @@ def _parse_opf(opf_content: str) -> tuple[list[str], dict[str, str]]:
     return spine_order, item_map
 
 
-def _extract_text_from_epub(epub_bytes: bytes) -> str:
-    """Extract text from an EPUB byte stream."""
+def _extract_epub_text(
+    archive: zipfile.ZipFile,
+    opf_dir: str,
+    spine_order: list[str],
+    item_map: dict[str, str],
+) -> str:
+    """Extract plain text from EPUB spine items (legacy tag-stripping path)."""
+    parts: list[str] = []
+    for item_id in spine_order:
+        href = item_map.get(item_id)
+        if href is None:
+            continue
+        file_path = os.path.normpath(os.path.join(opf_dir, href)) if opf_dir else href
+        try:
+            raw = archive.read(file_path).decode("utf-8")
+        except KeyError:
+            raw = archive.read(href).decode("utf-8")
+
+        extractor = _HTMLTextExtractor()
+        extractor.feed(raw)
+        text = extractor.get_text()
+        if text:
+            parts.append(text)
+    return "\n\n".join(parts)
+
+
+def _extract_chapters_from_epub(epub_bytes: bytes) -> list[tuple[int, str | None, str]]:
+    """Extract chapters from an EPUB using native HTML heading structure.
+
+    Uses the EPUB spine order and HTML heading tags (``<h1>``--``<h6>``) to
+    identify chapter and section boundaries.  ``<h1>`` increments the chapter
+    number; ``<h2>``--``<h6>`` are treated as sub-sections within the current
+    chapter.  Falls back to regex heuristics when no heading tags are present.
+    """
     try:
         with zipfile.ZipFile(BytesIO(epub_bytes)) as archive:
             container_xml = archive.read("META-INF/container.xml").decode("utf-8")
@@ -240,7 +336,9 @@ def _extract_text_from_epub(epub_bytes: bytes) -> str:
             opf_content = archive.read(opf_path).decode("utf-8")
             spine_order, item_map = _parse_opf(opf_content)
 
-            parts: list[str] = []
+            # Phase 1 -- structure-aware extraction via HTML headings
+            all_section_data: list[list[tuple[int | None, str | None, str]]] = []
+            total_headings = 0
             for item_id in spine_order:
                 href = item_map.get(item_id)
                 if href is None:
@@ -251,13 +349,27 @@ def _extract_text_from_epub(epub_bytes: bytes) -> str:
                 except KeyError:
                     raw = archive.read(href).decode("utf-8")
 
-                extractor = _HTMLTextExtractor()
+                extractor = _SectionExtractor()
                 extractor.feed(raw)
-                text = extractor.get_text()
-                if text:
-                    parts.append(text)
+                extractor.close()
+                sections = extractor.get_sections()
+                all_section_data.append(sections)
+                total_headings += sum(1 for level, _, _ in sections if level is not None)
 
-            return "\n\n".join(parts)
+            if total_headings > 0:
+                chapters: list[tuple[int, str | None, str]] = []
+                chapter_number = 0
+                for item_sections in all_section_data:
+                    for level, heading, body in item_sections:
+                        if level == 1:
+                            chapter_number += 1
+                        content = f"{heading}\n\n{body}" if heading else body
+                        chapters.append((chapter_number, heading, content))
+                return chapters
+
+            # Phase 2 -- no headings found, fall back to regex heuristics
+            text = _extract_epub_text(archive, opf_dir, spine_order, item_map)
+            return _split_into_chapters(text)
     except Exception as exc:
         raise IngestionError(f"Failed to parse EPUB: {exc}") from exc
 
@@ -295,15 +407,18 @@ def chunk_book(file_bytes: bytes) -> list[BookChunk]:
     """
     document_format = _detect_format(file_bytes)
     if document_format is BookFormat.PDF:
-        text = _extract_text_from_pdf(file_bytes)
+        raw_text = _extract_text_from_pdf(file_bytes)
+        if not raw_text.strip():
+            raise IngestionError("Book contains no extractable text")
+        chapters = _split_into_chapters(raw_text)
     else:
-        text = _extract_text_from_epub(file_bytes)
+        chapters = _extract_chapters_from_epub(file_bytes)
 
-    if not text.strip():
+    if not chapters:
         raise IngestionError("Book contains no extractable text")
 
     chunks: list[BookChunk] = []
-    for chapter, heading, body in _split_into_chapters(text):
+    for chapter, heading, body in chapters:
         if not body.strip():
             continue
         metadata = BookChunkMetadata(chapter=chapter, heading=heading)
@@ -315,14 +430,15 @@ def chunk_book(file_bytes: bytes) -> list[BookChunk]:
             )
         )
 
-    # If the heuristic found no usable sections, emit the whole document as a
-    # single chunk so the pipeline never produces zero chunks.
+    # If no section produced usable content, emit the whole document as a single
+    # chunk so the pipeline never produces zero chunks.
     if not chunks:
+        full_text = "\n\n".join(body for _, _, body in chapters)
         chunks.append(
             BookChunk(
-                content=text,
+                content=full_text,
                 metadata=BookChunkMetadata(chapter=1, heading=None),
-                token_count=_count_tokens(text),
+                token_count=_count_tokens(full_text),
             )
         )
 
