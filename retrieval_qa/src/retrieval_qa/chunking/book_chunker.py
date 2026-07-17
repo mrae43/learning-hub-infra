@@ -8,6 +8,7 @@ import os
 import re
 import xml.etree.ElementTree as ET
 import zipfile
+from enum import StrEnum
 from html.parser import HTMLParser
 from io import BytesIO
 
@@ -16,6 +17,14 @@ from pypdf import PdfReader
 
 from core.exceptions import IngestionError
 from core.types.chunk import BookChunkMetadata
+
+
+class BookFormat(StrEnum):
+    """Supported book file formats for ingestion."""
+
+    PDF = "pdf"
+    EPUB = "epub"
+
 
 # Matches lines that look like chapter headers, e.g.:
 #   "Chapter 1"
@@ -253,10 +262,10 @@ def _extract_text_from_epub(epub_bytes: bytes) -> str:
         raise IngestionError(f"Failed to parse EPUB: {exc}") from exc
 
 
-def _detect_format(file_bytes: bytes) -> str:
+def _detect_format(file_bytes: bytes) -> BookFormat:
     """Detect whether ``file_bytes`` is a PDF or EPUB."""
     if file_bytes.startswith(b"%PDF"):
-        return "pdf"
+        return BookFormat.PDF
 
     if file_bytes.startswith(b"PK"):
         try:
@@ -264,7 +273,7 @@ def _detect_format(file_bytes: bytes) -> str:
                 if "mimetype" in archive.namelist():
                     mimetype = archive.read("mimetype").strip().lower()
                     if mimetype == b"application/epub+zip":
-                        return "epub"
+                        return BookFormat.EPUB
         except zipfile.BadZipFile:
             pass
 
@@ -285,7 +294,7 @@ def chunk_book(file_bytes: bytes) -> list[BookChunk]:
             book format.
     """
     document_format = _detect_format(file_bytes)
-    if document_format == "pdf":
+    if document_format is BookFormat.PDF:
         text = _extract_text_from_pdf(file_bytes)
     else:
         text = _extract_text_from_epub(file_bytes)

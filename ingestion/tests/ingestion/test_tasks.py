@@ -3,6 +3,7 @@
 from unittest.mock import MagicMock
 from uuid import uuid4
 
+from core.types.document import DocumentType
 from ingestion.tasks import schedule_ingestion
 
 
@@ -14,7 +15,7 @@ def test_schedule_ingestion_adds_background_task() -> None:
     schedule_ingestion(
         background_tasks=mock_bg,
         document_id=doc_id,
-        document_type="paper",
+        document_type=DocumentType.PAPER,
         source_filename="test.pdf",
         file_bytes=b"fake-pdf-bytes",
     )
@@ -25,7 +26,7 @@ def test_schedule_ingestion_adds_background_task() -> None:
     assert callable(args[0][0])
     # Remaining positional args match the arguments passed through
     assert args[0][1] == doc_id
-    assert args[0][2] == "paper"
+    assert args[0][2] == DocumentType.PAPER
     assert args[0][3] == "test.pdf"
     assert args[0][4] == b"fake-pdf-bytes"
 

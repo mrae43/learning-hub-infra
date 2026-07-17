@@ -80,7 +80,7 @@ async def ingest_document(
     schedule_ingestion(
         background_tasks,
         document_id=document_id,
-        document_type=document_type.value,
+        document_type=document_type,
         source_filename=source_filename,
         file_bytes=file_bytes,
     )
