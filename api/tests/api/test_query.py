@@ -356,3 +356,37 @@ def test_query_end_to_end_cross_document_returns_paper_citation(
     cited_ids = {passage["chunk_id"] for passage in body["cited_passages"]}
     assert cited_ids & paper_chunk_ids
     assert not (cited_ids - paper_chunk_ids - book_chunk_ids)
+
+
+def test_query_end_to_end_cross_document_returns_documentation_citation(
+    client: TestClient,
+    test_session: Session,
+    ingest_a_paper: Callable[[str], str],
+    ingest_a_documentation: Callable[[str], str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A query answered by documentation returns a cited passage from the docs."""
+    monkeypatch.setattr("api.routes.retrieval_qa.LLMClient", _default_fake_llm_client)
+    # Raise top_k so the tied fake embeddings return chunks from both documents.
+    monkeypatch.setattr("api.routes.retrieval_qa.settings.query_top_k", 100)
+
+    paper_id = ingest_a_paper("RAG Paper")
+    docs_id = ingest_a_documentation("API Docs")
+
+    docs_chunk_ids = {
+        str(chunk.chunk_id)
+        for chunk in test_session.query(Chunk).filter(Chunk.document_id == docs_id).all()
+    }
+    paper_chunk_ids = {
+        str(chunk.chunk_id)
+        for chunk in test_session.query(Chunk).filter(Chunk.document_id == paper_id).all()
+    }
+
+    response = client.post("/query", json={"query": "Tell me about users."})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["grounded"] is True
+    cited_ids = {passage["chunk_id"] for passage in body["cited_passages"]}
+    assert cited_ids & docs_chunk_ids
+    assert not (cited_ids - paper_chunk_ids - docs_chunk_ids)

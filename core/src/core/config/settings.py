@@ -39,7 +39,7 @@ class Settings(BaseSettings):
     query_top_k: int = 5
     inference_model: str = "gpt-4o-mini"
     max_upload_bytes: int = 100 * 1024 * 1024  # 100 MB placeholder
-    allowed_file_extensions: set[str] = {"pdf", "epub"}
+    allowed_file_extensions: set[str] = {"pdf", "epub", "md", "html"}
 
 
 # Global singleton used by the application. Tests override via monkeypatch or

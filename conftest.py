@@ -26,6 +26,7 @@ import api.controllers.qa_controller
 import api.server  # noqa: F401
 import ingestion.tasks  # noqa: F401
 import retrieval_qa.chunking.book_chunker
+import retrieval_qa.chunking.documentation_chunker
 import retrieval_qa.chunking.paper_chunker
 import retrieval_qa.retrieval.query  # noqa: F401
 
@@ -210,6 +211,21 @@ def sample_book_epub() -> bytes:
         )
     buffer.seek(0)
     return buffer.read()
+
+
+@pytest.fixture
+def sample_documentation_md() -> bytes:
+    """Generate a small Markdown documentation file with pages and API entries."""
+    return (
+        b"# Installation\n\n"
+        b"Install the package with pip.\n\n"
+        b"# API Reference\n\n"
+        b"## Users\n\n"
+        b"GET /api/v1/users\n\n"
+        b"Returns a list of users.\n\n"
+        b"POST /api/v1/users\n\n"
+        b"Creates a new user.\n"
+    )
 
 
 def _create_enums(engine: Engine) -> None:

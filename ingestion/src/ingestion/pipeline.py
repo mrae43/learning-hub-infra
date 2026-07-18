@@ -17,9 +17,10 @@ from core.types.chunk import (
 )
 from core.types.document import DocumentStatus, DocumentType
 from retrieval_qa.chunking.book_chunker import BookChunk, chunk_book
+from retrieval_qa.chunking.documentation_chunker import DocumentationChunk, chunk_documentation
 from retrieval_qa.chunking.paper_chunker import PaperChunk, chunk_paper
 
-_Chunk = PaperChunk | BookChunk
+_Chunk = PaperChunk | BookChunk | DocumentationChunk
 
 
 def _validate_type_metadata(
@@ -78,7 +79,7 @@ def _chunk_document(
         case DocumentType.BOOK:
             return _chunk_inputs(chunk_book(file_bytes))
         case DocumentType.DOCUMENTATION:
-            raise IngestionError(f"Chunker not implemented for document type: {document_type}")
+            return _chunk_inputs(chunk_documentation(file_bytes))
         case _ as unreachable:
             assert_never(unreachable)
 
