@@ -11,7 +11,7 @@ Two fixture variants are used:
 """
 
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from unittest.mock import MagicMock
 
 import pytest
@@ -101,7 +101,7 @@ def test_query_embeddings_unavailable_returns_503(client: TestClient) -> None:
 
 
 def test_query_inference_bad_response_returns_502(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
+    client: TestClient, patched_retrieve_chunks: Callable[[Sequence[object]], None]
 ) -> None:
     """A mocked inference provider returning a bad response maps to 502."""
 
@@ -111,10 +111,7 @@ def test_query_inference_bad_response_returns_502(
         return llm
 
     set_dependency_override(client, get_completion_provider, _bad_llm)
-    monkeypatch.setattr(
-        "api.controllers.qa_controller.retrieve_relevant_chunks",
-        lambda **kwargs: [_fake_chunk(text="some chunk")],
-    )
+    patched_retrieve_chunks([_fake_chunk(text="some chunk")])
 
     response = client.post("/query", json={"query": "anything"})
 
@@ -125,7 +122,7 @@ def test_query_inference_bad_response_returns_502(
 
 
 def test_query_inference_unavailable_returns_503(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
+    client: TestClient, patched_retrieve_chunks: Callable[[Sequence[object]], None]
 ) -> None:
     """A mocked inference provider that's unreachable/timeout maps to 503."""
 
@@ -135,10 +132,7 @@ def test_query_inference_unavailable_returns_503(
         return llm
 
     set_dependency_override(client, get_completion_provider, _unavailable_llm)
-    monkeypatch.setattr(
-        "api.controllers.qa_controller.retrieve_relevant_chunks",
-        lambda **kwargs: [_fake_chunk(text="some chunk")],
-    )
+    patched_retrieve_chunks([_fake_chunk(text="some chunk")])
 
     response = client.post("/query", json={"query": "anything"})
 
@@ -154,14 +148,10 @@ def test_query_inference_unavailable_returns_503(
 
 
 def test_query_empty_corpus_returns_not_grounded(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
+    client: TestClient, patched_empty_retrieval: None
 ) -> None:
     """An empty retrieval result yields 200 grounded=false with empty passages."""
     set_dependency_override(client, get_completion_provider, _default_fake_llm_refusal_provider)
-    monkeypatch.setattr(
-        "api.controllers.qa_controller.retrieve_relevant_chunks",
-        lambda **kwargs: [],
-    )
 
     response = client.post("/query", json={"query": "What is pgvector?"})
 
@@ -174,14 +164,10 @@ def test_query_empty_corpus_returns_not_grounded(
 
 
 def test_query_response_has_exactly_three_fields(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
+    client: TestClient, patched_empty_retrieval: None
 ) -> None:
     """The 200 body exposes only answer, cited_passages, grounded (per ADR-0014)."""
     set_dependency_override(client, get_completion_provider, _default_fake_llm_refusal_provider)
-    monkeypatch.setattr(
-        "api.controllers.qa_controller.retrieve_relevant_chunks",
-        lambda **kwargs: [],
-    )
 
     response = client.post("/query", json={"query": "anything"})
 
@@ -190,15 +176,12 @@ def test_query_response_has_exactly_three_fields(
 
 
 def test_query_grounds_with_mocked_retrieval(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
+    client: TestClient, patched_retrieve_chunks: Callable[[Sequence[object]], None]
 ) -> None:
     """The route glue produces grounded=True and cited_passages from the retrieved chunks."""
     set_dependency_override(client, get_completion_provider, _default_fake_llm_provider)
     chunk = _fake_chunk(text="relevant passage text")
-    monkeypatch.setattr(
-        "api.controllers.qa_controller.retrieve_relevant_chunks",
-        lambda **kwargs: [chunk],
-    )
+    patched_retrieve_chunks([chunk])
 
     response = client.post("/query", json={"query": "Tell me about retrieval strategies."})
 
@@ -242,16 +225,12 @@ def test_query_end_to_end_grounds_with_real_chunks(
 def test_query_end_to_end_irrelevant_returns_not_grounded(
     client: TestClient,
     ingest_a_paper: Callable[[str], str],
-    monkeypatch: pytest.MonkeyPatch,
+    patched_empty_retrieval: None,
 ) -> None:
     """Asking an irrelevant question yields 200 grounded=false with empty passages."""
     # Force the not-found branch even against a ready corpus by returning []
     # from retrieval; the LLM stub returns a refusal.
     set_dependency_override(client, get_completion_provider, _default_fake_llm_refusal_provider)
-    monkeypatch.setattr(
-        "api.controllers.qa_controller.retrieve_relevant_chunks",
-        lambda **kwargs: [],
-    )
     ingest_a_paper("RAG Paper")
 
     response = client.post("/query", json={"query": "What is the capital of France?"})
