@@ -8,13 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from api.dependencies import get_completion_provider, get_embedder
-from api.tests.conftest import set_dependency_override
-from core.clients import MockCompletionProvider
-
-
-def _default_fake_llm_provider() -> MockCompletionProvider:
-    """A mocked completion provider that returns a fixed grounded answer."""
-    return MockCompletionProvider("Grounded answer derived from retrieved passages.")
+from api.tests.conftest import _default_fake_llm_provider, set_dependency_override
 
 
 def test_ingest_returns_202_with_location_header(

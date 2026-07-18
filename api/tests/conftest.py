@@ -21,6 +21,11 @@ def _default_fake_embedder() -> InMemoryEmbedder:
     return InMemoryEmbedder(dimension=1536, scale=0.01)
 
 
+def _default_fake_llm_provider() -> MockCompletionProvider:
+    """A mocked completion provider that returns a fixed grounded answer."""
+    return MockCompletionProvider("Grounded answer derived from retrieved passages.")
+
+
 def _default_fake_llm_refusal_provider() -> MockCompletionProvider:
     """A mocked completion provider returning a fixed refusal answer."""
     return MockCompletionProvider("I could not find anything relevant in the corpus.")
