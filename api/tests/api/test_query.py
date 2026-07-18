@@ -19,16 +19,14 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from api.dependencies import get_completion_provider, get_embedder
-from api.tests.conftest import _default_fake_llm_provider, set_dependency_override
-from core.clients import MockCompletionProvider
+from api.tests.conftest import (
+    _default_fake_llm_provider,
+    _default_fake_llm_refusal_provider,
+    set_dependency_override,
+)
 from core.database.schema import Chunk
 from core.exceptions import UpstreamBadResponse, UpstreamUnavailable
 from core.types.responses import CitedPassage
-
-
-def _refusal_fake_llm_provider() -> MockCompletionProvider:
-    """A mocked completion provider that returns a refusal answer."""
-    return MockCompletionProvider("I could not find anything relevant in the corpus.")
 
 
 def _fake_chunk(*, text: str = "chunk text") -> CitedPassage:
@@ -159,7 +157,7 @@ def test_query_empty_corpus_returns_not_grounded(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """An empty retrieval result yields 200 grounded=false with empty passages."""
-    set_dependency_override(client, get_completion_provider, _refusal_fake_llm_provider)
+    set_dependency_override(client, get_completion_provider, _default_fake_llm_refusal_provider)
     monkeypatch.setattr(
         "api.controllers.qa_controller.retrieve_relevant_chunks",
         lambda **kwargs: [],
@@ -179,7 +177,7 @@ def test_query_response_has_exactly_three_fields(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The 200 body exposes only answer, cited_passages, grounded (per ADR-0014)."""
-    set_dependency_override(client, get_completion_provider, _refusal_fake_llm_provider)
+    set_dependency_override(client, get_completion_provider, _default_fake_llm_refusal_provider)
     monkeypatch.setattr(
         "api.controllers.qa_controller.retrieve_relevant_chunks",
         lambda **kwargs: [],
@@ -249,7 +247,7 @@ def test_query_end_to_end_irrelevant_returns_not_grounded(
     """Asking an irrelevant question yields 200 grounded=false with empty passages."""
     # Force the not-found branch even against a ready corpus by returning []
     # from retrieval; the LLM stub returns a refusal.
-    set_dependency_override(client, get_completion_provider, _refusal_fake_llm_provider)
+    set_dependency_override(client, get_completion_provider, _default_fake_llm_refusal_provider)
     monkeypatch.setattr(
         "api.controllers.qa_controller.retrieve_relevant_chunks",
         lambda **kwargs: [],
@@ -269,7 +267,7 @@ def test_query_end_to_end_empty_corpus_returns_not_grounded(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Querying an empty corpus yields 200 grounded=false with empty passages."""
-    set_dependency_override(client, get_completion_provider, _refusal_fake_llm_provider)
+    set_dependency_override(client, get_completion_provider, _default_fake_llm_refusal_provider)
 
     response = client.post("/query", json={"query": "What is pgvector?"})
 
