@@ -105,6 +105,25 @@ def ingest_a_book(client: TestClient, sample_book_pdf: bytes) -> IngestADocument
     return _ingest
 
 
+@pytest.fixture
+def ingest_a_documentation(client: TestClient, sample_documentation_md: bytes) -> IngestADocument:
+    """Fixture returning a callable that ingests documentation and awaits ready."""
+
+    def _ingest(title: str = "Docs") -> str:
+        response = client.post(
+            "/ingest",
+            files={"file": ("docs.md", sample_documentation_md, "text/markdown")},
+            data={"title": title, "document_type": "documentation"},
+        )
+        assert response.status_code == 202
+        document_id = response.json()["document_id"]
+        status = client.get(f"/documents/{document_id}").json()["status"]
+        assert status == "ready", f"document never reached ready: {status}"
+        return str(document_id)
+
+    return _ingest
+
+
 def _default_fake_client(*args: object, **kwargs: object) -> MagicMock:
     client = MagicMock()
 

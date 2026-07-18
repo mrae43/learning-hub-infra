@@ -152,30 +152,47 @@ def test_pipeline_book_happy_path_reaches_ready(
     assert len(embeddings) == len(chunks)
 
 
-def test_pipeline_rejects_unsupported_document_type(
+def test_pipeline_documentation_happy_path_reaches_ready(
     test_session: Session,
     fake_embeddings_client: MagicMock,
+    sample_documentation_md: bytes,
 ) -> None:
-    """A document type without a chunker raises IngestionError."""
+    """A documentation ingestion advances validating -> chunking -> embedding -> ready."""
     document = Document(
-        title="Unknown",
+        title="Sample Docs",
         document_type=DocumentType.DOCUMENTATION,
         source_filename="docs.md",
     )
     test_session.add(document)
     test_session.flush()
 
-    with pytest.raises(IngestionError):
-        run_ingestion(
-            document_id=document.document_id,
-            title="Unknown",
-            document_type=DocumentType.DOCUMENTATION,
-            source_filename="docs.md",
-            file_bytes=b"contents",
-            session=test_session,
-            embeddings_client=fake_embeddings_client,
-            model_name="text-embedding-3-small",
-        )
+    run_ingestion(
+        document_id=document.document_id,
+        title="Sample Docs",
+        document_type=DocumentType.DOCUMENTATION,
+        source_filename="docs.md",
+        file_bytes=sample_documentation_md,
+        session=test_session,
+        embeddings_client=fake_embeddings_client,
+        model_name="text-embedding-3-small",
+    )
+
+    test_session.commit()
+    refreshed = test_session.get(Document, document.document_id)
+    assert refreshed is not None
+    assert refreshed.status == DocumentStatus.READY
+    assert refreshed.error_message is None
+
+    chunks = (
+        test_session.query(Chunk)
+        .filter(Chunk.document_id == document.document_id)
+        .order_by(Chunk.position)
+        .all()
+    )
+    assert len(chunks) >= 1
+    for chunk in chunks:
+        assert "page" in chunk.type_metadata
+        assert isinstance(chunk.type_metadata["page"], str)
 
 
 def test_reingestion_creates_new_document_id(

@@ -79,6 +79,23 @@ def test_ingest_book_epub_pipeline_transitions_to_ready(
     assert status == "ready"
 
 
+def test_ingest_documentation_pipeline_transitions_to_ready(
+    client: TestClient,
+    sample_documentation_md: bytes,
+) -> None:
+    """A Markdown documentation upload reaches ready after the background task runs."""
+    response = client.post(
+        "/ingest",
+        files={"file": ("docs.md", sample_documentation_md, "text/markdown")},
+        data={"title": "Sample Docs", "document_type": "documentation"},
+    )
+    assert response.status_code == 202
+    document_id = response.json()["document_id"]
+
+    status = client.get(f"/documents/{document_id}").json()["status"]
+    assert status == "ready"
+
+
 def test_ingest_oversized_file_returns_413(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,

@@ -21,7 +21,7 @@ A hand-rolled RAG study tool for learning AI/ML from papers, books, and document
 | Post-MVP 1 | **Depth Dive** — richer explanations (text + diagrams + code) with agentic web search | 🔧 Scaffold |
 | Post-MVP 2 | **Synapse** — multi-sensory interactive learning with gamification and neuroplasticity triggers | 📅 Planned |
 
-> **Status:** Early implementation — tracer bullet complete. Four of five packages (`core/`, `retrieval_qa/`, `api/`, `ingestion/`) have implementation code (~4720 lines total). Only `depth_dive/` remains as a scaffold. Ingestion pipeline, Harness A query pipeline, and three API endpoints (`POST /ingest`, `GET /documents/{id}`, `POST /query`) are operational. See [docs/](./docs/) for architecture decisions and plans.
+> **Status:** Early implementation — tracer bullet complete. Four of five packages (`core/`, `retrieval_qa/`, `api/`, `ingestion/`) have implementation code (~5470 lines total). Only `depth_dive/` remains as a scaffold. Ingestion pipeline, Harness A query pipeline, and three API endpoints (`POST /ingest`, `GET /documents/{id}`, `POST /query`) are operational. See [docs/](./docs/) for architecture decisions and plans.
 
 ## Architecture
 
@@ -51,7 +51,7 @@ Structured monorepo with extractable module boundaries:
 
 ## Challenges solved
 
-**Multi-format document chunking.** Papers, books, and documentation have different structures. Each gets a structure-aware chunker (section boundaries for papers, chapter boundaries for books) that produces typed metadata via a JSONB registry — keeping each doc type's schema explicit and extensible.
+**Multi-format document chunking.** Papers, books, and documentation have different structures. Each gets a structure-aware chunker (section boundaries for papers, chapter boundaries for books, page/API-entry boundaries for documentation) that produces typed metadata via a JSONB registry — keeping each doc type's schema explicit and extensible.
 
 **Module boundary enforcement.** A five-package monorepo needs real boundaries or they become fictional. `import-linter` in CI (`uv run lint-imports`) catches cross-package leaks before merge — e.g., `retrieval_qa` and `depth_dive` must never import each other.
 
