@@ -1,5 +1,6 @@
 """Unit tests for the QA controller (clients + retrieval mocked)."""
 
+from collections.abc import Callable, Sequence
 from typing import cast
 from unittest.mock import MagicMock
 from uuid import uuid4
@@ -36,18 +37,17 @@ def _vector(value: float = 0.5) -> list[float]:
     return [value] * 1536
 
 
-def test_run_query_grounds_when_retrieval_returns_chunks(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_run_query_grounds_when_retrieval_returns_chunks(
+    patched_retrieve_chunks: Callable[[Sequence[object]], None],
+) -> None:
     """Relevant chunks yield grounded=True with cited_passages populated."""
     retrieved_chunks = [
         CitedPassage(chunk_id=uuid4(), text="pgvector supports HNSW indexes."),
         CitedPassage(chunk_id=uuid4(), text="Cosine distance uses the <=> operator."),
     ]
+    patched_retrieve_chunks(retrieved_chunks)
 
     fake_session = MagicMock()
-    monkeypatch.setattr(
-        "api.controllers.qa_controller.retrieve_relevant_chunks",
-        lambda **kwargs: retrieved_chunks,
-    )
 
     response = run_query(
         query="How does pgvector rank chunks?",
@@ -66,12 +66,8 @@ def test_run_query_grounds_when_retrieval_returns_chunks(monkeypatch: pytest.Mon
     assert response.answer == "Cosine distance via <=> against an HNSW index."
 
 
-def test_run_query_not_grounded_when_retrieval_empty(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_run_query_not_grounded_when_retrieval_empty(patched_empty_retrieval: None) -> None:
     """An empty retrieval result yields grounded=False with empty passages and a refusal answer."""
-    monkeypatch.setattr(
-        "api.controllers.qa_controller.retrieve_relevant_chunks",
-        lambda **kwargs: [],
-    )
 
     response = run_query(
         query="an irrelevant question",
@@ -86,12 +82,8 @@ def test_run_query_not_grounded_when_retrieval_empty(monkeypatch: pytest.MonkeyP
     assert response.answer == "I couldn't find anything relevant in the corpus."
 
 
-def test_run_query_answer_field_always_populated(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_run_query_answer_field_always_populated(patched_empty_retrieval: None) -> None:
     """The answer field is non-empty on both grounded and not-grounded branches."""
-    monkeypatch.setattr(
-        "api.controllers.qa_controller.retrieve_relevant_chunks",
-        lambda **kwargs: [],
-    )
 
     response = run_query(
         query="another irrelevant question",
@@ -136,13 +128,9 @@ def test_run_query_embeds_query_before_retrieval(monkeypatch: pytest.MonkeyPatch
 
 
 def test_run_query_propagates_upstream_unavailable_from_embeddings(
-    monkeypatch: pytest.MonkeyPatch,
+    patched_empty_retrieval: None,
 ) -> None:
     """Embeddings client unreachable surfaces UpstreamUnavailable for the route to map to 503."""
-    monkeypatch.setattr(
-        "api.controllers.qa_controller.retrieve_relevant_chunks",
-        lambda **kwargs: [],
-    )
 
     with pytest.raises(UpstreamUnavailable):
         run_query(
@@ -158,13 +146,9 @@ def test_run_query_propagates_upstream_unavailable_from_embeddings(
 
 
 def test_run_query_propagates_upstream_bad_response_from_embeddings(
-    monkeypatch: pytest.MonkeyPatch,
+    patched_empty_retrieval: None,
 ) -> None:
     """Embeddings bad response surfaces UpstreamBadResponse for the route to map to 502."""
-    monkeypatch.setattr(
-        "api.controllers.qa_controller.retrieve_relevant_chunks",
-        lambda **kwargs: [],
-    )
 
     with pytest.raises(UpstreamBadResponse):
         run_query(
@@ -180,13 +164,10 @@ def test_run_query_propagates_upstream_bad_response_from_embeddings(
 
 
 def test_run_query_propagates_upstream_unavailable_from_inference(
-    monkeypatch: pytest.MonkeyPatch,
+    patched_retrieve_chunks: Callable[[Sequence[object]], None],
 ) -> None:
     """Inference client unreachable surfaces UpstreamUnavailable for the route to map to 503."""
-    monkeypatch.setattr(
-        "api.controllers.qa_controller.retrieve_relevant_chunks",
-        lambda **kwargs: [MagicMock(chunk_id=uuid4(), text="chunk text")],
-    )
+    patched_retrieve_chunks([MagicMock(chunk_id=uuid4(), text="chunk text")])
 
     with pytest.raises(UpstreamUnavailable):
         run_query(
@@ -202,13 +183,10 @@ def test_run_query_propagates_upstream_unavailable_from_inference(
 
 
 def test_run_query_propagates_upstream_bad_response_from_inference(
-    monkeypatch: pytest.MonkeyPatch,
+    patched_retrieve_chunks: Callable[[Sequence[object]], None],
 ) -> None:
     """Inference bad response surfaces UpstreamBadResponse for the route to map to 502."""
-    monkeypatch.setattr(
-        "api.controllers.qa_controller.retrieve_relevant_chunks",
-        lambda **kwargs: [MagicMock(chunk_id=uuid4(), text="chunk text")],
-    )
+    patched_retrieve_chunks([MagicMock(chunk_id=uuid4(), text="chunk text")])
 
     with pytest.raises(UpstreamBadResponse):
         run_query(
@@ -223,14 +201,12 @@ def test_run_query_propagates_upstream_bad_response_from_inference(
         )
 
 
-def test_run_query_passes_chunks_to_llm_prompt(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_run_query_passes_chunks_to_llm_prompt(
+    patched_retrieve_chunks: Callable[[Sequence[object]], None],
+) -> None:
     """The injected-context prompt embeds referenced chunk text into the user message."""
     retrieved = [CitedPassage(chunk_id=uuid4(), text="chunk A text")]
-
-    monkeypatch.setattr(
-        "api.controllers.qa_controller.retrieve_relevant_chunks",
-        lambda **kwargs: retrieved,
-    )
+    patched_retrieve_chunks(retrieved)
 
     llm_client = _fake_llm_client("answer")
     run_query(
@@ -249,13 +225,9 @@ def test_run_query_passes_chunks_to_llm_prompt(monkeypatch: pytest.MonkeyPatch) 
 
 
 def test_run_query_no_chunks_prompt_does_not_include_passage_text(
-    monkeypatch: pytest.MonkeyPatch,
+    patched_empty_retrieval: None,
 ) -> None:
     """When no chunks are retrieved the prompt asks for a refusal, without fake passages."""
-    monkeypatch.setattr(
-        "api.controllers.qa_controller.retrieve_relevant_chunks",
-        lambda **kwargs: [],
-    )
 
     llm_client = _fake_llm_client("refusal")
     run_query(

@@ -1,6 +1,11 @@
-"""Shared fixtures and utilities for api tests."""
+"""Shared fixtures and utilities for api tests.
 
-from collections.abc import Callable, Generator
+Test fixtures:
+* ``patched_empty_retrieval`` — patches ``retrieve_relevant_chunks`` to return ``[]``.
+* ``patched_retrieve_chunks`` — factory that patches retrieval with caller-supplied chunks.
+"""
+
+from collections.abc import Callable, Generator, Sequence
 from contextlib import contextmanager
 from typing import Any, cast
 from unittest.mock import MagicMock
@@ -29,6 +34,36 @@ def _default_fake_llm_provider() -> MockCompletionProvider:
 def _default_fake_llm_refusal_provider() -> MockCompletionProvider:
     """A mocked completion provider returning a fixed refusal answer."""
     return MockCompletionProvider("I could not find anything relevant in the corpus.")
+
+
+@pytest.fixture
+def patched_empty_retrieval(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Patch ``retrieve_relevant_chunks`` to return an empty list (not-grounded)."""
+    monkeypatch.setattr(
+        "api.controllers.qa_controller.retrieve_relevant_chunks",
+        lambda **kwargs: [],
+    )
+
+
+@pytest.fixture
+def patched_retrieve_chunks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> Callable[[Sequence[object]], None]:
+    """Return a factory that patches retrieval with the given chunks.
+
+    Usage in a test::
+
+        def test_foo(patched_retrieve_chunks: ...) -> None:
+            patched_retrieve_chunks([CitedPassage(chunk_id=uuid4(), text="...")])
+    """
+
+    def _factory(chunks: Sequence[object]) -> None:
+        monkeypatch.setattr(
+            "api.controllers.qa_controller.retrieve_relevant_chunks",
+            lambda **kwargs: chunks,
+        )
+
+    return _factory
 
 
 def set_dependency_override(client: TestClient, dependency: Any, override: Any) -> None:
