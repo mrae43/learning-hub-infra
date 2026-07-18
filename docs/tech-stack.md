@@ -35,7 +35,7 @@ MVP infra is **needs-driven** — the leanest stack that lets Harness A function
 | Workflow | Behavior |
 |---|---|
 | PR checks | Runs on every push to an open PR; lint (ruff), type check (mypy), tests (pytest) per module. Merge is blocked on any failing job. |
-| `release.yml` | Triggered on merge to `main` / on tag: builds and pushes a versioned Docker image to a registry (GHCR), and generates a changelog from commit history. |
+| `cd.yml` | Triggered on merge to `main` / on tag: builds and pushes a versioned Docker image to a registry (GHCR), and generates a changelog from commit history. |
 
 ---
 

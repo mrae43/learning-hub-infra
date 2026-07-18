@@ -74,14 +74,15 @@ learning-hub/
 │   ├── pyproject.toml
 │   └── README.md
 ├── docs/
-│   ├── adr/                          # 0001–0013 all live here
+│   ├── adr/                          # 0001–0014 all live here
 │   ├── tech-stack.md
 │   ├── coding-standards.md
-│   ├── commit-instructions.md
-│   └── README.md
+│   └── commit-instructions.md
 ├── .github/workflows/
-│   ├── pr-checks.yml                 # ruff, mypy, pytest, import-linter, commitlint
-│   └── release.yml                   # Docker build + changelog
+│   ├── ci.yml                        # ruff, mypy, pytest, import-linter, commitlint
+│   ├── cd.yml                        # Docker build + changelog
+│   ├── security.yml                  # Dependency scanning (pip-audit, etc.)
+│   └── dependabot-auto-merge.yml     # Auto-merge for low-risk Dependabot bumps
 ├── pyproject.toml                    # Root: ruff config, import-linter contracts
 ├── .env.example
 ├── Dockerfile

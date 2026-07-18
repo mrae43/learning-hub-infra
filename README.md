@@ -21,7 +21,7 @@ A hand-rolled RAG study tool for learning AI/ML from papers, books, and document
 | Post-MVP 1 | **Depth Dive** — richer explanations (text + diagrams + code) with agentic web search | 🔧 Scaffold |
 | Post-MVP 2 | **Synapse** — multi-sensory interactive learning with gamification and neuroplasticity triggers | 📅 Planned |
 
-> **Status:** Early implementation — tracer bullet complete. Four of five packages (`core/`, `retrieval_qa/`, `api/`, `ingestion/`) have implementation code (~5470 lines total). Only `depth_dive/` remains as a scaffold. Ingestion pipeline, Harness A query pipeline, and three API endpoints (`POST /ingest`, `GET /documents/{id}`, `POST /query`) are operational. See [docs/](./docs/) for architecture decisions and plans.
+> **Status:** Early implementation — tracer bullet complete. Four of five packages (`core/`, `retrieval_qa/`, `api/`, `ingestion/`) have implementation code (~5760 lines total). Only `depth_dive/` remains as a scaffold. Ingestion pipeline, Harness A query pipeline, and three API endpoints (`POST /ingest`, `GET /documents/{id}`, `POST /query`) are operational. See [docs/](./docs/) for architecture decisions and plans.
 
 ## Architecture
 

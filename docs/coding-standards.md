@@ -8,7 +8,7 @@ This project hand-rolls its RAG pipeline specifically so retrieval mechanics sta
 
 ## Typing
 
-- **`mypy --strict`** — every function has typed parameters and return values. No implicit `Any`. This is enforced in CI (see `tech-stack.md`), not just a style suggestion.
+- **`mypy --strict`** — every function has typed parameters and return values. No implicit `Any`. This is enforced in CI (see `.github/workflows/ci.yml`), not just a style suggestion.
 - Pydantic v2 models are the boundary type for all I/O — API requests/responses, and Harness A's internal `HarnessAResponse`. Don't pass bare dicts across module boundaries where a typed model should exist.
 - Prefer precise types over `str`/`dict` catch-alls (e.g. a `PassageId` type alias over a bare `str`, if it's used consistently enough to warrant one).
 
