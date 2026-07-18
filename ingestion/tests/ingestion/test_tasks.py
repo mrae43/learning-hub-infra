@@ -5,6 +5,7 @@ from uuid import uuid4
 
 from core.clients import InMemoryEmbedder
 from core.types.document import DocumentType
+from ingestion.models import PendingIngestion
 from ingestion.tasks import schedule_ingestion
 
 
@@ -15,12 +16,17 @@ def test_schedule_ingestion_adds_background_task() -> None:
     embedder = InMemoryEmbedder()
     model_name = "text-embedding-3-small"
 
-    schedule_ingestion(
-        background_tasks=mock_bg,
+    pending = PendingIngestion(
         document_id=doc_id,
+        title="Test Document",
         document_type=DocumentType.PAPER,
         source_filename="test.pdf",
         file_bytes=b"fake-pdf-bytes",
+    )
+
+    schedule_ingestion(
+        background_tasks=mock_bg,
+        pending=pending,
         embedder=embedder,
         model_name=model_name,
     )
@@ -29,13 +35,11 @@ def test_schedule_ingestion_adds_background_task() -> None:
     args = mock_bg.add_task.call_args
     # First positional arg is the callable
     assert callable(args[0][0])
-    # Remaining positional args match the arguments passed through
-    assert args[0][1] == doc_id
-    assert args[0][2] == DocumentType.PAPER
-    assert args[0][3] == "test.pdf"
-    assert args[0][4] == b"fake-pdf-bytes"
-    assert args[0][5] is embedder
-    assert args[0][6] == model_name
+    # Second positional arg is the PendingIngestion model
+    assert args[0][1] is pending
+    # Remaining positional args match infrastructure args
+    assert args[0][2] is embedder
+    assert args[0][3] == model_name
 
 
 def test_schedule_ingestion_is_public_api() -> None:

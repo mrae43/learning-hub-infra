@@ -5,23 +5,19 @@ This module is the only place that couples the pipeline to the task runner;
 ``ingestion/pipeline.py`` remains a plain function.
 """
 
-from uuid import UUID
-
 from fastapi import BackgroundTasks
 
 from core.clients import Embedder
 from core.database.connection import SessionLocal
 from core.database.schema import Document
 from core.exceptions import IngestionError
-from core.types.document import DocumentStatus, DocumentType
+from core.types.document import DocumentStatus
+from ingestion.models import PendingIngestion
 from ingestion.pipeline import run_ingestion
 
 
 def _execute_ingestion_task(
-    document_id: UUID,
-    document_type: DocumentType,
-    source_filename: str,
-    file_bytes: bytes,
+    pending: PendingIngestion,
     embedder: Embedder,
     model_name: str,
 ) -> None:
@@ -33,16 +29,13 @@ def _execute_ingestion_task(
     session = SessionLocal()
     try:
         title = ""
-        document = session.get(Document, document_id)
+        document = session.get(Document, pending.document_id)
         if document is not None:
             title = document.title
 
+        resolved = pending.model_copy(update={"title": title})
         run_ingestion(
-            document_id=document_id,
-            title=title,
-            document_type=document_type,
-            source_filename=source_filename,
-            file_bytes=file_bytes,
+            pending=resolved,
             session=session,
             embeddings_client=embedder,
             model_name=model_name,
@@ -58,7 +51,7 @@ def _execute_ingestion_task(
         # reason is retained after the main transaction rolls back.
         try:
             failure_session = SessionLocal()
-            failure_document = failure_session.get(Document, document_id)
+            failure_document = failure_session.get(Document, pending.document_id)
             if failure_document is not None:
                 failure_document.status = DocumentStatus.FAILED
                 failure_document.error_message = error_message
@@ -71,10 +64,7 @@ def _execute_ingestion_task(
 
 def schedule_ingestion(
     background_tasks: BackgroundTasks,
-    document_id: UUID,
-    document_type: DocumentType,
-    source_filename: str,
-    file_bytes: bytes,
+    pending: PendingIngestion,
     embedder: Embedder,
     model_name: str,
 ) -> None:
@@ -82,19 +72,13 @@ def schedule_ingestion(
 
     Args:
         background_tasks: FastAPI's background task container.
-        document_id: UUID of the newly created document row.
-        document_type: Document type (e.g. ``DocumentType.PAPER``).
-        source_filename: Original upload filename.
-        file_bytes: Raw uploaded file contents.
+        pending: Document-identity fields for the ingestion.
         embedder: Provider used to embed chunk contents.
         model_name: Model name to store alongside each embedding row.
     """
     background_tasks.add_task(
         _execute_ingestion_task,
-        document_id,
-        document_type,
-        source_filename,
-        file_bytes,
+        pending,
         embedder,
         model_name,
     )
