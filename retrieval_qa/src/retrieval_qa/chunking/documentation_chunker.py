@@ -9,15 +9,18 @@ PDF page breaks). Sections include sub-headings and API endpoint lines such as
 """
 
 import re
+from collections.abc import Sequence
 from enum import StrEnum
 from html.parser import HTMLParser
 from io import BytesIO
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import ConfigDict
 from pypdf import PdfReader
 
 from core.exceptions import IngestionError
-from core.types.chunk import DocumentationChunkMetadata
+from core.types.chunk import Chunk, DocumentationChunkMetadata
+from core.types.document import DocumentType
+from retrieval_qa.chunking.base import DocumentChunker, register_chunker
 
 
 class DocumentationFormat(StrEnum):
@@ -39,14 +42,12 @@ _API_ENTRY_PATTERN = re.compile(
 )
 
 
-class DocumentationChunk(BaseModel):
+class DocumentationChunk(Chunk):
     """A single chunk produced by the documentation chunker."""
 
     model_config = ConfigDict(extra="forbid")
 
-    content: str
     metadata: DocumentationChunkMetadata
-    token_count: int
 
 
 class _HTMLTextExtractor(HTMLParser):
@@ -259,4 +260,17 @@ def chunk_documentation(file_bytes: bytes) -> list[DocumentationChunk]:
     return chunks
 
 
-__all__ = ["DocumentationChunk", "chunk_documentation"]
+class DocumentationChunker(DocumentChunker):
+    """Chunker for documentation."""
+
+    metadata_model = DocumentationChunkMetadata
+
+    def chunk(self, file_bytes: bytes) -> Sequence[Chunk]:
+        """Chunk a Markdown/HTML/PDF documentation file into page-aware pieces."""
+        return chunk_documentation(file_bytes)
+
+
+register_chunker(DocumentType.DOCUMENTATION, DocumentationChunker)
+
+
+__all__ = ["DocumentationChunk", "DocumentationChunker", "chunk_documentation"]

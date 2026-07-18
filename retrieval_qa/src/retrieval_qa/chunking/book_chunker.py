@@ -8,15 +8,18 @@ import os
 import re
 import xml.etree.ElementTree as ET
 import zipfile
+from collections.abc import Sequence
 from enum import StrEnum
 from html.parser import HTMLParser
 from io import BytesIO
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import ConfigDict
 from pypdf import PdfReader
 
 from core.exceptions import IngestionError
-from core.types.chunk import BookChunkMetadata
+from core.types.chunk import BookChunkMetadata, Chunk
+from core.types.document import DocumentType
+from retrieval_qa.chunking.base import DocumentChunker, register_chunker
 
 
 class BookFormat(StrEnum):
@@ -44,14 +47,12 @@ _HEADING_PATTERN = re.compile(
 )
 
 
-class BookChunk(BaseModel):
+class BookChunk(Chunk):
     """A single chunk produced by the book chunker."""
 
     model_config = ConfigDict(extra="forbid")
 
-    content: str
     metadata: BookChunkMetadata
-    token_count: int
 
 
 class _HTMLTextExtractor(HTMLParser):
@@ -445,4 +446,17 @@ def chunk_book(file_bytes: bytes) -> list[BookChunk]:
     return chunks
 
 
-__all__ = ["BookChunk", "chunk_book"]
+class BookChunker(DocumentChunker):
+    """Chunker for books."""
+
+    metadata_model = BookChunkMetadata
+
+    def chunk(self, file_bytes: bytes) -> Sequence[Chunk]:
+        """Chunk a book PDF or EPUB into chapter-aware pieces."""
+        return chunk_book(file_bytes)
+
+
+register_chunker(DocumentType.BOOK, BookChunker)
+
+
+__all__ = ["BookChunk", "BookChunker", "chunk_book"]

@@ -17,59 +17,21 @@ to 502 / 503 (ADR-0014 § Error contract). DB-level failures propagate
 verbatim; the route's catch-all maps them to 500.
 """
 
-from collections.abc import Sequence
-
 from sqlalchemy.orm import Session
 
-from core.clients.embeddings_client import EmbeddingsClient
-from core.clients.llm_client import LLMClient
-from core.types.chat import ChatMessage
-from core.types.responses import CitedPassage, HarnessAResponse
+from api.prompt import build_messages
+from core.clients import CompletionProvider, Embedder
+from core.types.responses import HarnessAResponse
 from core.types.retrieval_config import RetrievalConfig
 from retrieval_qa.retrieval.query import retrieve_relevant_chunks
-
-_SYSTEM_PROMPT = (
-    "You answer the user's question using only the provided passages. "
-    "If no passages are provided, or if the answer is not contained in them, "
-    "say you cannot answer from the current corpus. Do not invent information."
-)
-
-
-def _build_messages(
-    query: str,
-    chunks: Sequence[CitedPassage],
-) -> list[ChatMessage]:
-    """Assemble the chat-completions message list for the inference call.
-
-    Args:
-        query: The user's raw query string.
-        chunks: Retrieved chunks (objects with a ``text`` attribute). Empty
-            for the not-found branch, in which case the user message carries
-            the query alone (no fake passages) so the model emits a refusal.
-
-    Returns:
-        A two-message list: a system message setting the grounding contract,
-        and a user message containing passages (when present) plus the query.
-    """
-    user_parts: list[str] = []
-    if chunks:
-        passages = "\n\n".join(f"[{i}] {chunk.text}" for i, chunk in enumerate(chunks, start=1))
-        user_parts.append("Passages:\n")
-        user_parts.append(passages)
-    user_parts.append(f"Question: {query}")
-    user_message = "\n\n".join(p for p in user_parts if p)
-    return [
-        ChatMessage(role="system", content=_SYSTEM_PROMPT),
-        ChatMessage(role="user", content=user_message),
-    ]
 
 
 def run_query(
     *,
     query: str,
     session: Session,
-    embeddings_client: EmbeddingsClient,
-    llm_client: LLMClient,
+    embeddings_client: Embedder,
+    llm_client: CompletionProvider,
     config: RetrievalConfig,
 ) -> HarnessAResponse:
     """Run the full Harness A query flow and return a ``HarnessAResponse``.
@@ -79,8 +41,8 @@ def run_query(
         session: SQLAlchemy session bound to the documents database. The
             retrieval step issues ``SET LOCAL hnsw.ef_search`` scoped to this
             session's transaction.
-        embeddings_client: Client used to embed the query (1536-dim).
-        llm_client: Client used to generate the answer.
+        embeddings_client: Provider used to embed the query (1536-dim).
+        llm_client: Provider used to generate the answer.
         config: Retrieval configuration (model name, ef_search, top_k).
 
     Returns:
@@ -103,7 +65,7 @@ def run_query(
         config=config,
     )
 
-    messages = _build_messages(query, chunks)
+    messages = build_messages(query, chunks)
     answer = llm_client.chat(messages)
 
     return HarnessAResponse(

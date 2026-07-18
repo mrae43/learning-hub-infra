@@ -2,37 +2,51 @@
 
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
+from typing import Any, cast
 from unittest.mock import MagicMock
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
+
+from api.dependencies import get_completion_provider, get_embedder
+from api.server import create_app
+from core.clients import InMemoryEmbedder, MockCompletionProvider
 
 IngestADocument = Callable[[str], str]
 
 
-def _patch_clients(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Patch embeddings + LLM clients with defaults for all test fixtures."""
-    monkeypatch.setattr("ingestion.tasks.EmbeddingsClient", _default_fake_client)
-    monkeypatch.setattr("api.routes.retrieval_qa.EmbeddingsClient", _default_fake_client)
-    monkeypatch.setattr("api.routes.retrieval_qa.LLMClient", _default_fake_llm_refusal_client)
+def _default_fake_embedder() -> InMemoryEmbedder:
+    """A deterministic embedder that returns fixed 1536-dim vectors."""
+    return InMemoryEmbedder(dimension=1536, scale=0.01)
+
+
+def _default_fake_llm_refusal_provider() -> MockCompletionProvider:
+    """A mocked completion provider returning a fixed refusal answer."""
+    return MockCompletionProvider("I could not find anything relevant in the corpus.")
+
+
+def set_dependency_override(client: TestClient, dependency: Any, override: Any) -> None:
+    """Set a FastAPI dependency override on ``client.app``.
+
+    ``TestClient.app`` is typed as a generic ASGI callable, so this helper
+    casts it to ``FastAPI`` before touching ``dependency_overrides``.
+    """
+    cast(FastAPI, client.app).dependency_overrides[dependency] = override
 
 
 @pytest.fixture
 def client(override_route_db_session: object, monkeypatch: pytest.MonkeyPatch) -> TestClient:
-    """A TestClient with DB sessions and embeddings client mocked.
+    """A TestClient with DB sessions and provider dependencies mocked.
 
-    Override ``monkeypatch`` again in a test to swap the embeddings client
-    behaviour (e.g. make it raise).
+    Real API calls belong only in the eval job (coding-standards.md). Both
+    the ingestion task and the query route get mocked ``Embedder`` and
+    ``CompletionProvider`` dependencies via FastAPI dependency overrides.
     """
-    # Default: a mocked embeddings client that returns fixed 1536-dim vectors.
-    # Real API calls belong only in the eval job (coding-standards.md); both
-    # the ingestion task and the query route get a mocked embeddings + LLM
-    # client. Tests override ``LLMClient`` / ``EmbeddingsClient`` to swap
-    # behaviour (e.g. make them raise, or return a grounded answer).
-    _patch_clients(monkeypatch)
-    from api.server import create_app
-
-    return TestClient(create_app())
+    app = create_app()
+    app.dependency_overrides[get_embedder] = _default_fake_embedder
+    app.dependency_overrides[get_completion_provider] = _default_fake_llm_refusal_provider
+    return TestClient(app)
 
 
 @pytest.fixture
@@ -41,10 +55,9 @@ def mock_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
 
     For tests that exercise request validation or upstream-error mapping
     where the DB session is opened but not meaningfully used (the embeddings
-    call raise, or retrieval is monkeypatched away). Lets the HTTP-level
+    call raises, or retrieval is monkeypatched away). Lets the HTTP-level
     behaviour run without a real Postgres+pgvector instance.
     """
-    _patch_clients(monkeypatch)
 
     @contextmanager
     def _mock_db_session() -> Generator[MagicMock, None, None]:
@@ -62,9 +75,10 @@ def mock_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     monkeypatch.setattr("api.routes.documents.db_session", _mock_db_session)
     monkeypatch.setattr("api.routes.retrieval_qa.db_session", _mock_db_session)
 
-    from api.server import create_app
-
-    return TestClient(create_app())
+    app = create_app()
+    app.dependency_overrides[get_embedder] = _default_fake_embedder
+    app.dependency_overrides[get_completion_provider] = _default_fake_llm_refusal_provider
+    return TestClient(app)
 
 
 @pytest.fixture
@@ -122,20 +136,3 @@ def ingest_a_documentation(client: TestClient, sample_documentation_md: bytes) -
         return str(document_id)
 
     return _ingest
-
-
-def _default_fake_client(*args: object, **kwargs: object) -> MagicMock:
-    client = MagicMock()
-
-    def _embed(texts: list[str]) -> list[list[float]]:
-        return [[0.01 * (i + 1)] * 1536 for i in range(len(texts))]
-
-    client.embed.side_effect = _embed
-    return client
-
-
-def _default_fake_llm_refusal_client(*args: object, **kwargs: object) -> MagicMock:
-    """A mocked LLM client returning a fixed refusal (not-grounded) answer."""
-    client = MagicMock()
-    client.chat.return_value = "I could not find anything relevant in the corpus."
-    return client

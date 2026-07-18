@@ -1,26 +1,18 @@
 """Background ingestion pipeline for uploaded documents."""
 
 from collections.abc import Sequence
-from typing import assert_never
 from uuid import UUID
 
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
-from core.clients.embeddings_client import EmbeddingsClient
-from core.database.schema import Chunk, Document, Embedding
+from core.clients import Embedder
+from core.database.schema import Chunk as ChunkRow
+from core.database.schema import Document, Embedding
 from core.exceptions import IngestionError
-from core.types.chunk import (
-    BookChunkMetadata,
-    DocumentationChunkMetadata,
-    PaperChunkMetadata,
-)
+from core.types.chunk import Chunk
 from core.types.document import DocumentStatus, DocumentType
-from retrieval_qa.chunking.book_chunker import BookChunk, chunk_book
-from retrieval_qa.chunking.documentation_chunker import DocumentationChunk, chunk_documentation
-from retrieval_qa.chunking.paper_chunker import PaperChunk, chunk_paper
-
-_Chunk = PaperChunk | BookChunk | DocumentationChunk
+from retrieval_qa.chunking import chunker_registry, get_chunker_class
 
 
 def _validate_type_metadata(
@@ -37,15 +29,11 @@ def _validate_type_metadata(
     Raises ``IngestionError`` when validation fails.
     """
     try:
-        match document_type:
-            case DocumentType.PAPER:
-                PaperChunkMetadata.model_validate(type_metadata)
-            case DocumentType.BOOK:
-                BookChunkMetadata.model_validate(type_metadata)
-            case DocumentType.DOCUMENTATION:
-                DocumentationChunkMetadata.model_validate(type_metadata)
-            case _ as unreachable:
-                assert_never(unreachable)
+        chunker_class = chunker_registry[document_type]
+    except KeyError as exc:
+        raise IngestionError(f"No chunker registered for {document_type.value}") from exc
+    try:
+        chunker_class.metadata_model.model_validate(type_metadata)
     except ValidationError as exc:
         raise IngestionError(
             f"type_metadata validation failed for {document_type.value}: {exc}"
@@ -53,12 +41,12 @@ def _validate_type_metadata(
 
 
 def _chunk_inputs(
-    chunks: Sequence[_Chunk],
+    chunks: Sequence[Chunk],
 ) -> list[tuple[str, dict[str, object], int]]:
     """Convert chunker output to the (content, type_metadata, token_count) shape.
 
-    Both paper and book chunkers expose the same interface, so this helper
-    avoids repeating the tuple construction.
+    All chunkers expose the same ``Chunk`` protocol, so this helper avoids
+    repeating the tuple construction for each document type.
     """
     return [(chunk.content, chunk.metadata.model_dump(), chunk.token_count) for chunk in chunks]
 
@@ -69,27 +57,20 @@ def _chunk_document(
 ) -> list[tuple[str, dict[str, object], int]]:
     """Return (content, type_metadata, token_count) tuples for a document.
 
-    Dispatches to the document-type-specific chunker. The ``match`` /
-    ``assert_never`` pair provides compile-time exhaustiveness: adding a new
-    ``DocumentType`` member produces a type-check error at every dispatch site.
+    Dispatches to the document-type-specific chunker via the registry. Adding
+    a new ``DocumentType`` only requires registering a new chunker; this
+    function does not need to change.
     """
-    match document_type:
-        case DocumentType.PAPER:
-            return _chunk_inputs(chunk_paper(file_bytes))
-        case DocumentType.BOOK:
-            return _chunk_inputs(chunk_book(file_bytes))
-        case DocumentType.DOCUMENTATION:
-            return _chunk_inputs(chunk_documentation(file_bytes))
-        case _ as unreachable:
-            assert_never(unreachable)
+    chunker_class = get_chunker_class(document_type)
+    return _chunk_inputs(chunker_class().chunk(file_bytes))
 
 
 def _embed_chunks(
     session: Session,
-    client: EmbeddingsClient,
-    chunks: Sequence[Chunk],
+    client: Embedder,
+    chunks: Sequence[ChunkRow],
     model_name: str,
-) -> list[tuple[Chunk, list[float]]]:
+) -> list[tuple[ChunkRow, list[float]]]:
     """Embed chunk contents and return (chunk, vector) pairs."""
     if not chunks:
         return []
@@ -115,7 +96,7 @@ def run_ingestion(
     source_filename: str,
     file_bytes: bytes,
     session: Session,
-    embeddings_client: EmbeddingsClient,
+    embeddings_client: Embedder,
     model_name: str,
 ) -> None:
     """Run the ingestion pipeline inside an open transaction.
@@ -132,7 +113,7 @@ def run_ingestion(
         source_filename: Original upload filename.
         file_bytes: Raw uploaded file contents.
         session: SQLAlchemy session bound to the documents database.
-        embeddings_client: Client that produces one vector per chunk text.
+        embeddings_client: Provider that produces one vector per chunk text.
         model_name: Model name to store alongside each embedding row.
     """
     _ = title, source_filename  # retained for future metadata use; not needed now
@@ -148,10 +129,10 @@ def run_ingestion(
         document.status = DocumentStatus.CHUNKING
         session.flush()
 
-        db_chunks: list[Chunk] = []
+        db_chunks: list[ChunkRow] = []
         for position, (content, type_metadata, token_count) in enumerate(chunk_inputs):
             _validate_type_metadata(document_type, type_metadata)
-            chunk = Chunk(
+            chunk = ChunkRow(
                 document_id=document_id,
                 position=position,
                 content=content,

@@ -18,23 +18,22 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
+from api.dependencies import get_completion_provider, get_embedder
+from api.tests.conftest import set_dependency_override
+from core.clients import MockCompletionProvider
 from core.database.schema import Chunk
 from core.exceptions import UpstreamBadResponse, UpstreamUnavailable
 from core.types.responses import CitedPassage
 
 
-def _default_fake_llm_client(*args: object, **kwargs: object) -> MagicMock:
-    """A mocked LLM client that returns a fixed grounded answer."""
-    client = MagicMock()
-    client.chat.return_value = "Grounded answer derived from retrieved passages."
-    return client
+def _default_fake_llm_provider() -> MockCompletionProvider:
+    """A mocked completion provider that returns a fixed grounded answer."""
+    return MockCompletionProvider("Grounded answer derived from retrieved passages.")
 
 
-def _refusal_fake_llm_client(*args: object, **kwargs: object) -> MagicMock:
-    """A mocked LLM client that returns a refusal answer."""
-    client = MagicMock()
-    client.chat.return_value = "I could not find anything relevant in the corpus."
-    return client
+def _refusal_fake_llm_provider() -> MockCompletionProvider:
+    """A mocked completion provider that returns a refusal answer."""
+    return MockCompletionProvider("I could not find anything relevant in the corpus.")
 
 
 def _fake_chunk(*, text: str = "chunk text") -> CitedPassage:
@@ -70,19 +69,17 @@ def test_query_non_string_query_returns_422(mock_client: TestClient) -> None:
 # ============================================================
 
 
-def test_query_embeddings_bad_response_returns_502(
-    mock_client: TestClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """A mocked embeddings client returning a bad response maps to 502."""
+def test_query_embeddings_bad_response_returns_502(client: TestClient) -> None:
+    """A mocked embeddings provider returning a bad response maps to 502."""
 
-    def _raises_bad_client(*args: object, **kwargs: object) -> MagicMock:
-        client = MagicMock()
-        client.embed.side_effect = UpstreamBadResponse("bad upstream response")
-        return client
+    def _bad_embedder() -> MagicMock:
+        embedder = MagicMock()
+        embedder.embed.side_effect = UpstreamBadResponse("bad upstream response")
+        return embedder
 
-    monkeypatch.setattr("api.routes.retrieval_qa.EmbeddingsClient", _raises_bad_client)
+    set_dependency_override(client, get_embedder, _bad_embedder)
 
-    response = mock_client.post("/query", json={"query": "anything"})
+    response = client.post("/query", json={"query": "anything"})
 
     assert response.status_code == 502
     body = response.json()
@@ -91,19 +88,17 @@ def test_query_embeddings_bad_response_returns_502(
     assert body["detail"]
 
 
-def test_query_embeddings_unavailable_returns_503(
-    mock_client: TestClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """A mocked embeddings client that's unreachable/timeout maps to 503."""
+def test_query_embeddings_unavailable_returns_503(client: TestClient) -> None:
+    """A mocked embeddings provider that's unreachable/timeout maps to 503."""
 
-    def _raises_unavailable_client(*args: object, **kwargs: object) -> MagicMock:
-        client = MagicMock()
-        client.embed.side_effect = UpstreamUnavailable("timeout")
-        return client
+    def _unavailable_embedder() -> MagicMock:
+        embedder = MagicMock()
+        embedder.embed.side_effect = UpstreamUnavailable("timeout")
+        return embedder
 
-    monkeypatch.setattr("api.routes.retrieval_qa.EmbeddingsClient", _raises_unavailable_client)
+    set_dependency_override(client, get_embedder, _unavailable_embedder)
 
-    response = mock_client.post("/query", json={"query": "anything"})
+    response = client.post("/query", json={"query": "anything"})
 
     assert response.status_code == 503
     body = response.json()
@@ -113,22 +108,22 @@ def test_query_embeddings_unavailable_returns_503(
 
 
 def test_query_inference_bad_response_returns_502(
-    mock_client: TestClient, monkeypatch: pytest.MonkeyPatch
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A mocked inference client returning a bad response maps to 502."""
+    """A mocked inference provider returning a bad response maps to 502."""
 
-    def _raises_bad_llm(*args: object, **kwargs: object) -> MagicMock:
-        client = MagicMock()
-        client.chat.side_effect = UpstreamBadResponse("bad upstream response")
-        return client
+    def _bad_llm() -> MagicMock:
+        llm = MagicMock()
+        llm.chat.side_effect = UpstreamBadResponse("bad upstream response")
+        return llm
 
-    monkeypatch.setattr("api.routes.retrieval_qa.LLMClient", _raises_bad_llm)
+    set_dependency_override(client, get_completion_provider, _bad_llm)
     monkeypatch.setattr(
         "api.controllers.qa_controller.retrieve_relevant_chunks",
         lambda **kwargs: [_fake_chunk(text="some chunk")],
     )
 
-    response = mock_client.post("/query", json={"query": "anything"})
+    response = client.post("/query", json={"query": "anything"})
 
     assert response.status_code == 502
     body = response.json()
@@ -137,22 +132,22 @@ def test_query_inference_bad_response_returns_502(
 
 
 def test_query_inference_unavailable_returns_503(
-    mock_client: TestClient, monkeypatch: pytest.MonkeyPatch
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A mocked inference client that's unreachable/timeout maps to 503."""
+    """A mocked inference provider that's unreachable/timeout maps to 503."""
 
-    def _raises_unavailable_llm(*args: object, **kwargs: object) -> MagicMock:
-        client = MagicMock()
-        client.chat.side_effect = UpstreamUnavailable("timeout")
-        return client
+    def _unavailable_llm() -> MagicMock:
+        llm = MagicMock()
+        llm.chat.side_effect = UpstreamUnavailable("timeout")
+        return llm
 
-    monkeypatch.setattr("api.routes.retrieval_qa.LLMClient", _raises_unavailable_llm)
+    set_dependency_override(client, get_completion_provider, _unavailable_llm)
     monkeypatch.setattr(
         "api.controllers.qa_controller.retrieve_relevant_chunks",
         lambda **kwargs: [_fake_chunk(text="some chunk")],
     )
 
-    response = mock_client.post("/query", json={"query": "anything"})
+    response = client.post("/query", json={"query": "anything"})
 
     assert response.status_code == 503
     body = response.json()
@@ -166,16 +161,16 @@ def test_query_inference_unavailable_returns_503(
 
 
 def test_query_empty_corpus_returns_not_grounded(
-    mock_client: TestClient, monkeypatch: pytest.MonkeyPatch
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """An empty retrieval result yields 200 grounded=false with empty passages."""
-    monkeypatch.setattr("api.routes.retrieval_qa.LLMClient", _refusal_fake_llm_client)
+    set_dependency_override(client, get_completion_provider, _refusal_fake_llm_provider)
     monkeypatch.setattr(
         "api.controllers.qa_controller.retrieve_relevant_chunks",
         lambda **kwargs: [],
     )
 
-    response = mock_client.post("/query", json={"query": "What is pgvector?"})
+    response = client.post("/query", json={"query": "What is pgvector?"})
 
     assert response.status_code == 200
     body = response.json()
@@ -186,33 +181,33 @@ def test_query_empty_corpus_returns_not_grounded(
 
 
 def test_query_response_has_exactly_three_fields(
-    mock_client: TestClient, monkeypatch: pytest.MonkeyPatch
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The 200 body exposes only answer, cited_passages, grounded (per ADR-0014)."""
-    monkeypatch.setattr("api.routes.retrieval_qa.LLMClient", _refusal_fake_llm_client)
+    set_dependency_override(client, get_completion_provider, _refusal_fake_llm_provider)
     monkeypatch.setattr(
         "api.controllers.qa_controller.retrieve_relevant_chunks",
         lambda **kwargs: [],
     )
 
-    response = mock_client.post("/query", json={"query": "anything"})
+    response = client.post("/query", json={"query": "anything"})
 
     assert response.status_code == 200
     assert set(response.json().keys()) == {"answer", "cited_passages", "grounded"}
 
 
 def test_query_grounds_with_mocked_retrieval(
-    mock_client: TestClient, monkeypatch: pytest.MonkeyPatch
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The route glue produces grounded=True and cited_passages from the retrieved chunks."""
-    monkeypatch.setattr("api.routes.retrieval_qa.LLMClient", _default_fake_llm_client)
+    set_dependency_override(client, get_completion_provider, _default_fake_llm_provider)
     chunk = _fake_chunk(text="relevant passage text")
     monkeypatch.setattr(
         "api.controllers.qa_controller.retrieve_relevant_chunks",
         lambda **kwargs: [chunk],
     )
 
-    response = mock_client.post("/query", json={"query": "Tell me about retrieval strategies."})
+    response = client.post("/query", json={"query": "Tell me about retrieval strategies."})
 
     assert response.status_code == 200
     body = response.json()
@@ -235,7 +230,7 @@ def test_query_end_to_end_grounds_with_real_chunks(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A relevant query against a ready corpus returns 200 grounded=true with citations."""
-    monkeypatch.setattr("api.routes.retrieval_qa.LLMClient", _default_fake_llm_client)
+    set_dependency_override(client, get_completion_provider, _default_fake_llm_provider)
     ingest_a_paper("RAG Paper")
 
     response = client.post("/query", json={"query": "Tell me about retrieval strategies."})
@@ -259,7 +254,7 @@ def test_query_end_to_end_irrelevant_returns_not_grounded(
     """Asking an irrelevant question yields 200 grounded=false with empty passages."""
     # Force the not-found branch even against a ready corpus by returning []
     # from retrieval; the LLM stub returns a refusal.
-    monkeypatch.setattr("api.routes.retrieval_qa.LLMClient", _refusal_fake_llm_client)
+    set_dependency_override(client, get_completion_provider, _refusal_fake_llm_provider)
     monkeypatch.setattr(
         "api.controllers.qa_controller.retrieve_relevant_chunks",
         lambda **kwargs: [],
@@ -279,7 +274,7 @@ def test_query_end_to_end_empty_corpus_returns_not_grounded(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Querying an empty corpus yields 200 grounded=false with empty passages."""
-    monkeypatch.setattr("api.routes.retrieval_qa.LLMClient", _refusal_fake_llm_client)
+    set_dependency_override(client, get_completion_provider, _refusal_fake_llm_provider)
 
     response = client.post("/query", json={"query": "What is pgvector?"})
 
@@ -298,7 +293,7 @@ def test_query_end_to_end_cross_document_returns_book_citation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A query answered by the book returns a cited passage from the book."""
-    monkeypatch.setattr("api.routes.retrieval_qa.LLMClient", _default_fake_llm_client)
+    set_dependency_override(client, get_completion_provider, _default_fake_llm_provider)
     # Raise top_k so the tied fake embeddings return chunks from both documents.
     monkeypatch.setattr("api.routes.retrieval_qa.settings.query_top_k", 100)
 
@@ -332,7 +327,7 @@ def test_query_end_to_end_cross_document_returns_paper_citation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A query answered by the paper returns a cited passage from the paper."""
-    monkeypatch.setattr("api.routes.retrieval_qa.LLMClient", _default_fake_llm_client)
+    set_dependency_override(client, get_completion_provider, _default_fake_llm_provider)
     # Raise top_k so the tied fake embeddings return chunks from both documents.
     monkeypatch.setattr("api.routes.retrieval_qa.settings.query_top_k", 100)
 
@@ -366,7 +361,7 @@ def test_query_end_to_end_cross_document_returns_documentation_citation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A query answered by documentation returns a cited passage from the docs."""
-    monkeypatch.setattr("api.routes.retrieval_qa.LLMClient", _default_fake_llm_client)
+    set_dependency_override(client, get_completion_provider, _default_fake_llm_provider)
     # Raise top_k so the tied fake embeddings return chunks from both documents.
     monkeypatch.setattr("api.routes.retrieval_qa.settings.query_top_k", 100)
 

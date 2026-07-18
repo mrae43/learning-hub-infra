@@ -1,10 +1,12 @@
 """Query route: POST /query (ADR-0014)."""
 
-from fastapi import APIRouter
+from typing import Annotated
+
+from fastapi import APIRouter, Depends
 
 from api.controllers.qa_controller import run_query
-from core.clients.embeddings_client import EmbeddingsClient
-from core.clients.llm_client import LLMClient
+from api.dependencies import get_completion_provider, get_embedder
+from core.clients import CompletionProvider, Embedder
 from core.config.settings import settings
 from core.database.connection import db_session
 from core.types.responses import HarnessARequest, HarnessAResponse
@@ -14,7 +16,11 @@ router = APIRouter(tags=["query"])
 
 
 @router.post("/query", response_model=HarnessAResponse)
-def query(body: HarnessARequest) -> HarnessAResponse:
+def query(
+    body: HarnessARequest,
+    embeddings_client: Annotated[Embedder, Depends(get_embedder)],
+    llm_client: Annotated[CompletionProvider, Depends(get_completion_provider)],
+) -> HarnessAResponse:
     """Answer a query against the ingested corpus.
 
     Returns 200 with a ``HarnessAResponse`` on both grounded and not-found
@@ -27,14 +33,8 @@ def query(body: HarnessARequest) -> HarnessAResponse:
         return run_query(
             query=body.query,
             session=session,
-            embeddings_client=EmbeddingsClient(
-                api_key=settings.openai_api_key,
-                model=settings.embedding_model,
-            ),
-            llm_client=LLMClient(
-                api_key=settings.openai_api_key,
-                model=settings.inference_model,
-            ),
+            embeddings_client=embeddings_client,
+            llm_client=llm_client,
             config=RetrievalConfig(
                 model_name=settings.embedding_model,
                 ef_search=settings.hnsw_ef_search,

@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from core.clients.embeddings_client import EmbeddingsClient
+from core.clients.embeddings_client import Embedder, EmbeddingsClient, InMemoryEmbedder
 
 
 def test_embed_returns_one_vector_per_input(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -30,3 +30,26 @@ def test_embed_returns_one_vector_per_input(monkeypatch: pytest.MonkeyPatch) -> 
         input=["hello", "world"],
         model="text-embedding-3-small",
     )
+
+
+def test_embeddings_client_satisfies_embedder_protocol() -> None:
+    """EmbeddingsClient is a structural ``Embedder`` implementation."""
+    client = EmbeddingsClient(api_key="sk-test", model="text-embedding-3-small")
+    assert isinstance(client, Embedder)
+
+
+def test_in_memory_embedder_returns_one_vector_per_text() -> None:
+    """InMemoryEmbedder returns one deterministic vector per input."""
+    embedder = InMemoryEmbedder(dimension=8, scale=0.1)
+    vectors = embedder.embed(["alpha", "beta"])
+
+    assert len(vectors) == 2
+    assert len(vectors[0]) == 8
+    assert vectors[0] == [0.1] * 8
+    assert vectors[1] == [0.2] * 8
+
+
+def test_in_memory_embedder_satisfies_embedder_protocol() -> None:
+    """InMemoryEmbedder is a structural ``Embedder`` implementation."""
+    embedder = InMemoryEmbedder()
+    assert isinstance(embedder, Embedder)

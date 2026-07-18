@@ -270,4 +270,4 @@ def test_run_query_no_chunks_prompt_does_not_include_passage_text(
     sent_messages = llm_client.chat.call_args.args[0]
     user_msg = next(m for m in sent_messages if m.role == "user")
     assert "topic the corpus does not cover" in user_msg.content
-    assert "Passages:" not in user_msg.content
+    assert "Injected Context:" not in user_msg.content
