@@ -4,6 +4,7 @@ from collections.abc import Sequence
 from typing import Protocol, runtime_checkable
 
 from openai import APIConnectionError, APIStatusError, AsyncOpenAI, OpenAI
+from openai.types.create_embedding_response import CreateEmbeddingResponse
 
 from core.config.settings import settings
 from core.exceptions import UpstreamBadResponse, UpstreamUnavailable
@@ -79,12 +80,7 @@ class EmbeddingsClient:
         except APIStatusError as exc:
             raise UpstreamBadResponse(f"Embeddings API returned bad status: {exc}") from exc
 
-        try:
-            return [item.embedding for item in response.data]
-        except (AttributeError, IndexError) as exc:
-            raise UpstreamBadResponse(
-                f"Embeddings API returned unexpected response shape: {exc}"
-            ) from exc
+        return self._parse_embedding_response(response)
 
     async def aembed(self, texts: Sequence[str]) -> list[list[float]]:
         """Embed a batch of texts asynchronously."""
@@ -100,6 +96,23 @@ class EmbeddingsClient:
         except APIStatusError as exc:
             raise UpstreamBadResponse(f"Embeddings API returned bad status: {exc}") from exc
 
+        return self._parse_embedding_response(response)
+
+    @staticmethod
+    def _parse_embedding_response(
+        response: CreateEmbeddingResponse,
+    ) -> list[list[float]]:
+        """Extract embedding vectors from an API response.
+
+        Args:
+            response: The raw ``CreateEmbeddingResponse`` from the OpenAI SDK.
+
+        Returns:
+            One vector per input string.
+
+        Raises:
+            UpstreamBadResponse: The response data had an unexpected shape.
+        """
         try:
             return [item.embedding for item in response.data]
         except (AttributeError, IndexError) as exc:
