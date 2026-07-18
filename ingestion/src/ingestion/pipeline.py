@@ -1,7 +1,6 @@
 """Background ingestion pipeline for uploaded documents."""
 
 from collections.abc import Sequence
-from uuid import UUID
 
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
@@ -12,6 +11,7 @@ from core.database.schema import Document, Embedding
 from core.exceptions import IngestionError
 from core.types.chunk import Chunk
 from core.types.document import DocumentStatus, DocumentType
+from ingestion.models import PendingIngestion
 from retrieval_qa.chunking import chunker_registry, get_chunker_class
 
 
@@ -90,11 +90,7 @@ def _embed_chunks(
 
 
 def run_ingestion(
-    document_id: UUID,
-    title: str,
-    document_type: DocumentType,
-    source_filename: str,
-    file_bytes: bytes,
+    pending: PendingIngestion,
     session: Session,
     embeddings_client: Embedder,
     model_name: str,
@@ -107,33 +103,27 @@ def run_ingestion(
     and the caller should roll back.
 
     Args:
-        document_id: UUID of the document row created at upload time.
-        title: Document title supplied by the user.
-        document_type: Document type (e.g. ``DocumentType.PAPER``).
-        source_filename: Original upload filename.
-        file_bytes: Raw uploaded file contents.
+        pending: Document-identity fields for the ingestion.
         session: SQLAlchemy session bound to the documents database.
         embeddings_client: Provider that produces one vector per chunk text.
         model_name: Model name to store alongside each embedding row.
     """
-    _ = title, source_filename  # retained for future metadata use; not needed now
-
-    document = session.get(Document, document_id)
+    document = session.get(Document, pending.document_id)
     if document is None:
-        raise IngestionError(f"Document {document_id} not found")
+        raise IngestionError(f"Document {pending.document_id} not found")
 
     try:
         # validating phase: ensure the file is parseable for the document type.
-        chunk_inputs = _chunk_document(document_type, file_bytes)
+        chunk_inputs = _chunk_document(pending.document_type, pending.file_bytes)
 
         document.status = DocumentStatus.CHUNKING
         session.flush()
 
         db_chunks: list[ChunkRow] = []
         for position, (content, type_metadata, token_count) in enumerate(chunk_inputs):
-            _validate_type_metadata(document_type, type_metadata)
+            _validate_type_metadata(pending.document_type, type_metadata)
             chunk = ChunkRow(
-                document_id=document_id,
+                document_id=pending.document_id,
                 position=position,
                 content=content,
                 token_count=token_count,

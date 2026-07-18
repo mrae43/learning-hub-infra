@@ -21,6 +21,7 @@ from core.config.settings import settings
 from core.database.connection import db_session
 from core.database.schema import Document
 from core.types.document import DocumentStatusResponse, DocumentType
+from ingestion.models import PendingIngestion
 from ingestion.tasks import schedule_ingestion
 
 router = APIRouter(tags=["ingestion"])
@@ -91,10 +92,13 @@ async def ingest_document(
 
     schedule_ingestion(
         background_tasks,
-        document_id=document_id,
-        document_type=document_type,
-        source_filename=source_filename,
-        file_bytes=file_bytes,
+        pending=PendingIngestion(
+            document_id=document_id,
+            title=title,
+            document_type=document_type,
+            source_filename=source_filename,
+            file_bytes=file_bytes,
+        ),
         embedder=embedder,
         model_name=settings.embedding_model,
     )

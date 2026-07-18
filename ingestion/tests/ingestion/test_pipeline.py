@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from core.database.schema import Chunk, Document, Embedding
 from core.exceptions import IngestionError
 from core.types.document import DocumentStatus, DocumentType
+from ingestion.models import PendingIngestion
 from ingestion.pipeline import _validate_type_metadata, run_ingestion
 
 
@@ -38,11 +39,13 @@ def test_pipeline_happy_path_reaches_ready(
     test_session.flush()
 
     run_ingestion(
-        document_id=document.document_id,
-        title="Sample Paper",
-        document_type=DocumentType.PAPER,
-        source_filename="sample.pdf",
-        file_bytes=sample_paper_pdf,
+        pending=PendingIngestion(
+            document_id=document.document_id,
+            title="Sample Paper",
+            document_type=DocumentType.PAPER,
+            source_filename="sample.pdf",
+            file_bytes=sample_paper_pdf,
+        ),
         session=test_session,
         embeddings_client=fake_embeddings_client,
         model_name="text-embedding-3-small",
@@ -89,11 +92,13 @@ def test_pipeline_failure_marks_failed_with_error(
 
     with pytest.raises(IngestionError):
         run_ingestion(
-            document_id=document.document_id,
-            title="Failing Paper",
-            document_type=DocumentType.PAPER,
-            source_filename="fail.pdf",
-            file_bytes=sample_paper_pdf,
+            pending=PendingIngestion(
+                document_id=document.document_id,
+                title="Failing Paper",
+                document_type=DocumentType.PAPER,
+                source_filename="fail.pdf",
+                file_bytes=sample_paper_pdf,
+            ),
             session=test_session,
             embeddings_client=failing_client,
             model_name="text-embedding-3-small",
@@ -121,11 +126,13 @@ def test_pipeline_book_happy_path_reaches_ready(
     test_session.flush()
 
     run_ingestion(
-        document_id=document.document_id,
-        title="Sample Book",
-        document_type=DocumentType.BOOK,
-        source_filename="sample.pdf",
-        file_bytes=sample_book_pdf,
+        pending=PendingIngestion(
+            document_id=document.document_id,
+            title="Sample Book",
+            document_type=DocumentType.BOOK,
+            source_filename="sample.pdf",
+            file_bytes=sample_book_pdf,
+        ),
         session=test_session,
         embeddings_client=fake_embeddings_client,
         model_name="text-embedding-3-small",
@@ -167,11 +174,13 @@ def test_pipeline_documentation_happy_path_reaches_ready(
     test_session.flush()
 
     run_ingestion(
-        document_id=document.document_id,
-        title="Sample Docs",
-        document_type=DocumentType.DOCUMENTATION,
-        source_filename="docs.md",
-        file_bytes=sample_documentation_md,
+        pending=PendingIngestion(
+            document_id=document.document_id,
+            title="Sample Docs",
+            document_type=DocumentType.DOCUMENTATION,
+            source_filename="docs.md",
+            file_bytes=sample_documentation_md,
+        ),
         session=test_session,
         embeddings_client=fake_embeddings_client,
         model_name="text-embedding-3-small",
@@ -209,11 +218,13 @@ def test_reingestion_creates_new_document_id(
     test_session.add(first)
     test_session.flush()
     run_ingestion(
-        document_id=first.document_id,
-        title="Paper",
-        document_type=DocumentType.PAPER,
-        source_filename="sample.pdf",
-        file_bytes=sample_paper_pdf,
+        pending=PendingIngestion(
+            document_id=first.document_id,
+            title="Paper",
+            document_type=DocumentType.PAPER,
+            source_filename="sample.pdf",
+            file_bytes=sample_paper_pdf,
+        ),
         session=test_session,
         embeddings_client=fake_embeddings_client,
         model_name="text-embedding-3-small",
@@ -232,11 +243,13 @@ def test_reingestion_creates_new_document_id(
     test_session.add(second)
     test_session.flush()
     run_ingestion(
-        document_id=second.document_id,
-        title="Paper",
-        document_type=DocumentType.PAPER,
-        source_filename="sample.pdf",
-        file_bytes=sample_paper_pdf,
+        pending=PendingIngestion(
+            document_id=second.document_id,
+            title="Paper",
+            document_type=DocumentType.PAPER,
+            source_filename="sample.pdf",
+            file_bytes=sample_paper_pdf,
+        ),
         session=test_session,
         embeddings_client=fake_embeddings_client,
         model_name="text-embedding-3-small",
@@ -338,11 +351,13 @@ class TestPipelineValidation:
             ]
             with pytest.raises(IngestionError):
                 run_ingestion(
-                    document_id=document.document_id,
-                    title="Bad Book",
-                    document_type=DocumentType.BOOK,
-                    source_filename="bad.pdf",
-                    file_bytes=b"irrelevant",
+                    pending=PendingIngestion(
+                        document_id=document.document_id,
+                        title="Bad Book",
+                        document_type=DocumentType.BOOK,
+                        source_filename="bad.pdf",
+                        file_bytes=b"irrelevant",
+                    ),
                     session=test_session,
                     embeddings_client=fake_embeddings_client,
                     model_name="text-embedding-3-small",
@@ -372,11 +387,13 @@ class TestPipelineValidation:
             ]
             with pytest.raises(IngestionError):
                 run_ingestion(
-                    document_id=document.document_id,
-                    title="Bad Paper",
-                    document_type=DocumentType.PAPER,
-                    source_filename="bad.pdf",
-                    file_bytes=b"irrelevant",
+                    pending=PendingIngestion(
+                        document_id=document.document_id,
+                        title="Bad Paper",
+                        document_type=DocumentType.PAPER,
+                        source_filename="bad.pdf",
+                        file_bytes=b"irrelevant",
+                    ),
                     session=test_session,
                     embeddings_client=fake_embeddings_client,
                     model_name="text-embedding-3-small",
@@ -401,11 +418,13 @@ class TestPipelineValidation:
         test_session.flush()
 
         run_ingestion(
-            document_id=document.document_id,
-            title="Sample Book",
-            document_type=DocumentType.BOOK,
-            source_filename="sample.pdf",
-            file_bytes=sample_book_pdf,
+            pending=PendingIngestion(
+                document_id=document.document_id,
+                title="Sample Book",
+                document_type=DocumentType.BOOK,
+                source_filename="sample.pdf",
+                file_bytes=sample_book_pdf,
+            ),
             session=test_session,
             embeddings_client=fake_embeddings_client,
             model_name="text-embedding-3-small",
