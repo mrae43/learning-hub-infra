@@ -7,6 +7,15 @@ from unittest.mock import MagicMock
 import pytest
 from fastapi.testclient import TestClient
 
+from api.dependencies import get_completion_provider, get_embedder
+from api.tests.conftest import set_dependency_override
+from core.clients import MockCompletionProvider
+
+
+def _default_fake_llm_provider() -> MockCompletionProvider:
+    """A mocked completion provider that returns a fixed grounded answer."""
+    return MockCompletionProvider("Grounded answer derived from retrieved passages.")
+
 
 def test_ingest_returns_202_with_location_header(
     client: TestClient,
@@ -152,17 +161,16 @@ def test_ingest_missing_document_type_returns_422(
 
 def test_ingest_pipeline_failure_marks_failed(
     client: TestClient,
-    monkeypatch: pytest.MonkeyPatch,
     sample_paper_pdf: bytes,
 ) -> None:
-    """A mocked embeddings client that raises surfaces as status=failed."""
+    """A mocked embeddings provider that raises surfaces as status=failed."""
 
-    def _failing_client(*args: object, **kwargs: object) -> MagicMock:
-        client = MagicMock()
-        client.embed.side_effect = RuntimeError("upstream down")
-        return client
+    def _failing_embedder() -> MagicMock:
+        embedder = MagicMock()
+        embedder.embed.side_effect = RuntimeError("upstream down")
+        return embedder
 
-    monkeypatch.setattr("ingestion.tasks.EmbeddingsClient", _failing_client)
+    set_dependency_override(client, get_embedder, _failing_embedder)
 
     response = client.post(
         "/ingest",
@@ -179,20 +187,12 @@ def test_ingest_pipeline_failure_marks_failed(
     assert body["error_message"] is not None
 
 
-def _default_fake_llm_client(*args: object, **kwargs: object) -> MagicMock:
-    """A mocked LLM client that returns a fixed grounded answer."""
-    client = MagicMock()
-    client.chat.return_value = "Grounded answer derived from retrieved passages."
-    return client
-
-
 def test_ingest_then_query_end_to_end(
     client: TestClient,
     ingest_a_paper: Callable[[str], str],
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Ingest a paper, then query it expecting grounded=true with cited passages."""
-    monkeypatch.setattr("api.routes.retrieval_qa.LLMClient", _default_fake_llm_client)
+    set_dependency_override(client, get_completion_provider, _default_fake_llm_provider)
 
     ingest_a_paper("RAG Paper")
 
@@ -214,7 +214,7 @@ def test_ingest_book_then_query_end_to_end(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Ingest a book, then query it expecting grounded=true with cited passages."""
-    monkeypatch.setattr("api.routes.retrieval_qa.LLMClient", _default_fake_llm_client)
+    set_dependency_override(client, get_completion_provider, _default_fake_llm_provider)
     # Raise top_k so all tied fake-embedding chunks are returned.
     monkeypatch.setattr("api.routes.retrieval_qa.settings.query_top_k", 100)
 

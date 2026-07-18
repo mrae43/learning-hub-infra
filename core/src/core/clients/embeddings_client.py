@@ -1,11 +1,33 @@
 """Client for the hosted OpenAI embeddings API."""
 
 from collections.abc import Sequence
+from typing import Protocol, runtime_checkable
 
 from openai import APIConnectionError, APIStatusError, AsyncOpenAI, OpenAI
 
 from core.config.settings import settings
 from core.exceptions import UpstreamBadResponse, UpstreamUnavailable
+
+
+@runtime_checkable
+class Embedder(Protocol):
+    """Protocol for synchronous text embedding providers.
+
+    Consumers depend on this protocol rather than a concrete client so that
+    hosted API clients, in-memory test doubles, and future provider
+    implementations are interchangeable.
+    """
+
+    def embed(self, texts: Sequence[str]) -> list[list[float]]:
+        """Embed a batch of texts synchronously.
+
+        Args:
+            texts: Input strings to embed.
+
+        Returns:
+            One vector per input string, with a consistent dimensionality.
+        """
+        ...
 
 
 class EmbeddingsClient:
@@ -84,3 +106,35 @@ class EmbeddingsClient:
             raise UpstreamBadResponse(
                 f"Embeddings API returned unexpected response shape: {exc}"
             ) from exc
+
+
+class InMemoryEmbedder:
+    """Deterministic, in-memory embedder for tests and local development.
+
+    Implements ``Embedder`` without calling a hosted API. Each input text
+    receives a deterministic vector based on its position in the batch.
+    """
+
+    def __init__(self, *, dimension: int = 1536, scale: float = 0.01) -> None:
+        """Initialize the embedder.
+
+        Args:
+            dimension: Vector dimensionality.
+            scale: Multiplier used to vary vectors per input position.
+        """
+        self._dimension = dimension
+        self._scale = scale
+
+    def embed(self, texts: Sequence[str]) -> list[list[float]]:
+        """Return one deterministic vector per input text.
+
+        Args:
+            texts: Input strings to embed.
+
+        Returns:
+            A vector of length ``dimension`` for each input string.
+        """
+        return [[self._scale * (i + 1)] * self._dimension for i in range(len(texts))]
+
+
+__all__ = ["Embedder", "EmbeddingsClient", "InMemoryEmbedder"]

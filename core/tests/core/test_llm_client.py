@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 import pytest
 from openai import APIConnectionError, APIStatusError
 
-from core.clients.llm_client import LLMClient
+from core.clients.llm_client import CompletionProvider, LLMClient, MockCompletionProvider
 from core.exceptions import UpstreamBadResponse, UpstreamUnavailable
 from core.types.chat import ChatMessage
 
@@ -121,3 +121,22 @@ def test_chat_raises_upstream_bad_response_when_content_missing(
 
     with pytest.raises(UpstreamBadResponse):
         client.chat(messages=[ChatMessage(role="user", content="x")])
+
+
+def test_llm_client_satisfies_completion_provider_protocol() -> None:
+    """LLMClient is a structural ``CompletionProvider`` implementation."""
+    client = LLMClient(api_key="sk-test", model="gpt-4o-mini")
+    assert isinstance(client, CompletionProvider)
+
+
+def test_mock_completion_provider_returns_configured_response() -> None:
+    """MockCompletionProvider returns the response configured at construction."""
+    provider = MockCompletionProvider("Fixed answer.")
+    result = provider.chat([ChatMessage(role="user", content="question")])
+    assert result == "Fixed answer."
+
+
+def test_mock_completion_provider_satisfies_protocol() -> None:
+    """MockCompletionProvider is a structural ``CompletionProvider`` implementation."""
+    provider = MockCompletionProvider()
+    assert isinstance(provider, CompletionProvider)

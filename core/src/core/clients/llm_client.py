@@ -7,12 +7,34 @@ narrow: one model, plain chat-completions shape, no streaming/tools.
 """
 
 from collections.abc import Sequence
+from typing import Protocol, runtime_checkable
 
 from openai import APIConnectionError, APIStatusError, OpenAI
 
 from core.config.settings import settings
 from core.exceptions import UpstreamBadResponse, UpstreamUnavailable
 from core.types.chat import ChatMessage
+
+
+@runtime_checkable
+class CompletionProvider(Protocol):
+    """Protocol for synchronous chat-completion providers.
+
+    Consumers depend on this protocol rather than a concrete client so that
+    hosted API clients, deterministic test doubles, and future provider
+    implementations are interchangeable.
+    """
+
+    def chat(self, messages: Sequence[ChatMessage]) -> str:
+        """Generate a chat completion and return the message content.
+
+        Args:
+            messages: Chat messages (role/content) to send to the model.
+
+        Returns:
+            The generated message content as a string.
+        """
+        ...
 
 
 class LLMClient:
@@ -74,3 +96,32 @@ class LLMClient:
         if content is None:
             raise UpstreamBadResponse("Inference API returned empty message content")
         return content
+
+
+class MockCompletionProvider:
+    """Deterministic chat-completion test double.
+
+    Implements ``CompletionProvider`` without calling a hosted inference API.
+    """
+
+    def __init__(self, response: str = "Mocked answer.") -> None:
+        """Initialize the provider.
+
+        Args:
+            response: The fixed string to return from ``chat()``.
+        """
+        self._response = response
+
+    def chat(self, messages: Sequence[ChatMessage]) -> str:
+        """Return the configured response.
+
+        Args:
+            messages: Messages that would be sent to the model (ignored).
+
+        Returns:
+            The configured response string.
+        """
+        return self._response
+
+
+__all__ = ["CompletionProvider", "LLMClient", "MockCompletionProvider"]

@@ -7,6 +7,19 @@ in Python before persisting (ADR-0014).
 from pydantic import BaseModel, ConfigDict
 
 
+class Chunk(BaseModel):
+    """Base model for a chunk produced by a document-type chunker.
+
+    All concrete chunker outputs share ``content``, ``metadata``, and
+    ``token_count``. The base model lets the ingestion pipeline treat them
+    uniformly without importing concrete chunker classes.
+    """
+
+    content: str
+    metadata: BaseModel
+    token_count: int
+
+
 class PaperChunkMetadata(BaseModel):
     """Metadata for a paper chunk."""
 
@@ -33,3 +46,11 @@ class DocumentationChunkMetadata(BaseModel):
 
     page: str
     section: str | None
+
+
+__all__ = [
+    "BookChunkMetadata",
+    "Chunk",
+    "DocumentationChunkMetadata",
+    "PaperChunkMetadata",
+]

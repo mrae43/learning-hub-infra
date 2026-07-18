@@ -9,8 +9,7 @@ from uuid import UUID
 
 from fastapi import BackgroundTasks
 
-from core.clients.embeddings_client import EmbeddingsClient
-from core.config.settings import settings
+from core.clients import Embedder
 from core.database.connection import SessionLocal
 from core.database.schema import Document
 from core.exceptions import IngestionError
@@ -23,6 +22,8 @@ def _execute_ingestion_task(
     document_type: DocumentType,
     source_filename: str,
     file_bytes: bytes,
+    embedder: Embedder,
+    model_name: str,
 ) -> None:
     """Synchronous wrapper run by ``BackgroundTasks``.
 
@@ -31,10 +32,6 @@ def _execute_ingestion_task(
     """
     session = SessionLocal()
     try:
-        embeddings_client = EmbeddingsClient(
-            api_key=settings.openai_api_key,
-            model=settings.embedding_model,
-        )
         title = ""
         document = session.get(Document, document_id)
         if document is not None:
@@ -47,8 +44,8 @@ def _execute_ingestion_task(
             source_filename=source_filename,
             file_bytes=file_bytes,
             session=session,
-            embeddings_client=embeddings_client,
-            model_name=settings.embedding_model,
+            embeddings_client=embedder,
+            model_name=model_name,
         )
         session.commit()
     except Exception as exc:
@@ -78,6 +75,8 @@ def schedule_ingestion(
     document_type: DocumentType,
     source_filename: str,
     file_bytes: bytes,
+    embedder: Embedder,
+    model_name: str,
 ) -> None:
     """Schedule the ingestion pipeline as a background task.
 
@@ -87,6 +86,8 @@ def schedule_ingestion(
         document_type: Document type (e.g. ``DocumentType.PAPER``).
         source_filename: Original upload filename.
         file_bytes: Raw uploaded file contents.
+        embedder: Provider used to embed chunk contents.
+        model_name: Model name to store alongside each embedding row.
     """
     background_tasks.add_task(
         _execute_ingestion_task,
@@ -94,6 +95,8 @@ def schedule_ingestion(
         document_type,
         source_filename,
         file_bytes,
+        embedder,
+        model_name,
     )
 
 

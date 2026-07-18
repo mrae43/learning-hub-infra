@@ -5,12 +5,15 @@ emitting ``PaperChunkMetadata`` for each chunk.
 """
 
 import re
+from collections.abc import Sequence
 from io import BytesIO
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import ConfigDict
 from pypdf import PdfReader
 
-from core.types.chunk import PaperChunkMetadata
+from core.types.chunk import Chunk, PaperChunkMetadata
+from core.types.document import DocumentType
+from retrieval_qa.chunking.base import DocumentChunker, register_chunker
 
 # Matches lines that look like paper section headers, e.g.:
 #   "1 Introduction"
@@ -23,14 +26,12 @@ _SECTION_PATTERN = re.compile(
 )
 
 
-class PaperChunk(BaseModel):
+class PaperChunk(Chunk):
     """A single chunk produced by the paper chunker."""
 
     model_config = ConfigDict(extra="forbid")
 
-    content: str
     metadata: PaperChunkMetadata
-    token_count: int
 
 
 def _count_tokens(text: str) -> int:
@@ -144,3 +145,19 @@ def chunk_paper(pdf_bytes: bytes) -> list[PaperChunk]:
         )
 
     return chunks
+
+
+class PaperChunker(DocumentChunker):
+    """Chunker for academic papers."""
+
+    metadata_model = PaperChunkMetadata
+
+    def chunk(self, file_bytes: bytes) -> Sequence[Chunk]:
+        """Chunk a paper PDF into section-aware pieces."""
+        return chunk_paper(file_bytes)
+
+
+register_chunker(DocumentType.PAPER, PaperChunker)
+
+
+__all__ = ["PaperChunk", "PaperChunker", "chunk_paper"]

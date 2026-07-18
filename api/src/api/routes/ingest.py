@@ -4,8 +4,19 @@ from pathlib import Path
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, Form, HTTPException, Request, Response, UploadFile
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    Form,
+    HTTPException,
+    Request,
+    Response,
+    UploadFile,
+)
 
+from api.dependencies import get_embedder
+from core.clients import Embedder
 from core.config.settings import settings
 from core.database.connection import db_session
 from core.database.schema import Document
@@ -46,6 +57,7 @@ async def ingest_document(
     file: UploadFile,
     title: Annotated[str, Form(...)],
     document_type: Annotated[DocumentType, Form(...)],
+    embedder: Annotated[Embedder, Depends(get_embedder)],
 ) -> DocumentStatusResponse:
     """Accept a document for background ingestion.
 
@@ -83,6 +95,8 @@ async def ingest_document(
         document_type=document_type,
         source_filename=source_filename,
         file_bytes=file_bytes,
+        embedder=embedder,
+        model_name=settings.embedding_model,
     )
 
     location = request.url_for("get_document", document_id=str(document_id))
