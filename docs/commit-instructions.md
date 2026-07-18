@@ -1,5 +1,5 @@
 # commit-instructions.md
-> Commit message conventions for the Learning Hub project. Enforced in CI (see ADR-0010) so `release.yml`'s automated changelog stays trustworthy.
+> Commit message conventions for the Learning Hub project. Enforced in CI (see ADR-0010) so `cd.yml`'s automated changelog stays trustworthy.
 
 ## Format
 
