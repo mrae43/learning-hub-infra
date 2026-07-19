@@ -19,6 +19,9 @@ dev = [
     "httpx2>=2.0.0",
     "reportlab>=4.0",
     "types-reportlab>=4.0",
+    "deepeval>=1.0",
+    "pyyaml>=6.0",
+    "types-pyyaml>=6.0",
 ]
 
 [tool.ruff]
