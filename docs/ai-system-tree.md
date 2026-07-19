@@ -7,13 +7,10 @@ learning-hub/
 │   │   ├── chunking/                 # Document-type-specific chunkers
 │   │   │   ├── paper_chunker.py
 │   │   │   ├── book_chunker.py
-│   │   │   └── doc_chunker.py
+│   │   │   └── documentation_chunker.py
 │   │   ├── retrieval/                # Retrieve from pgvector
 │   │   │   ├── query.py
 │   │   │   └── ranking.py
-│   │   ├── evaluation/               # recall@k eval
-│   │   │   ├── eval_set.py
-│   │   │   └── scorer.py
 │   │   └── __init__.py
 │   ├── tests/retrieval_qa/
 │   ├── pyproject.toml
@@ -74,7 +71,7 @@ learning-hub/
 │   ├── pyproject.toml
 │   └── README.md
 ├── docs/
-│   ├── adr/                          # 0001–0014 all live here
+│   ├── adr/                          # 0001–0015 all live here
 │   ├── tech-stack.md
 │   ├── coding-standards.md
 │   └── commit-instructions.md
