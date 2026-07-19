@@ -37,3 +37,6 @@ Thumbs.db
 
 # Coding Agents
 .opencode
+
+# DeepEval auto-generated data
+.deepeval/
