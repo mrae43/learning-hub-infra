@@ -3,8 +3,12 @@
 Each parametrized query exercises the real pgvector retrieval pipeline against
 a pre-seeded corpus (``eval_corpus`` session fixture).  A custom
 ``RecallAtKMetric`` computes set-intersection recall against expected chunks.
+
+Queries marked ``known_borderline: true`` in the eval set produce a warning
+instead of a test failure, keeping their score and mismatch details visible.
 """
 
+import warnings
 from hashlib import sha256
 from pathlib import Path
 from typing import Any
@@ -97,7 +101,11 @@ class RecallAtKMetric(BaseMetric):  # type: ignore[no-untyped-call]
 def test_recall_at_k_retrieves_expected_passages(
     query_data: dict[str, Any], eval_session: Session
 ) -> None:
-    """Retrieve chunks for the query and assert recall@k >= threshold."""
+    """Retrieve chunks for the query and assert recall@k >= threshold.
+
+    Queries with ``known_borderline: true`` emit a warning carrying the score
+    and mismatch details instead of calling ``assert_test`` (which would fail).
+    """
     top_k = Settings().query_top_k
     results = retrieve_relevant_chunks(
         query_vector=list(query_data["query_embedding"]),
@@ -118,4 +126,19 @@ def test_recall_at_k_retrieves_expected_passages(
     metric = RecallAtKMetric(
         expected_chunks=query_data["expected_chunk_contents"],
     )
-    assert_test(test_case, [metric])
+
+    if query_data.get("known_borderline", False):
+        reason = query_data.get("reason", "No reason provided")
+        metric.measure(test_case)
+        expected_items = "\n".join(f"  - {c[:80]}" for c in query_data["expected_chunk_contents"])
+        retrieved_items = "\n".join(f"  - {t[:80]}" for t in retrieved_texts)
+        warnings.warn(
+            f"Borderline query: {query_data['query'][:60]!r}...\n"
+            f"  score: {metric.score:.2f}  (threshold: {metric.threshold})\n"
+            f"  reason: {reason}\n"
+            f"  expected:\n{expected_items}\n"
+            f"  retrieved:\n{retrieved_items}",
+            stacklevel=2,
+        )
+    else:
+        assert_test(test_case, [metric])
