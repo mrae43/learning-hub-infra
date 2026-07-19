@@ -11,13 +11,14 @@ instead of a test failure, keeping their score and mismatch details visible.
 import warnings
 from hashlib import sha256
 from pathlib import Path
-from typing import Any
+from typing import Any, Self
 
 import pytest
 import yaml
 from deepeval import assert_test  # type: ignore[attr-defined]
 from deepeval.metrics import BaseMetric
 from deepeval.test_case import LLMTestCase
+from pydantic import BaseModel, model_validator
 from sqlalchemy.orm import Session
 
 from core.config.settings import Settings
@@ -25,6 +26,27 @@ from core.types.retrieval_config import RetrievalConfig
 from retrieval_qa.retrieval.query import retrieve_relevant_chunks
 
 _EVAL_SET_PATH = Path(__file__).parent / "eval_set.yaml"
+
+
+class EvalQuery(BaseModel):
+    """A single query entry from the eval YAML set.
+
+    Fields mirror the YAML schema.  ``reason`` is required (non-``None``)
+    when ``known_borderline`` is ``True``, enforced by ``model_validator``.
+    """
+
+    query: str
+    content_sha256: str
+    query_embedding: list[float]
+    expected_chunk_contents: list[str]
+    known_borderline: bool = False
+    reason: str | None = None
+
+    @model_validator(mode="after")
+    def reason_required_when_borderline(self) -> Self:
+        if self.known_borderline and self.reason is None:
+            raise ValueError("reason is required when known_borderline is true")
+        return self
 
 
 def _load_eval_data() -> dict[str, Any]:
@@ -56,7 +78,7 @@ for query in _EVAL_DATA.get("queries", []):
         f"Re-run scripts/generate_eval_vectors.py to update."
     )
 
-_EVAL_QUERIES: list[dict[str, Any]] = list(_EVAL_DATA["queries"])
+_EVAL_QUERIES: list[EvalQuery] = [EvalQuery.model_validate(q) for q in _EVAL_DATA["queries"]]
 
 
 class RecallAtKMetric(BaseMetric):  # type: ignore[no-untyped-call]
@@ -96,10 +118,10 @@ class RecallAtKMetric(BaseMetric):  # type: ignore[no-untyped-call]
 @pytest.mark.parametrize(
     "query_data",
     _EVAL_QUERIES,
-    ids=[q["query"][:40] for q in _EVAL_QUERIES],
+    ids=[q.query[:40] for q in _EVAL_QUERIES],
 )
 def test_recall_at_k_retrieves_expected_passages(
-    query_data: dict[str, Any], eval_session: Session
+    query_data: EvalQuery, eval_session: Session
 ) -> None:
     """Retrieve chunks for the query and assert recall@k >= threshold.
 
@@ -108,7 +130,7 @@ def test_recall_at_k_retrieves_expected_passages(
     """
     top_k = Settings().query_top_k
     results = retrieve_relevant_chunks(
-        query_vector=list(query_data["query_embedding"]),
+        query_vector=list(query_data.query_embedding),
         session=eval_session,
         config=RetrievalConfig(
             model_name="text-embedding-3-small",
@@ -119,23 +141,22 @@ def test_recall_at_k_retrieves_expected_passages(
 
     retrieved_texts = [r.text for r in results]
     test_case = LLMTestCase(
-        input=query_data["query"],
+        input=query_data.query,
         actual_output="",
         retrieval_context=retrieved_texts,  # type: ignore[arg-type]
     )
     metric = RecallAtKMetric(
-        expected_chunks=query_data["expected_chunk_contents"],
+        expected_chunks=query_data.expected_chunk_contents,
     )
 
-    if query_data.get("known_borderline", False):
-        reason = query_data.get("reason", "No reason provided")
+    if query_data.known_borderline:
         metric.measure(test_case)
-        expected_items = "\n".join(f"  - {c[:80]}" for c in query_data["expected_chunk_contents"])
+        expected_items = "\n".join(f"  - {c[:80]}" for c in query_data.expected_chunk_contents)
         retrieved_items = "\n".join(f"  - {t[:80]}" for t in retrieved_texts)
         warnings.warn(
-            f"Borderline query: {query_data['query'][:60]!r}...\n"
+            f"Borderline query: {query_data.query[:60]!r}...\n"
             f"  score: {metric.score:.2f}  (threshold: {metric.threshold})\n"
-            f"  reason: {reason}\n"
+            f"  reason: {query_data.reason}\n"
             f"  expected:\n{expected_items}\n"
             f"  retrieved:\n{retrieved_items}",
             stacklevel=2,
