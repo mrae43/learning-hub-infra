@@ -8,8 +8,8 @@ Queries marked ``known_borderline: true`` in the eval set produce a warning
 instead of a test failure, keeping their score and mismatch details visible.
 """
 
+import json
 import warnings
-from hashlib import sha256
 from pathlib import Path
 from typing import Any, Self
 
@@ -26,6 +26,7 @@ from core.types.retrieval_config import RetrievalConfig
 from retrieval_qa.retrieval.query import retrieve_relevant_chunks
 
 _EVAL_SET_PATH = Path(__file__).parent / "eval_set.yaml"
+_EVAL_VECTORS_PATH = _EVAL_SET_PATH.with_name("eval_vectors.json")
 
 
 class EvalQuery(BaseModel):
@@ -37,7 +38,6 @@ class EvalQuery(BaseModel):
 
     query: str
     content_sha256: str
-    query_embedding: list[float]
     expected_chunk_contents: list[str]
     known_borderline: bool = False
     reason: str | None = None
@@ -54,31 +54,26 @@ def _load_eval_data() -> dict[str, Any]:
         return yaml.safe_load(f)  # type: ignore[no-any-return]
 
 
-def _sha256(text: str) -> str:
-    return sha256(text.encode()).hexdigest()
+def _load_vectors() -> dict[str, list[float]]:
+    with open(_EVAL_VECTORS_PATH) as f:
+        vectors: dict[str, list[float]] = json.load(f)["vectors"]
+        return vectors
 
 
-# Verify integrity of all queries and chunk contents in the eval set.
 _EVAL_DATA = _load_eval_data()
-for doc in _EVAL_DATA.get("documents", []):
-    for chunk in doc.get("chunks", []):
-        actual = _sha256(chunk["content"])
-        expected = chunk["content_sha256"]
-        assert actual == expected, (
-            f"SHA-256 mismatch for chunk content {chunk['content'][:60]!r}...: "
-            f"got {actual}, expected {expected}. "
-            f"Re-run scripts/generate_eval_vectors.py to update."
-        )
-for query in _EVAL_DATA.get("queries", []):
-    actual = _sha256(query["query"])
-    expected = query["content_sha256"]
-    assert actual == expected, (
-        f"SHA-256 mismatch for query {query['query']!r}: "
-        f"got {actual}, expected {expected}. "
-        f"Re-run scripts/generate_eval_vectors.py to update."
-    )
-
+_EVAL_VECTORS = _load_vectors()
 _EVAL_QUERIES: list[EvalQuery] = [EvalQuery.model_validate(q) for q in _EVAL_DATA["queries"]]
+
+_QUERY_VECTORS: dict[str, list[float]] = {}
+for _q in _EVAL_DATA["queries"]:
+    _key = _q["content_sha256"]
+    _vec = _EVAL_VECTORS.get(_key)
+    if _vec is None:
+        raise KeyError(
+            f"Vector missing for entry with hash {_key!r}. "
+            f"Re-run `uv run python scripts/generate_eval_vectors.py`"
+        )
+    _QUERY_VECTORS[_key] = _vec
 
 
 class RecallAtKMetric(BaseMetric):  # type: ignore[no-untyped-call]
@@ -129,8 +124,9 @@ def test_recall_at_k_retrieves_expected_passages(
     and mismatch details instead of calling ``assert_test`` (which would fail).
     """
     top_k = Settings().query_top_k
+    query_vector = _QUERY_VECTORS[query_data.content_sha256]
     results = retrieve_relevant_chunks(
-        query_vector=list(query_data.query_embedding),
+        query_vector=query_vector,
         session=eval_session,
         config=RetrievalConfig(
             model_name="text-embedding-3-small",

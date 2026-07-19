@@ -7,17 +7,13 @@ Usage:
 
 Reads ``retrieval_qa/tests/retrieval_qa/retrieval/eval_set.yaml``,
 calls the OpenAI embedding API (``text-embedding-3-small``) for **all** entries
-every run, writes both ``eval_vectors.json`` (sidecar) and updated inline
-vectors back to the YAML.
-
-This is an expand step -- both files carry the same vector data so nothing
-consuming the YAML breaks yet.
+every run, writes only the sidecar ``eval_vectors.json`` (keyed by
+SHA-256 hash).  Does **not** modify the YAML file.
 """
 
 import hashlib
 import json
 from pathlib import Path
-from typing import Any
 
 import yaml
 
@@ -37,7 +33,7 @@ def _sha256(text: str) -> str:
 
 
 def main() -> None:
-    """Read eval YAML, regenerate all embeddings, write YAML + sidecar JSON."""
+    """Read eval YAML, regenerate all embeddings, write sidecar JSON only."""
     client = EmbeddingsClient()
     model_name = Settings().embedding_model
     dimensions = 1536
@@ -46,16 +42,13 @@ def main() -> None:
         data = yaml.safe_load(f)
 
     texts_to_embed: list[str] = []
-    source_info: list[tuple[dict[str, Any], str, str, str]] = []
 
     for doc in data["documents"]:
         for chunk in doc["chunks"]:
             texts_to_embed.append(chunk["content"])
-            source_info.append((chunk, "content", "embedding", "content_sha256"))
 
     for query in data["queries"]:
         texts_to_embed.append(query["query"])
-        source_info.append((query, "query", "query_embedding", "content_sha256"))
 
     vectors: dict[str, list[float]] = {}
 
@@ -64,15 +57,8 @@ def main() -> None:
         print(f"Embedding batch {i // BATCH_SIZE + 1} ({len(batch)} texts)...")
         batch_vectors = client.embed(batch)
         for j, vector in enumerate(batch_vectors):
-            entry, text_key, embedding_key, hash_key = source_info[i + j]
-            text = entry[text_key]
-            content_hash = _sha256(text)
-            entry[embedding_key] = vector
-            entry[hash_key] = content_hash
+            content_hash = _sha256(texts_to_embed[i + j])
             vectors[content_hash] = vector
-
-    with open(EVAL_SET_PATH, "w") as f:
-        yaml.dump(data, f, default_flow_style=None, sort_keys=False, width=200)
 
     sidecar = {
         "model": model_name,
@@ -82,7 +68,7 @@ def main() -> None:
     with open(EVAL_VECTORS_PATH, "w") as f:
         json.dump(sidecar, f)
 
-    print(f"Done. Updated {len(texts_to_embed)} embedding(s).")
+    print(f"Done. Generated {len(texts_to_embed)} embedding(s).")
 
 
 if __name__ == "__main__":
