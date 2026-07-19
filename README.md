@@ -10,7 +10,7 @@ A hand-rolled RAG study tool for learning AI/ML from papers, books, and document
 
 ## How it works
 
-**Upload & ingest.** Submit a PDF or EPUB via `POST /ingest`. The server validates the file, chunks it by document type (paper, book, documentation), embeds each chunk via OpenAI `text-embedding-3-small`, and stores it in a pgvector HNSW index. You get a document ID immediately; ingestion continues in the background. Poll progress with `GET /documents/{id}`.
+**Upload & ingest.** Submit a PDF or EPUB via `POST /ingest`. The server validates the file, chunks it by document type (paper, book, documentation), embeds each chunk via Google `text-embedding-004` or OpenAI `text-embedding-3-small`, and stores it in a pgvector HNSW index. You get a document ID immediately; ingestion continues in the background. Poll progress with `GET /documents/{id}`.
 
 **Query (MVP).** Send `{query: str}` to `POST /query`. The system retrieves the top-k relevant chunks from your entire corpus, assembles a prompt with those chunks as context, and calls a hosted LLM. The response is a structured `HarnessAResponse` — answer text, cited passages, and a `grounded: bool` flag so you know whether the answer actually came from your documents.
 
@@ -21,7 +21,7 @@ A hand-rolled RAG study tool for learning AI/ML from papers, books, and document
 | Post-MVP 1 | **Depth Dive** — richer explanations (text + diagrams + code) with agentic web search | 🔧 Scaffold |
 | Post-MVP 2 | **Synapse** — multi-sensory interactive learning with gamification and neuroplasticity triggers | 📅 Planned |
 
-> **Status:** Early implementation — tracer bullet complete. Four of five packages (`core/`, `retrieval_qa/`, `api/`, `ingestion/`) have implementation code (~5760 lines total). Only `depth_dive/` remains as a scaffold. Ingestion pipeline, Harness A query pipeline, and three API endpoints (`POST /ingest`, `GET /documents/{id}`, `POST /query`) are operational. See [docs/](./docs/) for architecture decisions and plans.
+> **Status:** Early implementation — tracer bullet complete. Four of five packages (`core/`, `retrieval_qa/`, `api/`, `ingestion/`) have implementation code (~6422 lines total). Only `depth_dive/` remains as a scaffold. Ingestion pipeline, Harness A query pipeline, and three API endpoints (`POST /ingest`, `GET /documents/{id}`, `POST /query`) are operational. See [docs/](./docs/) for architecture decisions and plans.
 
 ## Architecture
 

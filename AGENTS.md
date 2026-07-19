@@ -3,7 +3,7 @@
 
 ## Current state
 
-This repository is in **early implementation (tracer bullet complete)**. ADRs, stack decisions, coding standards, and the monorepo layout are in place, plus the build/CI scaffolding: root + per-module `pyproject.toml` (uv workspace), `uv.lock`, `.github/workflows/` (`ci.yml`, `cd.yml`, `security.yml`, `dependabot-auto-merge.yml`), `commitlint.config.mjs`, and `Dockerfile`. Four of five packages have real implementation code (~5760 lines total); only `depth_dive/` still has just placeholders. The toolchain is green: `uv sync` installs all deps; `uv run ruff check`, `uv run ruff format --check`, `uv run mypy`, `uv run lint-imports`, and `uv run pytest` all pass.
+This repository is in **early implementation (tracer bullet complete)**. ADRs, stack decisions, coding standards, and the monorepo layout are in place, plus the build/CI scaffolding: root + per-module `pyproject.toml` (uv workspace), `uv.lock`, `.github/workflows/` (`ci.yml`, `cd.yml`, `security.yml`, `dependabot-auto-merge.yml`), `commitlint.config.mjs`, and `Dockerfile`. Four of five packages have real implementation code (~6422 lines total); only `depth_dive/` still has just placeholders. The toolchain is green: `uv sync` installs all deps; `uv run ruff check`, `uv run ruff format --check`, `uv run mypy`, `uv run lint-imports`, and `uv run pytest` all pass.
 
 ## Authoritative sources — read before acting
 
@@ -20,7 +20,7 @@ These docs are **not** auto-loaded into session context. Only this `AGENTS.md` i
 
 **Before choosing or adding a library, model, or external service:**
 - `docs/tech-stack.md` — MVP stack and staged post-MVP milestones.
-- `docs/adr/` — read the ADR(s) most relevant to the area (e.g., ADR-0001 inference, ADR-0002 pgvector, ADR-0003 hand-rolled RAG, ADR-0004 embeddings, ADR-0006 background ingestion, ADR-0012 depth-dive-web-search-agentic, ADR-0013 depth-dive-search-failure-retry-fallback, ADR-0014 data-schema-api-contracts-harness-a). Treat ADRs as **constraints, not suggestions**. If a decision contradicts an ADR, stop and propose a new/updated ADR rather than silently deviating.
+- `docs/adr/` — read the ADR(s) most relevant to the area (e.g., ADR-0001 inference, ADR-0002 pgvector, ADR-0003 hand-rolled RAG, ADR-0004 embeddings, ADR-0006 background ingestion, ADR-0012 depth-dive-web-search-agentic, ADR-0013 depth-dive-search-failure-retry-fallback, ADR-0014 data-schema-api-contracts-harness-a, ADR-0015 deepeval-for-retrieval-evaluation). Treat ADRs as **constraints, not suggestions**. If a decision contradicts an ADR, stop and propose a new/updated ADR rather than silently deviating.
 
 **Before writing a commit message:**
 - `docs/commit-instructions.md` — Conventional Commits format and allowed types.
