@@ -10,6 +10,7 @@ instead of a test failure, keeping their score and mismatch details visible.
 
 import json
 import warnings
+from hashlib import sha256
 from pathlib import Path
 from typing import Any, Self
 
@@ -54,26 +55,83 @@ def _load_eval_data() -> dict[str, Any]:
         return yaml.safe_load(f)  # type: ignore[no-any-return]
 
 
+def _sha256(text: str) -> str:
+    return sha256(text.encode()).hexdigest()
+
+
+def _validate_eval_integrity(
+    data: dict[str, Any],
+    vectors: dict[str, list[float]],
+    sidecar_model: str | None = None,
+) -> None:
+    """Validate SHA-256 hashes and vector cross-references.
+
+    Checks:
+    - Every chunk content and query string hash matches its stored hash.
+    - Every YAML content hash has a corresponding entry in the vector JSON.
+    - Every vector in JSON has a corresponding YAML entry (no orphans).
+    - Model metadata matches ``settings.embedding_model`` (if provided).
+    """
+    yaml_hashes: set[str] = set()
+
+    expected_model = Settings().embedding_model
+    if sidecar_model is not None:
+        assert sidecar_model == expected_model, (
+            f"Sidecar JSON model '{sidecar_model}' does not match "
+            f"settings.embedding_model '{expected_model}'. "
+            f"Re-run scripts/generate_eval_vectors.py."
+        )
+
+    for doc in data.get("documents", []):
+        for chunk in doc.get("chunks", []):
+            actual = _sha256(chunk["content"])
+            expected = chunk["content_sha256"]
+            assert actual == expected, (
+                f"SHA-256 mismatch for chunk content {chunk['content'][:60]!r}...: "
+                f"got {actual}, expected {expected}. "
+                f"Re-run scripts/generate_eval_vectors.py to update."
+            )
+            yaml_hashes.add(expected)
+
+    for query in data.get("queries", []):
+        actual = _sha256(query["query"])
+        expected = query["content_sha256"]
+        assert actual == expected, (
+            f"SHA-256 mismatch for query {query['query']!r}: "
+            f"got {actual}, expected {expected}. "
+            f"Re-run scripts/generate_eval_vectors.py to update."
+        )
+        yaml_hashes.add(expected)
+
+    for yaml_hash in yaml_hashes:
+        assert yaml_hash in vectors, (
+            f"Vector missing for entry with hash {yaml_hash}. "
+            f"Re-run `uv run python scripts/generate_eval_vectors.py`"
+        )
+
+    for vec_hash in vectors:
+        assert vec_hash in yaml_hashes, (
+            f"Orphan vector in sidecar JSON for hash {vec_hash} — no matching YAML entry found."
+        )
+
+
 def _load_vectors() -> dict[str, list[float]]:
     with open(_EVAL_VECTORS_PATH) as f:
-        vectors: dict[str, list[float]] = json.load(f)["vectors"]
-        return vectors
+        sidecar = json.load(f)
+    with open(_EVAL_SET_PATH) as f:
+        eval_data = yaml.safe_load(f)
+    vectors: dict[str, list[float]] = sidecar["vectors"]
+    _validate_eval_integrity(eval_data, vectors, sidecar_model=sidecar.get("model"))
+    return vectors
 
 
 _EVAL_DATA = _load_eval_data()
 _EVAL_VECTORS = _load_vectors()
 _EVAL_QUERIES: list[EvalQuery] = [EvalQuery.model_validate(q) for q in _EVAL_DATA["queries"]]
 
-_QUERY_VECTORS: dict[str, list[float]] = {}
-for _q in _EVAL_DATA["queries"]:
-    _key = _q["content_sha256"]
-    _vec = _EVAL_VECTORS.get(_key)
-    if _vec is None:
-        raise KeyError(
-            f"Vector missing for entry with hash {_key!r}. "
-            f"Re-run `uv run python scripts/generate_eval_vectors.py`"
-        )
-    _QUERY_VECTORS[_key] = _vec
+_QUERY_VECTORS: dict[str, list[float]] = {
+    q["content_sha256"]: _EVAL_VECTORS[q["content_sha256"]] for q in _EVAL_DATA["queries"]
+}
 
 
 class RecallAtKMetric(BaseMetric):  # type: ignore[no-untyped-call]
