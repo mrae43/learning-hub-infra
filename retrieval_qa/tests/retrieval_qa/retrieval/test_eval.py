@@ -8,7 +8,6 @@ Queries marked ``known_borderline: true`` in the eval set produce a warning
 instead of a test failure, keeping their score and mismatch details visible.
 """
 
-import json
 import warnings
 from pathlib import Path
 from typing import Any, Self
@@ -26,7 +25,6 @@ from core.types.retrieval_config import RetrievalConfig
 from retrieval_qa.retrieval.query import retrieve_relevant_chunks
 
 _EVAL_SET_PATH = Path(__file__).parent / "eval_set.yaml"
-_EVAL_VECTORS_PATH = _EVAL_SET_PATH.with_name("eval_vectors.json")
 
 
 class EvalQuery(BaseModel):
@@ -54,26 +52,13 @@ def _load_eval_data() -> dict[str, Any]:
         return yaml.safe_load(f)  # type: ignore[no-any-return]
 
 
-def _load_vectors() -> dict[str, list[float]]:
-    with open(_EVAL_VECTORS_PATH) as f:
-        vectors: dict[str, list[float]] = json.load(f)["vectors"]
-        return vectors
-
-
 _EVAL_DATA = _load_eval_data()
-_EVAL_VECTORS = _load_vectors()
 _EVAL_QUERIES: list[EvalQuery] = [EvalQuery.model_validate(q) for q in _EVAL_DATA["queries"]]
 
-_QUERY_VECTORS: dict[str, list[float]] = {}
-for _q in _EVAL_DATA["queries"]:
-    _key = _q["content_sha256"]
-    _vec = _EVAL_VECTORS.get(_key)
-    if _vec is None:
-        raise KeyError(
-            f"Vector missing for entry with hash {_key!r}. "
-            f"Re-run `uv run python scripts/generate_eval_vectors.py`"
-        )
-    _QUERY_VECTORS[_key] = _vec
+
+@pytest.fixture(scope="session")
+def query_vectors(eval_vectors: dict[str, list[float]]) -> dict[str, list[float]]:
+    return {q["content_sha256"]: eval_vectors[q["content_sha256"]] for q in _EVAL_DATA["queries"]}
 
 
 class RecallAtKMetric(BaseMetric):  # type: ignore[no-untyped-call]
@@ -116,7 +101,7 @@ class RecallAtKMetric(BaseMetric):  # type: ignore[no-untyped-call]
     ids=[q.query[:40] for q in _EVAL_QUERIES],
 )
 def test_recall_at_k_retrieves_expected_passages(
-    query_data: EvalQuery, eval_session: Session
+    query_data: EvalQuery, query_vectors: dict[str, list[float]], eval_session: Session
 ) -> None:
     """Retrieve chunks for the query and assert recall@k >= threshold.
 
@@ -124,7 +109,7 @@ def test_recall_at_k_retrieves_expected_passages(
     and mismatch details instead of calling ``assert_test`` (which would fail).
     """
     top_k = Settings().query_top_k
-    query_vector = _QUERY_VECTORS[query_data.content_sha256]
+    query_vector = query_vectors[query_data.content_sha256]
     results = retrieve_relevant_chunks(
         query_vector=query_vector,
         session=eval_session,

@@ -7,13 +7,18 @@ Usage:
 
 Reads ``retrieval_qa/tests/retrieval_qa/retrieval/eval_set.yaml``,
 calls the OpenAI embedding API (``text-embedding-3-small``) for **all** entries
-every run, writes only the sidecar ``eval_vectors.json`` (keyed by
-SHA-256 hash).  Does **not** modify the YAML file.
+every run, writes the sidecar ``eval_vectors.json`` (keyed by SHA-256 hash)
+**and** updates ``content_sha256`` in the YAML so both files form a consistent
+snapshot.
+
+Edit content in the YAML, run this script, and both files are in sync —
+no manual hash updates needed.
 """
 
 import hashlib
 import json
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -32,14 +37,24 @@ def _sha256(text: str) -> str:
     return hashlib.sha256(text.encode()).hexdigest()
 
 
+def _rewrite_content_hashes(data: dict[str, Any]) -> None:
+    """Recompute ``content_sha256`` for every chunk and query entry in-place."""
+    for doc in data.get("documents", []):
+        for chunk in doc.get("chunks", []):
+            chunk["content_sha256"] = _sha256(chunk["content"])
+    for query in data.get("queries", []):
+        query["content_sha256"] = _sha256(query["query"])
+
+
 def main() -> None:
-    """Read eval YAML, regenerate all embeddings, write sidecar JSON only."""
+    """Read eval YAML, recompute content hashes, regenerate embeddings, write both."""
     client = EmbeddingsClient()
     model_name = Settings().embedding_model
-    dimensions = 1536
 
     with open(EVAL_SET_PATH) as f:
         data = yaml.safe_load(f)
+
+    _rewrite_content_hashes(data)
 
     texts_to_embed: list[str] = []
 
@@ -60,6 +75,12 @@ def main() -> None:
             content_hash = _sha256(texts_to_embed[i + j])
             vectors[content_hash] = vector
 
+    if not vectors:
+        print("No texts to embed.")
+        return
+
+    dimensions = len(vectors[next(iter(vectors))])
+
     sidecar = {
         "model": model_name,
         "dimensions": dimensions,
@@ -68,7 +89,10 @@ def main() -> None:
     with open(EVAL_VECTORS_PATH, "w") as f:
         json.dump(sidecar, f)
 
-    print(f"Done. Generated {len(texts_to_embed)} embedding(s).")
+    with open(EVAL_SET_PATH, "w") as f:
+        yaml.dump(data, f, default_flow_style=None, sort_keys=False, allow_unicode=True)
+
+    print(f"Done. Generated {len(texts_to_embed)} embedding(s), dimensions={dimensions}.")
 
 
 if __name__ == "__main__":
