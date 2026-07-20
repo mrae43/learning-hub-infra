@@ -37,8 +37,6 @@ Thumbs.db
 
 # Coding Agents
 .opencode
-docs/agent/
-.out-of-scope/
 
 # DeepEval auto-generated data
 .deepeval/
