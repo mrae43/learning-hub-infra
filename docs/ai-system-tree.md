@@ -5,73 +5,78 @@ learning-hub/
 ├── retrieval_qa/                        # Retrieval QA (extractable later)
 │   ├── src/retrieval_qa/
 │   │   ├── chunking/                 # Document-type-specific chunkers
+│   │   │   ├── base.py               # Base chunker class
 │   │   │   ├── paper_chunker.py
 │   │   │   ├── book_chunker.py
 │   │   │   └── documentation_chunker.py
 │   │   ├── retrieval/                # Retrieve from pgvector
-│   │   │   ├── query.py
-│   │   │   └── ranking.py
+│   │   │   └── query.py
 │   │   └── __init__.py
-│   ├── tests/retrieval_qa/
+│   ├── tests/retrieval_qa/           # chunker + retrieval tests
 │   ├── pyproject.toml
 │   └── README.md
-├── depth_dive/                        # Depth Dive generation (extractable later)
+├── depth_dive/                        # Depth Dive generation (stub — TODO)
 │   ├── src/depth_dive/
-│   │   ├── generation/               # Depth Dive response generation
-│   │   │   └── generator.py
-│   │   ├── web_search/               # Web search tool logic
-│   │   │   ├── search_tool.py
-│   │   │   └── citation.py
-│   │   └── __init__.py
+│   │   └── __init__.py               # Package marker only
 │   ├── tests/depth_dive/
+│   │   └── test_smoke.py
 │   ├── pyproject.toml
-│   └── README.md
+│   └── (README.md)
 ├── core/                             # Shared (may stay here or move to common/ later)
 │   ├── src/core/
 │   │   ├── types/                    # Shared schemas
-│   │   │   ├── document.py
 │   │   │   ├── chunk.py
+│   │   │   ├── document.py
+│   │   │   ├── chat.py               # Chat / conversation models
 │   │   │   ├── responses.py          # HarnessAResponse, etc.
+│   │   │   ├── retrieval_config.py   # Retrieval config models
 │   │   │   └── __init__.py
 │   │   ├── config/
 │   │   │   ├── settings.py           # Pydantic settings
 │   │   │   └── __init__.py
 │   │   ├── clients/                  # API clients (hosted inference, embeddings)
 │   │   │   ├── llm_client.py
-│   │   │   ├── embeddings_client.py
-│   │   │   └── web_search_client.py
+│   │   │   └── embeddings_client.py
 │   │   ├── database/                 # pgvector wrapper, Alembic migrations
 │   │   │   ├── connection.py
 │   │   │   ├── schema.py
 │   │   │   └── migrations/
+│   │   ├── exceptions.py             # Named exception types
 │   │   └── __init__.py
-│   ├── tests/core/
+│   ├── tests/core/                   # types, clients, migration tests
 │   ├── pyproject.toml
 │   └── README.md
 ├── api/                              # FastAPI server (thin controller layer)
 │   ├── src/api/
 │   │   ├── routes/
-│   │   │   ├── retrieval_qa.py          # /query endpoint
-│   │   │   └── depth_dive.py          # /depth-dive endpoint
+│   │   │   ├── retrieval_qa.py       # /query endpoint
+│   │   │   ├── ingest.py             # /ingest endpoint
+│   │   │   └── documents.py          # /documents/{id} endpoint
 │   │   ├── controllers/
-│   │   │   ├── qa_controller.py      # Orchestrates Harness A
-│   │   │   └── depth_dive_controller.py  # Orchestrates Harness B
+│   │   │   └── qa_controller.py      # Orchestrates Harness A
+│   │   ├── dependencies.py           # FastAPI dependency injection
+│   │   ├── prompt.py                 # Prompt templates
 │   │   ├── server.py                 # FastAPI app factory
 │   │   ├── main.py                   # Entry point
 │   │   └── __init__.py
-│   ├── tests/api/
+│   ├── tests/api/                    # route + controller + prompt tests
+│   ├── tests/conftest.py
 │   ├── pyproject.toml
 │   └── README.md
 ├── ingestion/                        # Document upload & background task logic
 │   ├── src/ingestion/
+│   │   ├── models.py                 # Pydantic models for ingestion
 │   │   ├── tasks.py                  # FastAPI BackgroundTasks logic
 │   │   ├── pipeline.py               # Ingest → chunk → embed → store
 │   │   └── __init__.py
 │   ├── tests/ingestion/
 │   ├── pyproject.toml
 │   └── README.md
+├── scripts/
+│   └── generate_eval_vectors.py      # Eval vector generation utility
 ├── docs/
-│   ├── adr/                          # 0001–0015 all live here
+│   ├── adr/                          # 0001–0015 (skip 0008; 0015 supersedes 0007 scorer)
+│   ├── ai-system-tree.md
 │   ├── tech-stack.md
 │   ├── coding-standards.md
 │   └── commit-instructions.md
@@ -80,11 +85,17 @@ learning-hub/
 │   ├── cd.yml                        # Docker build + changelog
 │   ├── security.yml                  # Dependency scanning (pip-audit, etc.)
 │   └── dependabot-auto-merge.yml     # Auto-merge for low-risk Dependabot bumps
-├── pyproject.toml                    # Root: ruff config, import-linter contracts
+├── .out-of-scope/
+│   └── docker-compose.md             # Notes on docker-compose scoping decision
+├── pyproject.toml                    # Root: uv workspace, ruff config, import-linter contracts
+├── conftest.py                       # Root test fixtures (271 lines, shared by all packages)
+├── alembic.ini                       # Alembic configuration for DB migrations
+├── commitlint.config.mjs             # Conventional Commits enforcement
+├── docker-compose.yml                # Local dev: PostgreSQL + pgvector
+├── Dockerfile                        # Multi-stage build (all 5 packages)
 ├── .env.example
-├── Dockerfile
-├── AGENTS.md
-├── CONTEXT.md
+├── AGENTS.md                         # Session notes for AI coding tools
+├── CONTEXT.md                        # Domain glossary
 └── README.md
 ```
 
@@ -97,16 +108,4 @@ learning-hub/
 5. **Clean import boundaries** — matches ADR-0011's import-linter rules exactly (retrieval_qa ↔ core, depth_dive ↔ core, never retrieval_qa ↔ depth_dive).
 6. **Extractable ingestion** — ingestion logic is modular enough that when you graduate to `arq` + Redis (ADR-0006), you can slot it in without restructuring.
 
-**One addition:** Add a `CLAUDE.md` at the root (or link to it from README) that documents exactly where things go — this is what you'd hand to Claude Code or a future contributor:
-
-```
-## Where to add things
-
-- **New chunking strategy for a doc type** → `retrieval_qa/src/retrieval_qa/chunking/`
-- **Bug fix in retrieval logic** → `retrieval_qa/src/retrieval_qa/retrieval/`
-- **New Depth Dive generation feature** → `depth_dive/src/depth_dive/generation/`
-- **Web search improvements** → `depth_dive/src/depth_dive/web_search/`
-- **New shared type** → `core/src/core/types/`
-- **New API endpoint** → `api/src/api/routes/`
-- **New ADR** → `docs/adr/`
-```
+**Where to add things** — the `AGENTS.md` file at the root now documents exactly where things go (the "Where to add things" section). Use that as the canonical reference for future contributors.
