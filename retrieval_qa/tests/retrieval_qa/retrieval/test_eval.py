@@ -56,6 +56,7 @@ def _load_eval_data() -> dict[str, Any]:
 
 
 _EVAL_DATA = _load_eval_data()
+_EVAL_EMBEDDING_MODEL: str = _EVAL_DATA["embedding_model"]
 _EVAL_QUERIES: list[EvalQuery] = [EvalQuery.model_validate(q) for q in _EVAL_DATA["queries"]]
 
 
@@ -118,7 +119,7 @@ def test_recall_at_k_retrieves_expected_passages(
         query_vector=query_vector,
         session=eval_session,
         config=RetrievalConfig(
-            model_name="text-embedding-3-small",
+            model_name=_EVAL_EMBEDDING_MODEL,
             ef_search=Settings().hnsw_ef_search,
             top_k=top_k,
         ),

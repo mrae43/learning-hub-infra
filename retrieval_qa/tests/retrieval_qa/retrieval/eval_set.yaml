@@ -1,3 +1,4 @@
+embedding_model: text-embedding-3-small
 documents:
 - title: RAG Architecture Guide
   document_type: documentation
