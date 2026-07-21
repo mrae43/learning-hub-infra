@@ -5,7 +5,7 @@
 The closed-book question-answering system. Scope is strictly bounded to the model plus the user's ingested documents — no web search, no external tools. Output format is plain text. This is Retrieval QA's entire job; it does not produce artifacts, code samples, or cite external sources beyond the ingested corpus.
 
 ## Depth Dive
-The synthesis system that consumes Retrieval QA's retrieval layer and produces Depth Dives — richer, non-plain-text outputs. Unlike Retrieval QA, Depth Dive is permitted to extend beyond the ingested corpus via web search. Depth Dive ships after Retrieval QA is proven, since it depends on Retrieval QA's retrieval quality.
+The synthesis system that consumes Retrieval QA's retrieval layer and produces richer, non-plain-text outputs called Depth Dives. MVP output format is a **dual-coding** explanation of a captured passage — text paired with a diagram, carousel, or coding example. Stateless; no quizzing, no scheduling. Unlike Retrieval QA, Depth Dive is permitted to extend beyond the ingested corpus via agentic web search. Ships after Retrieval QA is proven, since it depends on Retrieval QA's retrieval quality. Term chosen to avoid collision with "Artifacts" as a pre-existing product term, and to capture both the depth of understanding it provides and the fact that it's triggered by diving into a specific captured passage.
 
 ## Document-Type Chunker
 A structure-aware chunking strategy specific to each ingested document type, rather than one fixed-size splitter applied uniformly. Papers chunk along section/subsection boundaries, books along chapter/heading boundaries, documentation along page/API-entry boundaries. Chosen as a separation-of-concerns principle for the hand-rolled pipeline (see ADR-0003) — each document type owns its own chunking logic rather than sharing a generic splitter.
@@ -27,9 +27,6 @@ A property of Retrieval QA's global-corpus retrieval, not a separate feature: be
 
 ## Concept Linking (post-MVP)
 The explicit, query-independent capability of proactively surfacing relationships between documents (e.g. "this passage relates to a paper you uploaded last week") without the user asking. Requires its own architecture (entity/concept extraction, a relation layer over the vector store, a UI surface) and its own evaluation criteria. Deferred until Retrieval QA and B are proven.
-
-## Depth Dive
-Depth Dive's MVP output format: a **dual-coding** explanation of a captured passage — text paired with a diagram, carousel, or coding example. Stateless; no quizzing, no scheduling. Final term — chosen to avoid colliding with "Artifacts" as a pre-existing product term, and to capture both the depth of understanding it provides and the fact that it's triggered by diving into a specific captured passage.
 
 ## Retrieval Practice / Spaced Repetition (post-MVP)
 Testing-effect and scheduling-based learning mechanisms (quizzes on captured passages, scheduled resurfacing of concepts) considered part of the "neuroscience-backed" goal but explicitly out of MVP. Requires durable per-concept state (long-term memory), unlike dual coding which is stateless per-request.
