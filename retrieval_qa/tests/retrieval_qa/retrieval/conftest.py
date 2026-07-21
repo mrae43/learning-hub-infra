@@ -59,11 +59,17 @@ def _validate_eval_integrity(
     - Every chunk content and query string hash matches its stored hash.
     - Every YAML content hash has a corresponding entry in the vector JSON.
     - Every vector in JSON has a corresponding YAML entry (no orphans).
-    - Model metadata matches ``settings.embedding_model`` (if provided).
+    - ``data["embedding_model"]`` matches ``settings.embedding_model``.
+    - Sidecar JSON model metadata matches ``settings.embedding_model`` (if provided).
     """
     yaml_hashes: set[str] = set()
 
     expected_model = Settings().embedding_model
+    assert data["embedding_model"] == expected_model, (
+        f"YAML embedding_model '{data['embedding_model']}' does not match "
+        f"settings.embedding_model '{expected_model}'. "
+        f"Update eval_set.yaml or settings."
+    )
     if sidecar_model is not None:
         assert sidecar_model == expected_model, (
             f"Sidecar JSON model '{sidecar_model}' does not match "
@@ -151,7 +157,7 @@ def _seed_eval_set(engine: Engine, vectors: dict[str, list[float]]) -> None:
                 session.add(
                     Embedding(
                         chunk_id=chunk.chunk_id,
-                        model_name="text-embedding-3-small",
+                        model_name=data["embedding_model"],
                         embedding=embedding_vec,
                     )
                 )

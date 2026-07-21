@@ -6,10 +6,10 @@ Usage:
     uv run python scripts/generate_eval_vectors.py
 
 Reads ``retrieval_qa/tests/retrieval_qa/retrieval/eval_set.yaml``,
-calls the OpenAI embedding API (``text-embedding-3-small``) for **all** entries
-every run, writes the sidecar ``eval_vectors.json`` (keyed by SHA-256 hash)
-**and** updates ``content_sha256`` in the YAML so both files form a consistent
-snapshot.
+calls the configured embedding API (``Settings().embedding_model``) for **all**
+entries every run, writes the sidecar ``eval_vectors.json`` (keyed by SHA-256
+hash) **and** updates ``content_sha256`` in the YAML so both files form a
+consistent snapshot.
 
 Edit content in the YAML, run this script, and both files are in sync —
 no manual hash updates needed.
@@ -17,6 +17,7 @@ no manual hash updates needed.
 
 import hashlib
 import json
+from collections import OrderedDict
 from pathlib import Path
 from typing import Any
 
@@ -53,6 +54,23 @@ def main() -> None:
 
     with open(EVAL_SET_PATH) as f:
         data = yaml.safe_load(f)
+
+    # Warn if YAML declares a different model than settings.
+    existing_model = data.get("embedding_model")
+    if existing_model is not None and existing_model != model_name:
+        print(
+            f"Warning: eval_set.yaml declares embedding_model={existing_model!r}, "
+            f"but Settings().embedding_model={model_name!r}. "
+            f"Overwriting YAML with {model_name!r}."
+        )
+
+    # Ensure embedding_model is the first key and matches settings.
+    ordered: OrderedDict[str, Any] = OrderedDict()
+    ordered["embedding_model"] = model_name
+    for k, v in data.items():
+        if k != "embedding_model":
+            ordered[k] = v
+    data = ordered
 
     _rewrite_content_hashes(data)
 
