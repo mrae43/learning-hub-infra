@@ -14,6 +14,8 @@ from typing import Any, Self
 
 import pytest
 import yaml
+
+# deepeval has no type stubs; assert_test is dynamically exported
 from deepeval import assert_test  # type: ignore[attr-defined]
 from deepeval.metrics import BaseMetric
 from deepeval.test_case import LLMTestCase
@@ -49,6 +51,7 @@ class EvalQuery(BaseModel):
 
 def _load_eval_data() -> dict[str, Any]:
     with open(_EVAL_SET_PATH) as f:
+        # yaml.safe_load returns Any; return type is already declared as dict[str, Any]
         return yaml.safe_load(f)  # type: ignore[no-any-return]
 
 
@@ -61,6 +64,7 @@ def query_vectors(eval_vectors: dict[str, list[float]]) -> dict[str, list[float]
     return {q["content_sha256"]: eval_vectors[q["content_sha256"]] for q in _EVAL_DATA["queries"]}
 
 
+# deepeval BaseMetric.__init__ has no type stubs; subclass must still call super().__init__
 class RecallAtKMetric(BaseMetric):  # type: ignore[no-untyped-call]
     """Set-intersection recall@k against top-k retrieved chunk texts.
 
@@ -124,6 +128,7 @@ def test_recall_at_k_retrieves_expected_passages(
     test_case = LLMTestCase(
         input=query_data.query,
         actual_output="",
+        # retrieved_texts is list[str]; deepeval's LLMTestCase stubs expect Sequence[str] | None
         retrieval_context=retrieved_texts,  # type: ignore[arg-type]
     )
     metric = RecallAtKMetric(
