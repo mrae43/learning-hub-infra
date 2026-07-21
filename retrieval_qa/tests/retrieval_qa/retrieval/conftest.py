@@ -20,6 +20,7 @@ from typing import Any
 import pytest
 import yaml
 from sqlalchemy import Engine, text
+from sqlalchemy.dialects.postgresql import ENUM
 from sqlalchemy.orm import Session, sessionmaker
 
 from core.config.settings import Settings
@@ -38,15 +39,8 @@ _ENUM_DEFS = {
 def _create_enums(engine: Engine) -> None:
     with engine.connect() as conn:
         for name, values in _ENUM_DEFS.items():
-            vals = ", ".join(f"'{v}'" for v in values)
-            conn.execute(
-                text(
-                    f"DO $$ BEGIN "
-                    f"CREATE TYPE {name} AS ENUM ({vals}); "
-                    f"EXCEPTION WHEN duplicate_object THEN NULL; "
-                    f"END $$"
-                )
-            )
+            enum_type = ENUM(*values, name=name)
+            enum_type.create(bind=conn, checkfirst=True)
         conn.commit()
 
 
