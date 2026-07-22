@@ -11,7 +11,6 @@ PDF page breaks). Sections include sub-headings and API endpoint lines such as
 import re
 from collections.abc import Sequence
 from enum import StrEnum
-from html.parser import HTMLParser
 from io import BytesIO
 
 from pydantic import ConfigDict
@@ -21,6 +20,7 @@ from core.exceptions import IngestionError
 from core.types.chunk import Chunk, DocumentationChunkMetadata
 from core.types.document import DocumentType
 from retrieval_qa._utils import count_tokens
+from retrieval_qa.chunking._html_utils import _BaseHTMLTextExtractor
 from retrieval_qa.chunking.base import DocumentChunker, register_chunker
 
 
@@ -51,41 +51,31 @@ class DocumentationChunk(Chunk):
     metadata: DocumentationChunkMetadata
 
 
-class _HTMLTextExtractor(HTMLParser):
+class _HTMLTextExtractor(_BaseHTMLTextExtractor):
     """Convert HTML to Markdown-style headings so the text splitter can run."""
 
     def __init__(self) -> None:
         super().__init__()
-        self._parts: list[str] = []
-        self._skip = False
         self._heading_level: int | None = None
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        if tag in {"script", "style", "head"}:
+        if tag == "head":
             self._skip = True
         elif tag in {"h1", "h2", "h3", "h4", "h5", "h6"}:
             self._heading_level = int(tag[1])
             self._parts.append("\n")
             self._parts.append("#" * self._heading_level + " ")
-        elif tag in {"p", "div", "br", "li"}:
-            self._parts.append("\n")
+        else:
+            super().handle_starttag(tag, attrs)
 
     def handle_endtag(self, tag: str) -> None:
-        if tag in {"script", "style", "head"}:
+        if tag == "head":
             self._skip = False
         elif tag in {"h1", "h2", "h3", "h4", "h5", "h6"}:
             self._heading_level = None
             self._parts.append("\n")
-        elif tag in {"p", "div", "li"}:
-            self._parts.append("\n")
-
-    def handle_data(self, data: str) -> None:
-        if not self._skip:
-            self._parts.append(data)
-
-    def get_text(self) -> str:
-        text = "".join(self._parts)
-        return re.sub(r"\n\s*\n+", "\n\n", text).strip()
+        else:
+            super().handle_endtag(tag)
 
 
 def _detect_format(file_bytes: bytes) -> DocumentationFormat:

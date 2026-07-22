@@ -20,6 +20,7 @@ from core.exceptions import IngestionError
 from core.types.chunk import BookChunkMetadata, Chunk
 from core.types.document import DocumentType
 from retrieval_qa._utils import count_tokens
+from retrieval_qa.chunking._html_utils import _BaseHTMLTextExtractor
 from retrieval_qa.chunking.base import DocumentChunker, register_chunker
 
 
@@ -54,35 +55,6 @@ class BookChunk(Chunk):
     model_config = ConfigDict(extra="forbid")
 
     metadata: BookChunkMetadata
-
-
-class _HTMLTextExtractor(HTMLParser):
-    """Strip tags from EPUB HTML bodies while preserving some structure."""
-
-    def __init__(self) -> None:
-        super().__init__()
-        self._parts: list[str] = []
-        self._skip = False
-
-    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        if tag in {"script", "style"}:
-            self._skip = True
-        elif tag in {"p", "div", "h1", "h2", "h3", "h4", "li", "br"}:
-            self._parts.append("\n")
-
-    def handle_endtag(self, tag: str) -> None:
-        if tag in {"script", "style"}:
-            self._skip = False
-        elif tag in {"p", "div", "h1", "h2", "h3", "h4", "li"}:
-            self._parts.append("\n")
-
-    def handle_data(self, data: str) -> None:
-        if not self._skip:
-            self._parts.append(data)
-
-    def get_text(self) -> str:
-        text = "".join(self._parts)
-        return re.sub(r"\n\s*\n+", "\n\n", text).strip()
 
 
 class _SectionExtractor(HTMLParser):
@@ -303,7 +275,7 @@ def _extract_epub_text(
         except KeyError:
             raw = archive.read(href).decode("utf-8")
 
-        extractor = _HTMLTextExtractor()
+        extractor = _BaseHTMLTextExtractor()
         extractor.feed(raw)
         text = extractor.get_text()
         if text:
