@@ -32,7 +32,7 @@ class DocumentationFormat(StrEnum):
     MARKDOWN = "markdown"
 
 
-_HTTP_METHODS = ("GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS")
+_HTTP_METHODS = ("GET", "POST")
 
 # Matches Markdown headings like ``# Page`` or ``## Section``.
 _HEADING_PATTERN = re.compile(r"^(#{1,6})\s+(.+?)$")
