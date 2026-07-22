@@ -19,6 +19,7 @@ from pypdf import PdfReader
 from core.exceptions import IngestionError
 from core.types.chunk import BookChunkMetadata, Chunk
 from core.types.document import DocumentType
+from retrieval_qa._utils import count_tokens
 from retrieval_qa.chunking.base import DocumentChunker, register_chunker
 
 
@@ -146,16 +147,6 @@ class _SectionExtractor(HTMLParser):
         """Return the list of ``(level, heading, body)`` tuples extracted."""
         self._flush_body_section()
         return self.sections
-
-
-def _count_tokens(text: str) -> int:
-    """Approximate token count for chunk sizing.
-
-    Uses a simple whitespace split; this is sufficient for MVP chunk ordering
-    and sanity checks. More precise counting can be swapped in later without
-    changing the chunker interface.
-    """
-    return max(1, len(text.split()))
 
 
 def _looks_like_heading(line: str) -> bool:
@@ -427,7 +418,7 @@ def chunk_book(file_bytes: bytes) -> list[BookChunk]:
             BookChunk(
                 content=body,
                 metadata=metadata,
-                token_count=_count_tokens(body),
+                token_count=count_tokens(body),
             )
         )
 
@@ -439,7 +430,7 @@ def chunk_book(file_bytes: bytes) -> list[BookChunk]:
             BookChunk(
                 content=full_text,
                 metadata=BookChunkMetadata(chapter=1, heading=None),
-                token_count=_count_tokens(full_text),
+                token_count=count_tokens(full_text),
             )
         )
 
