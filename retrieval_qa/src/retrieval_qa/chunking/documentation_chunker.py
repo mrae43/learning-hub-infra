@@ -20,6 +20,7 @@ from pypdf import PdfReader
 from core.exceptions import IngestionError
 from core.types.chunk import Chunk, DocumentationChunkMetadata
 from core.types.document import DocumentType
+from retrieval_qa._utils import count_tokens
 from retrieval_qa.chunking.base import DocumentChunker, register_chunker
 
 
@@ -85,16 +86,6 @@ class _HTMLTextExtractor(HTMLParser):
     def get_text(self) -> str:
         text = "".join(self._parts)
         return re.sub(r"\n\s*\n+", "\n\n", text).strip()
-
-
-def _count_tokens(text: str) -> int:
-    """Approximate token count for chunk sizing.
-
-    Uses a simple whitespace split; this is sufficient for MVP chunk ordering
-    and sanity checks. More precise counting can be swapped in later without
-    changing the chunker interface.
-    """
-    return max(1, len(text.split()))
 
 
 def _detect_format(file_bytes: bytes) -> DocumentationFormat:
@@ -242,7 +233,7 @@ def chunk_documentation(file_bytes: bytes) -> list[DocumentationChunk]:
             DocumentationChunk(
                 content=body,
                 metadata=metadata,
-                token_count=_count_tokens(body),
+                token_count=count_tokens(body),
             )
         )
 
@@ -253,7 +244,7 @@ def chunk_documentation(file_bytes: bytes) -> list[DocumentationChunk]:
             DocumentationChunk(
                 content=raw_text.strip(),
                 metadata=DocumentationChunkMetadata(page="Document", section=None),
-                token_count=_count_tokens(raw_text),
+                token_count=count_tokens(raw_text),
             )
         )
 

@@ -14,6 +14,7 @@ from pypdf import PdfReader
 from core.exceptions import IngestionError
 from core.types.chunk import Chunk, PaperChunkMetadata
 from core.types.document import DocumentType
+from retrieval_qa._utils import count_tokens
 from retrieval_qa.chunking.base import DocumentChunker, register_chunker
 
 # Matches lines that look like paper section headers, e.g.:
@@ -33,16 +34,6 @@ class PaperChunk(Chunk):
     model_config = ConfigDict(extra="forbid")
 
     metadata: PaperChunkMetadata
-
-
-def _count_tokens(text: str) -> int:
-    """Approximate token count for chunk sizing.
-
-    Uses a simple whitespace split; this is sufficient for MVP chunk ordering
-    and sanity checks. More precise counting can be swapped in later without
-    changing the chunker interface.
-    """
-    return max(1, len(text.split()))
 
 
 def _split_into_sections(text: str) -> list[tuple[str, str | None, str]]:
@@ -121,7 +112,7 @@ def chunk_paper(pdf_bytes: bytes) -> list[PaperChunk]:
                 PaperChunk(
                     content=body,
                     metadata=metadata,
-                    token_count=_count_tokens(body),
+                    token_count=count_tokens(body),
                 )
             )
 
@@ -139,7 +130,7 @@ def chunk_paper(pdf_bytes: bytes) -> list[PaperChunk]:
                     subsection=None,
                     page=1,
                 ),
-                token_count=_count_tokens(full_text),
+                token_count=count_tokens(full_text),
             )
         )
 
