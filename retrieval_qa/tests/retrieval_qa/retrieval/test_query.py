@@ -48,6 +48,60 @@ def _seed_paper(
     return document
 
 
+def _seed_parent_child_paper(
+    session: Session,
+    *,
+    title: str = "Parent-Child Paper",
+    parent_content: str,
+    child_contents: list[str],
+    vectors: list[list[float]],
+) -> tuple[Document, Chunk, list[Chunk]]:
+    """Seed a document with one parent and several embedded children.
+
+    Returns (document, parent_row, child_rows).
+    """
+    document = Document(
+        title=title,
+        document_type=DocumentType.PAPER,
+        source_filename=f"{title}.pdf",
+        status=DocumentStatus.READY,
+    )
+    session.add(document)
+    session.flush()
+
+    parent = Chunk(
+        document_id=document.document_id,
+        position=0,
+        content=parent_content,
+        token_count=max(1, len(parent_content.split())),
+        parent_chunk_id=None,
+    )
+    session.add(parent)
+    session.flush()
+
+    children: list[Chunk] = []
+    for position, (content, vector) in enumerate(zip(child_contents, vectors, strict=True)):
+        child = Chunk(
+            document_id=document.document_id,
+            position=position + 1,
+            content=content,
+            token_count=max(1, len(content.split())),
+            parent_chunk_id=parent.chunk_id,
+        )
+        session.add(child)
+        session.flush()
+        session.add(
+            Embedding(
+                chunk_id=child.chunk_id,
+                model_name="text-embedding-3-small",
+                embedding=vector,
+            )
+        )
+        children.append(child)
+
+    return document, parent, children
+
+
 def test_retrieve_returns_closest_chunks_by_cosine(test_session: Session) -> None:
     """The closest chunks by cosine distance are returned in ascending order."""
     near = [1.0] + [0.0] * 1535
@@ -263,3 +317,331 @@ def test_retrieve_wraps_db_connection_error_as_upstream_unavailable() -> None:
             session=fake_session,
             config=RetrievalConfig(model_name="text-embedding-3-small", ef_search=40, top_k=1),
         )
+
+
+# ── Hybrid search tests ──────────────────────────────────────────────────────
+
+
+def test_hybrid_dense_only_when_no_query_text_falls_back_to_dense(
+    test_session: Session,
+) -> None:
+    """When query_text is None, hybrid search falls back to dense-only."""
+    vector = [0.5] * 1536
+    _seed_paper(
+        test_session,
+        title="Test",
+        chunks=[("dense match", vector, "dense")],
+    )
+    test_session.commit()
+
+    results = retrieve_relevant_chunks(
+        query_vector=vector,
+        session=test_session,
+        config=RetrievalConfig(model_name="text-embedding-3-small", ef_search=40, top_k=5),
+        query_text=None,
+    )
+
+    assert len(results) == 1
+    assert results[0].text == "dense match"
+
+
+def test_hybrid_search_false_falls_back_to_dense_only(
+    test_session: Session,
+) -> None:
+    """Setting hybrid_search=False uses dense-only retrieval."""
+    vector = [0.5] * 1536
+    _seed_paper(
+        test_session,
+        title="Test",
+        chunks=[("dense only", vector, "dense")],
+    )
+    test_session.commit()
+
+    results = retrieve_relevant_chunks(
+        query_vector=vector,
+        session=test_session,
+        config=RetrievalConfig(
+            model_name="text-embedding-3-small",
+            ef_search=40,
+            top_k=5,
+            hybrid_search=False,
+        ),
+        query_text="some query that would match via sparse if enabled",
+    )
+
+    assert len(results) == 1
+    assert results[0].text == "dense only"
+
+
+def test_sparse_only_matches_exact_keyword_not_in_embedding_space(
+    test_session: Session,
+) -> None:
+    """A query matching only via sparse tsvector still returns the chunk.
+
+    The dense path gets no meaningful match (all vectors are far from
+    the query), but the sparse path finds the exact keyword.
+    """
+    dense_near = [1.0] + [0.0] * 1535
+    dense_far = [-1.0] + [0.0] * 1535
+
+    _seed_paper(
+        test_session,
+        title="Mixed",
+        chunks=[
+            ("semantic content about machine learning topics", dense_near, "near"),
+            ("git checkout --orphan creates a new branch without history", dense_far, "far"),
+        ],
+    )
+    test_session.commit()
+
+    results = retrieve_relevant_chunks(
+        query_vector=dense_near,
+        session=test_session,
+        config=RetrievalConfig(model_name="text-embedding-3-small", ef_search=40, top_k=5),
+        query_text="checkout orphan",
+    )
+
+    assert len(results) >= 1
+    texts = [r.text for r in results]
+    assert any("checkout" in t for t in texts)
+
+
+def test_sparse_path_graceful_degradation_when_no_text_matches(
+    test_session: Session,
+) -> None:
+    """When the sparse path finds nothing, dense results still come through."""
+    vector = [0.5] * 1536
+    _seed_paper(
+        test_session,
+        title="Dense",
+        chunks=[("dense result text", vector, "d")],
+    )
+    test_session.commit()
+
+    results = retrieve_relevant_chunks(
+        query_vector=vector,
+        session=test_session,
+        config=RetrievalConfig(model_name="text-embedding-3-small", ef_search=40, top_k=5),
+        query_text="xyznonexistentkeyword12345",
+    )
+
+    assert len(results) == 1
+    assert results[0].text == "dense result text"
+
+
+def test_sparse_only_finds_result_when_dense_returns_empty(
+    test_session: Session,
+) -> None:
+    """When the dense path returns empty (no embeddings for model_name),
+    the sparse path alone still produces output.
+    """
+    vector = [0.5] * 1536
+    _seed_paper(
+        test_session,
+        title="Sparse Only",
+        chunks=[("unique sparse keyword zxcvbnm", vector, "sparse")],
+    )
+    test_session.commit()
+
+    results = retrieve_relevant_chunks(
+        query_vector=[-1.0] * 1536,  # far from all chunks
+        session=test_session,
+        config=RetrievalConfig(model_name="text-embedding-3-small", ef_search=40, top_k=5),
+        query_text="zxcvbnm",
+    )
+
+    # Sparse should find the keyword even though the dense vector is far
+    assert len(results) >= 1
+    assert any("zxcvbnm" in r.text for r in results)
+
+
+def test_parent_swap_replaces_child_content_with_parent_content(
+    test_session: Session,
+) -> None:
+    """After hybrid retrieval, matched child chunks are swapped to parents."""
+    parent_text = "This is the full parent section about vector databases."
+    child_text = "vector databases store high-dimensional embeddings"
+    vector = [0.5] * 1536
+
+    _, parent, _ = _seed_parent_child_paper(
+        test_session,
+        parent_content=parent_text,
+        child_contents=[child_text],
+        vectors=[vector],
+    )
+    test_session.commit()
+
+    results = retrieve_relevant_chunks(
+        query_vector=vector,
+        session=test_session,
+        config=RetrievalConfig(model_name="text-embedding-3-small", ef_search=40, top_k=5),
+        query_text="vector databases embeddings",
+    )
+
+    assert len(results) == 1
+    assert results[0].text == parent_text
+    assert results[0].chunk_id == parent.chunk_id
+
+
+def test_parent_swap_deduplicates_multiple_children_of_same_parent(
+    test_session: Session,
+) -> None:
+    """When two children of the same parent match, only one parent result is
+    returned (deduplication by parent).
+    """
+    parent_text = "Kubernetes orchestrates container deployments across clusters."
+    child1 = "Kubernetes pods are the smallest deployable units in a cluster"
+    child2 = "Kubernetes deployments manage the lifecycle of pods"
+    vector = [0.5] * 1536
+
+    _, parent, _ = _seed_parent_child_paper(
+        test_session,
+        parent_content=parent_text,
+        child_contents=[child1, child2],
+        vectors=[vector, vector],
+    )
+    test_session.commit()
+
+    results = retrieve_relevant_chunks(
+        query_vector=vector,
+        session=test_session,
+        config=RetrievalConfig(model_name="text-embedding-3-small", ef_search=40, top_k=5),
+        query_text="Kubernetes pods",
+    )
+
+    assert len(results) == 1
+    assert results[0].chunk_id == parent.chunk_id
+    assert results[0].text == parent_text
+
+
+def test_parent_swap_returns_standalone_chunks_without_parents_as_is(
+    test_session: Session,
+) -> None:
+    """Chunks that have no parent (parent_chunk_id IS NULL) are returned as-is,
+    without being swapped or dropped.
+    """
+    vector = [0.5] * 1536
+    content = "standalone chunk without a parent"
+    _seed_paper(
+        test_session,
+        title="Standalone",
+        chunks=[(content, vector, "solo")],
+    )
+    test_session.commit()
+
+    results = retrieve_relevant_chunks(
+        query_vector=vector,
+        session=test_session,
+        config=RetrievalConfig(model_name="text-embedding-3-small", ef_search=40, top_k=5),
+        query_text="standalone chunk",
+    )
+
+    assert len(results) == 1
+    assert results[0].text == content
+
+
+def test_hybrid_rrf_fusion_combines_dense_and_sparse_without_duplicates(
+    test_session: Session,
+) -> None:
+    """RRF fusion produces a single ranked set with no duplicate entries."""
+    vector = [0.5] * 1536
+
+    # Same content so both dense and sparse paths find the same chunk
+    content = "postgresql and pgvector are used for vector similarity search"
+    _seed_paper(
+        test_session,
+        title="Hybrid",
+        chunks=[(content, vector, "h")],
+    )
+    test_session.commit()
+
+    results = retrieve_relevant_chunks(
+        query_vector=vector,
+        session=test_session,
+        config=RetrievalConfig(model_name="text-embedding-3-small", ef_search=40, top_k=5),
+        query_text="pgvector",
+    )
+
+    assert len(results) == 1
+    assert results[0].text == content
+
+
+def test_hybrid_search_respects_top_k_limit(test_session: Session) -> None:
+    """Hybrid search with RRF fusion respects the top_k limit."""
+    vector = [0.5] * 1536
+
+    _seed_paper(
+        test_session,
+        title="Many",
+        chunks=[(f"chunk {i} with unique word zeta{i}", vector, f"c{i}") for i in range(5)],
+    )
+    test_session.commit()
+
+    results = retrieve_relevant_chunks(
+        query_vector=vector,
+        session=test_session,
+        config=RetrievalConfig(model_name="text-embedding-3-small", ef_search=40, top_k=3),
+        query_text="zeta",
+    )
+
+    assert len(results) <= 3
+
+
+def test_hybrid_search_returns_empty_list_when_no_results_from_either_path(
+    test_session: Session,
+) -> None:
+    """When neither dense nor sparse paths find results, return empty list."""
+    vector = [0.5] * 1536
+    _seed_paper(
+        test_session,
+        title="Present",
+        chunks=[("some content", vector, "c1")],
+    )
+    test_session.commit()
+
+    results = retrieve_relevant_chunks(
+        query_vector=vector,
+        session=test_session,
+        config=RetrievalConfig(
+            model_name="some-other-model",  # dense: no embeddings under this model
+            ef_search=40,
+            top_k=5,
+        ),
+        query_text="xyznonexistentkeyword12345",  # sparse: no text match
+    )
+
+    assert results == []
+
+
+def test_sparse_only_parent_swap_returns_parent_content(
+    test_session: Session,
+) -> None:
+    """A query that matches only via sparse path returns the parent's content.
+
+    The dense vector is far from the child's embedding, but the exact
+    keyword in the sparse path recovers the match, and parent-swap
+    replaces the child with the parent.
+    """
+    parent_text = "PostgreSQL full-text search with tsvector and tsquery."
+    child_text = "pgvector and HNSW indexing for ANN search on embedding vectors."
+    far_vector = [-1.0] * 1536  # far from child's embedding
+    child_vector = [0.5] * 1536
+
+    _, parent, _ = _seed_parent_child_paper(
+        test_session,
+        parent_content=parent_text,
+        child_contents=[child_text],
+        vectors=[child_vector],
+    )
+    test_session.commit()
+
+    results = retrieve_relevant_chunks(
+        query_vector=far_vector,  # dense path won't find this close
+        session=test_session,
+        config=RetrievalConfig(model_name="text-embedding-3-small", ef_search=40, top_k=5),
+        query_text="pgvector",
+    )
+
+    assert len(results) == 1
+    assert results[0].chunk_id == parent.chunk_id
+    assert results[0].text == parent_text

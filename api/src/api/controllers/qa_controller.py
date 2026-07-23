@@ -63,6 +63,7 @@ def run_query(
         query_vector=query_vector,
         session=session,
         config=config,
+        query_text=query,
     )
 
     messages = build_messages(query, chunks)
