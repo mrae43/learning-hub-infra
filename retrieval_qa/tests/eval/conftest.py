@@ -6,9 +6,8 @@ each time, this module **must not** use ``test_session`` — it creates its own
 tables once and reuses them across all parametrized eval queries via the
 ``eval_session`` function-scoped fixture.
 
-Alphabetical ordering (``eval`` < ``query``) ensures the eval tests run before
-the regular retrieval tests in the same directory, so the session-scoped seed
-is still present when the eval tests execute.
+Placed in a dedicated ``tests/eval/`` directory so eval tests are a
+self-contained suite that cannot be interleaved with regular retrieval tests.
 """
 
 import json
