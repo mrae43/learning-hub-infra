@@ -30,3 +30,30 @@ The explicit, query-independent capability of proactively surfacing relationship
 
 ## Retrieval Practice / Spaced Repetition (post-MVP)
 Testing-effect and scheduling-based learning mechanisms (quizzes on captured passages, scheduled resurfacing of concepts) considered part of the "neuroscience-backed" goal but explicitly out of MVP. Requires durable per-concept state (long-term memory), unlike dual coding which is stateless per-request.
+
+## Parent Chunk
+The enclosing structural unit (section, chapter, API page) produced by a Document-Type Chunker. Not embedded directly. Contains one or more Child Chunks. At retrieval time, the parent replaces matched child chunks before being handed to the LLM for generation.
+
+## Child Chunk
+A fixed-size (~512 tokens, 15% overlap) recursive split of a Parent Chunk. Embedded and indexed for retrieval (both dense pgvector and sparse tsvector). A child points to its parent via `parent_chunk_id`. Only children are matched by the query; the parent is what reaches generation.
+
+## Hybrid Search
+A retrieval strategy combining dense (embedding-based pgvector cosine search) and sparse (PostgreSQL `tsvector` full-text search) passes, fused via Reciprocal Rank Fusion. Recovers exact-match queries (function names, API endpoints, error codes, symbols) that pure dense retrieval misses.
+
+## Reranking
+A second-pass relevance filter that scores the top-K candidates from hybrid search using a cross-encoder (Cohere Rerank for prototyping, planned swap to local BGE-reranker). Keeps the top-5 for generation. Implemented after hybrid search per the RAG reference guide's priority order.
+
+## Query Decomposition (post-MVP)
+The technique of splitting a complex multi-hop question into simpler sub-queries, retrieving for each, then synthesizing the results. Deferred until parent-child chunking, hybrid search, and reranking are implemented and evaluated.
+
+## Evaluation
+
+**Content-Signature Labeling**:
+A ground-truth labeling strategy for retrieval evaluation where expected passages are identified by a distinctive substring of their text (or a SHA-256 of that substring). Invariant to chunk boundaries — unlike position ranges or page numbers — so the same labeled queries work across any chunk-size configuration without re-labeling.
+
+**Eval Query Taxonomy**:
+Four-stratum classification of eval queries:
+- *Concept lookup* (dense-friendly) — single-fact lookup ("What is attention?")
+- *Exact-match / keyword* (sparse-friendly) — API names, error codes, CLI flags
+- *Context-dependent* (parent-child matters) — requires the enclosing section to answer precisely
+- *Multi-hop / reasoning* (decomposition prep) — relates two or more concepts across different parts of the corpus

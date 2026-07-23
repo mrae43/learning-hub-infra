@@ -75,7 +75,7 @@ learning-hub/
 ├── scripts/
 │   └── generate_eval_vectors.py      # Eval vector generation utility
 ├── docs/
-│   ├── adr/                          # 0001–0015 (skip 0008; 0015 supersedes 0007 scorer)
+│   ├── adr/                          # 0001–0017 (skip 0008; 0015 supersedes 0007 scorer)
 │   ├── ai-system-tree.md
 │   ├── tech-stack.md
 │   ├── coding-standards.md
@@ -86,7 +86,9 @@ learning-hub/
 │   ├── security.yml                  # Dependency scanning (pip-audit, etc.)
 │   └── dependabot-auto-merge.yml     # Auto-merge for low-risk Dependabot bumps
 ├── .out-of-scope/
-│   └── docker-compose.md             # Notes on docker-compose scoping decision
+│   ├── custom-deepeval-metric-async.md   # Deepeval a_measure pattern rationale
+│   ├── docker-compose.md                 # Notes on docker-compose scoping decision
+│   └── pytest-module-level-test-data.md  # Module-level test data I/O rationale
 ├── pyproject.toml                    # Root: uv workspace, ruff config, import-linter contracts
 ├── conftest.py                       # Root test fixtures (271 lines, shared by all packages)
 ├── alembic.ini                       # Alembic configuration for DB migrations
