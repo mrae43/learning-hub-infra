@@ -1,5 +1,7 @@
 """Internal shared utilities for the retrieval_qa package."""
 
+from hashlib import sha256
+
 
 def count_tokens(text: str) -> int:
     """Approximate token count for chunk sizing.
@@ -9,3 +11,7 @@ def count_tokens(text: str) -> int:
     changing the chunker interface.
     """
     return max(1, len(text.split()))
+
+
+def _sha256(text: str) -> str:
+    return sha256(text.encode()).hexdigest()

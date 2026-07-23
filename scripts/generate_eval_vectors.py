@@ -15,7 +15,6 @@ Edit content in the YAML, run this script, and both files are in sync —
 no manual hash updates needed.
 """
 
-import hashlib
 import json
 from collections import OrderedDict
 from pathlib import Path
@@ -25,6 +24,7 @@ import yaml
 
 from core.clients import EmbeddingsClient
 from core.config.settings import Settings
+from retrieval_qa._utils import _sha256
 
 EVAL_SET_PATH = (
     Path(__file__).resolve().parent.parent
@@ -32,10 +32,6 @@ EVAL_SET_PATH = (
 )
 EVAL_VECTORS_PATH = EVAL_SET_PATH.with_name("eval_vectors.json")
 BATCH_SIZE = 20
-
-
-def _sha256(text: str) -> str:
-    return hashlib.sha256(text.encode()).hexdigest()
 
 
 def _rewrite_content_hashes(data: dict[str, Any]) -> None:
