@@ -13,7 +13,6 @@ is still present when the eval tests execute.
 
 import json
 from collections.abc import Generator
-from hashlib import sha256
 from pathlib import Path
 from typing import Any
 
@@ -26,6 +25,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from core.config.settings import Settings
 from core.database.schema import Base, Chunk, Document, Embedding
 from core.types.document import DocumentStatus, DocumentType
+from retrieval_qa._utils import _sha256
 
 _EVAL_SET_PATH = Path(__file__).parent / "eval_set.yaml"
 _EVAL_VECTORS_PATH = _EVAL_SET_PATH.with_name("eval_vectors.json")
@@ -42,10 +42,6 @@ def _create_enums(engine: Engine) -> None:
             enum_type = ENUM(*values, name=name)
             enum_type.create(bind=conn, checkfirst=True)
         conn.commit()
-
-
-def _sha256(text: str) -> str:
-    return sha256(text.encode()).hexdigest()
 
 
 def _validate_eval_integrity(
