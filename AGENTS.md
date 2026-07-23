@@ -20,7 +20,7 @@ These docs are **not** auto-loaded into session context. Only this `AGENTS.md` i
 
 **Before choosing or adding a library, model, or external service:**
 - `docs/tech-stack.md` — MVP stack and staged post-MVP milestones.
-- `docs/adr/` — read the ADR(s) most relevant to the area (e.g., ADR-0001 inference, ADR-0002 pgvector, ADR-0003 hand-rolled RAG, ADR-0004 embeddings, ADR-0006 background ingestion, ADR-0012 depth-dive-web-search-agentic, ADR-0013 depth-dive-search-failure-retry-fallback, ADR-0014 data-schema-api-contracts-harness-a, ADR-0015 deepeval-for-retrieval-evaluation). Treat ADRs as **constraints, not suggestions**. If a decision contradicts an ADR, stop and propose a new/updated ADR rather than silently deviating.
+- `docs/adr/` — read the ADR(s) most relevant to the area (e.g., ADR-0001 inference, ADR-0002 pgvector, ADR-0003 hand-rolled RAG, ADR-0004 embeddings, ADR-0006 background ingestion, ADR-0012 depth-dive-web-search-agentic, ADR-0013 depth-dive-search-failure-retry-fallback, ADR-0014 data-schema-api-contracts-harness-a, ADR-0015 deepeval-for-retrieval-evaluation, ADR-0016 retrieval-qa-critical-gaps-parent-child-hybrid-rerank, ADR-0017 important-but-gatable-retrieval-phase). Treat ADRs as **constraints, not suggestions**. If a decision contradicts an ADR, stop and propose a new/updated ADR rather than silently deviating.
 
 **Before writing a commit message:**
 - `docs/commit-instructions.md` — Conventional Commits format and allowed types.
