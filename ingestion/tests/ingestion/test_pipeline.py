@@ -64,12 +64,21 @@ def test_pipeline_happy_path_reaches_ready(
         .all()
     )
     assert len(chunks) >= 1
-    positions = [chunk.position for chunk in chunks]
-    assert positions == sorted(positions)
-    assert positions == list(range(len(chunks)))
+
+    # Parents are NOT embedded; only children are.
+    parents = [c for c in chunks if c.parent_chunk_id is None]
+    children = [c for c in chunks if c.parent_chunk_id is not None]
+    assert len(parents) >= 1
+    assert len(children) >= 1
+    # Parents enumerate at document level; children enumerate within their parent.
+    for p in parents:
+        assert p.position < len(parents)
+    for child in children:
+        assert child.parent_chunk_id is not None
+        assert "child_of" in child.type_metadata
 
     embeddings = test_session.query(Embedding).all()
-    assert len(embeddings) == len(chunks)
+    assert len(embeddings) == len(children)
     for embedding in embeddings:
         assert len(embedding.embedding) == 1536
 
@@ -151,12 +160,18 @@ def test_pipeline_book_happy_path_reaches_ready(
         .all()
     )
     assert len(chunks) >= 1
+    # Parents have original metadata; children inherit with "child_of" key.
     for chunk in chunks:
         assert "chapter" in chunk.type_metadata
         assert isinstance(chunk.type_metadata["chapter"], int)
 
+    children = [c for c in chunks if c.parent_chunk_id is not None]
+    assert len(children) >= 1
+    for child in children:
+        assert "child_of" in child.type_metadata
+
     embeddings = test_session.query(Embedding).all()
-    assert len(embeddings) == len(chunks)
+    assert len(embeddings) == len(children)
 
 
 def test_pipeline_documentation_happy_path_reaches_ready(
@@ -202,6 +217,11 @@ def test_pipeline_documentation_happy_path_reaches_ready(
     for chunk in chunks:
         assert "page" in chunk.type_metadata
         assert isinstance(chunk.type_metadata["page"], str)
+
+    children = [c for c in chunks if c.parent_chunk_id is not None]
+    assert len(children) >= 1
+    for child in children:
+        assert "child_of" in child.type_metadata
 
 
 def test_reingestion_creates_new_document_id(
@@ -441,3 +461,263 @@ class TestPipelineValidation:
         for chunk in chunks:
             assert "chapter" in chunk.type_metadata
             assert isinstance(chunk.type_metadata["chapter"], int)
+
+
+# ── Parent-child ingestion tests ─────────────────────────────────────
+
+
+class TestParentChildIngestion:
+    """Tests for parent-child chunking in the ingestion pipeline."""
+
+    def test_parents_not_embedded_children_are(
+        self,
+        test_session: Session,
+        fake_embeddings_client: MagicMock,
+        sample_paper_pdf: bytes,
+    ) -> None:
+        """Parent rows are stored without embeddings; children are embedded."""
+        document = Document(
+            title="PC Paper",
+            document_type=DocumentType.PAPER,
+            source_filename="pc.pdf",
+        )
+        test_session.add(document)
+        test_session.flush()
+
+        run_ingestion(
+            pending=PendingIngestion(
+                document_id=document.document_id,
+                title="PC Paper",
+                document_type=DocumentType.PAPER,
+                source_filename="pc.pdf",
+                file_bytes=sample_paper_pdf,
+            ),
+            session=test_session,
+            embeddings_client=fake_embeddings_client,
+            model_name="text-embedding-3-small",
+        )
+
+        test_session.commit()
+        chunks = (
+            test_session.query(Chunk)
+            .filter(Chunk.document_id == document.document_id)
+            .order_by(Chunk.position)
+            .all()
+        )
+        parents = [c for c in chunks if c.parent_chunk_id is None]
+        children = [c for c in chunks if c.parent_chunk_id is not None]
+        assert len(parents) >= 1
+        assert len(children) >= 1
+
+        # Parents should not have embeddings
+        if parents:
+            parent_ids = [p.chunk_id for p in parents]
+            parent_emb_count = (
+                test_session.query(Embedding).filter(Embedding.chunk_id.in_(parent_ids)).count()
+            )
+            assert parent_emb_count == 0
+
+        # All children should have embeddings
+        if children:
+            child_ids = [c.chunk_id for c in children]
+            child_emb_count = (
+                test_session.query(Embedding).filter(Embedding.chunk_id.in_(child_ids)).count()
+            )
+            assert child_emb_count == len(children)
+
+    def test_large_parent_creates_multiple_children(
+        self,
+        test_session: Session,
+        fake_embeddings_client: MagicMock,
+    ) -> None:
+        """A parent >512 tokens produces multiple child chunks."""
+        big_content = "large_parent_child_test_word " * 600
+        document = Document(
+            title="Big Parent",
+            document_type=DocumentType.PAPER,
+            source_filename="big.pdf",
+        )
+        test_session.add(document)
+        test_session.flush()
+
+        with patch("ingestion.pipeline._chunk_document") as mock_chunk:
+            mock_chunk.return_value = [
+                (big_content, {"section": "Test", "subsection": None, "page": 1}, 600),
+            ]
+            run_ingestion(
+                pending=PendingIngestion(
+                    document_id=document.document_id,
+                    title="Big Parent",
+                    document_type=DocumentType.PAPER,
+                    source_filename="big.pdf",
+                    file_bytes=b"fake",
+                ),
+                session=test_session,
+                embeddings_client=fake_embeddings_client,
+                model_name="text-embedding-3-small",
+            )
+
+        test_session.commit()
+        chunks = (
+            test_session.query(Chunk)
+            .filter(Chunk.document_id == document.document_id)
+            .order_by(Chunk.position)
+            .all()
+        )
+        parents = [c for c in chunks if c.parent_chunk_id is None]
+        children = [c for c in chunks if c.parent_chunk_id is not None]
+
+        assert len(parents) == 1
+        assert len(children) >= 2
+        for child in children:
+            assert child.parent_chunk_id == parents[0].chunk_id
+            assert child.type_metadata.get("child_of") == str(parents[0].chunk_id)
+
+    def test_small_parent_produces_one_child(
+        self,
+        test_session: Session,
+        fake_embeddings_client: MagicMock,
+    ) -> None:
+        """A parent ≤512 tokens produces exactly one child (identity split)."""
+        small_content = "small chunk content"
+        document = Document(
+            title="Small Parent",
+            document_type=DocumentType.PAPER,
+            source_filename="small.pdf",
+        )
+        test_session.add(document)
+        test_session.flush()
+
+        with patch("ingestion.pipeline._chunk_document") as mock_chunk:
+            mock_chunk.return_value = [
+                (small_content, {"section": "Intro", "subsection": None, "page": 1}, 3),
+            ]
+            run_ingestion(
+                pending=PendingIngestion(
+                    document_id=document.document_id,
+                    title="Small Parent",
+                    document_type=DocumentType.PAPER,
+                    source_filename="small.pdf",
+                    file_bytes=b"fake",
+                ),
+                session=test_session,
+                embeddings_client=fake_embeddings_client,
+                model_name="text-embedding-3-small",
+            )
+
+        test_session.commit()
+        chunks = (
+            test_session.query(Chunk)
+            .filter(Chunk.document_id == document.document_id)
+            .order_by(Chunk.position)
+            .all()
+        )
+        parents = [c for c in chunks if c.parent_chunk_id is None]
+        children = [c for c in chunks if c.parent_chunk_id is not None]
+
+        assert len(parents) == 1
+        assert len(children) == 1
+        assert children[0].content == small_content
+
+    def test_child_inherits_type_metadata_with_child_of(
+        self,
+        test_session: Session,
+        fake_embeddings_client: MagicMock,
+    ) -> None:
+        """Children inherit type_metadata from parent and add 'child_of' key."""
+        content = "inherit_metadata_test_word " * 400
+        document = Document(
+            title="Inherit Test",
+            document_type=DocumentType.BOOK,
+            source_filename="inherit.pdf",
+        )
+        test_session.add(document)
+        test_session.flush()
+
+        with patch("ingestion.pipeline._chunk_document") as mock_chunk:
+            mock_chunk.return_value = [
+                (content, {"chapter": 5, "heading": "Deep Dive"}, 400),
+            ]
+            run_ingestion(
+                pending=PendingIngestion(
+                    document_id=document.document_id,
+                    title="Inherit Test",
+                    document_type=DocumentType.BOOK,
+                    source_filename="inherit.pdf",
+                    file_bytes=b"fake",
+                ),
+                session=test_session,
+                embeddings_client=fake_embeddings_client,
+                model_name="text-embedding-3-small",
+            )
+
+        test_session.commit()
+        chunks = (
+            test_session.query(Chunk)
+            .filter(Chunk.document_id == document.document_id)
+            .order_by(Chunk.position)
+            .all()
+        )
+        children = [c for c in chunks if c.parent_chunk_id is not None]
+        assert len(children) >= 1
+        for child in children:
+            assert child.type_metadata.get("chapter") == 5
+            assert child.type_metadata.get("heading") == "Deep Dive"
+            assert "child_of" in child.type_metadata
+            child_of_val = child.type_metadata["child_of"]
+            assert isinstance(child_of_val, str)
+            assert len(child_of_val) > 0
+
+    def test_positions_enumerate_within_parent(
+        self,
+        test_session: Session,
+        fake_embeddings_client: MagicMock,
+    ) -> None:
+        """Children enumerate position within their parent; parents enumerate at document level."""
+        content_a = "position_test_word_a " * 400
+        content_b = "position_test_word_b " * 400
+        document = Document(
+            title="Position Test",
+            document_type=DocumentType.PAPER,
+            source_filename="pos.pdf",
+        )
+        test_session.add(document)
+        test_session.flush()
+
+        with patch("ingestion.pipeline._chunk_document") as mock_chunk:
+            mock_chunk.return_value = [
+                (content_a, {"section": "A", "subsection": None, "page": 1}, 400),
+                (content_b, {"section": "B", "subsection": None, "page": 2}, 400),
+            ]
+            run_ingestion(
+                pending=PendingIngestion(
+                    document_id=document.document_id,
+                    title="Position Test",
+                    document_type=DocumentType.PAPER,
+                    source_filename="pos.pdf",
+                    file_bytes=b"fake",
+                ),
+                session=test_session,
+                embeddings_client=fake_embeddings_client,
+                model_name="text-embedding-3-small",
+            )
+
+        test_session.commit()
+        chunks = (
+            test_session.query(Chunk)
+            .filter(Chunk.document_id == document.document_id)
+            .order_by(Chunk.position)
+            .all()
+        )
+        parents = [c for c in chunks if c.parent_chunk_id is None]
+        # Parents enumerate at document level
+        for i, p in enumerate(parents):
+            assert p.position == i, f"Parent at index {i} has position {p.position}"
+
+        # Children enumerate within their parent
+        for parent in parents:
+            parent_children = [c for c in chunks if c.parent_chunk_id == parent.chunk_id]
+            for i, child in enumerate(parent_children):
+                assert child.position == i, (
+                    f"Child at index {i} of parent {parent.chunk_id} has position {child.position}"
+                )

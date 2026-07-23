@@ -59,6 +59,20 @@ def _unique_constraints(engine: Engine, table: str) -> set[str]:
     return {uc["name"] for uc in inspector.get_unique_constraints(table) if uc["name"] is not None}
 
 
+def _gin_index_info(engine: Engine, table: str, index_name: str) -> dict[str, object]:
+    with engine.connect() as conn:
+        row = conn.execute(
+            text(
+                "SELECT indexname, indexdef FROM pg_indexes "
+                "WHERE tablename = :table_name AND indexname = :index_name"
+            ),
+            {"table_name": table, "index_name": index_name},
+        ).fetchone()
+    if row is None:
+        return {}
+    return {"name": row[0], "definition": row[1]}
+
+
 def _hnsw_index_info(engine: Engine, table: str) -> dict[str, object]:
     with engine.connect() as conn:
         row = conn.execute(
@@ -110,6 +124,8 @@ def test_migration_creates_expected_schema(migrated_engine: Engine) -> None:
         "content",
         "token_count",
         "type_metadata",
+        "parent_chunk_id",
+        "content_search",
         "created_at",
     }
     assert "updated_at" not in chunk_columns
@@ -133,8 +149,25 @@ def test_migration_creates_expected_schema(migrated_engine: Engine) -> None:
     assert "ck_chunk_position_non_negative" in _check_constraints(migrated_engine, "chunks")
     assert "ck_chunk_token_count_positive" in _check_constraints(migrated_engine, "chunks")
 
-    # Unique (document_id, position) present.
-    assert "uq_chunk_document_position" in _unique_constraints(migrated_engine, "chunks")
+    # parent_chunk_id FK is self-referential with ON DELETE SET NULL.
+    chunk_fks = inspector.get_foreign_keys("chunks")
+    parent_chunk_fk = [fk for fk in chunk_fks if fk["constrained_columns"] == ["parent_chunk_id"]]
+    assert len(parent_chunk_fk) == 1
+    assert parent_chunk_fk[0]["referred_table"] == "chunks"
+    assert parent_chunk_fk[0]["referred_columns"] == ["chunk_id"]
+    assert parent_chunk_fk[0].get("options", {}).get("ondelete", "").upper() == "SET NULL"
+
+    # content_search column is tsvector.
+    chunk_cols = inspector.get_columns("chunks")
+    content_search_col = [c for c in chunk_cols if c["name"] == "content_search"]
+    assert len(content_search_col) == 1
+    assert str(content_search_col[0]["type"]).lower() == "tsvector"
+
+    # GIN index on content_search.
+    content_search_index = _gin_index_info(
+        migrated_engine, "chunks", "ix_chunks_content_search_gin"
+    )
+    assert content_search_index, "GIN index on content_search not found"
 
     # HNSW index on embeddings.embedding with vector_cosine_ops.
     hnsw = _hnsw_index_info(migrated_engine, "embeddings")

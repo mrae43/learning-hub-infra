@@ -12,6 +12,7 @@ from core.exceptions import IngestionError
 from core.types.chunk import Chunk
 from core.types.document import DocumentStatus, DocumentType
 from ingestion.models import PendingIngestion
+from ingestion.splitting import recursive_fixed_size_split
 from retrieval_qa.chunking import chunker_registry, get_chunker_class
 
 
@@ -102,6 +103,15 @@ def run_ingestion(
     embeddings attached. On failure, this function raises ``IngestionError``
     and the caller should roll back.
 
+    The pipeline follows ADR-0016 parent-child chunking:
+    1. Structure-aware chunking produces parent chunks.
+    2. Each parent is stored as a row (not embedded).
+    3. Each parent is split into fixed-size child chunks (512 tokens, 15%
+       overlap) via ``recursive_fixed_size_split``.
+    4. Child chunks inherit ``type_metadata`` from the parent with an
+       additional ``"child_of"`` lineage key.
+    5. Only child chunks are embedded and indexed for retrieval.
+
     Args:
         pending: Document-identity fields for the ingestion.
         session: SQLAlchemy session bound to the documents database.
@@ -119,27 +129,47 @@ def run_ingestion(
         document.status = DocumentStatus.CHUNKING
         session.flush()
 
-        db_chunks: list[ChunkRow] = []
-        for position, (content, type_metadata, token_count) in enumerate(chunk_inputs):
+        # ── Phase 1: Store parent rows (structure-aware chunks, not embedded) ──
+        parent_rows: list[ChunkRow] = []
+        for parent_position, (content, type_metadata, token_count) in enumerate(chunk_inputs):
             _validate_type_metadata(pending.document_type, type_metadata)
-            chunk = ChunkRow(
+            parent = ChunkRow(
                 document_id=pending.document_id,
-                position=position,
+                position=parent_position,
                 content=content,
                 token_count=token_count,
                 type_metadata=type_metadata,
+                parent_chunk_id=None,
             )
-            session.add(chunk)
-            db_chunks.append(chunk)
+            session.add(parent)
+            parent_rows.append(parent)
+
+        session.flush()
+
+        # ── Phase 2: Split parents into children ──
+        child_rows: list[ChunkRow] = []
+        for parent in parent_rows:
+            child_splits = recursive_fixed_size_split(parent.content, parent.token_count)
+            for child_split in child_splits:
+                child_metadata = dict(parent.type_metadata)
+                child_metadata["child_of"] = str(parent.chunk_id)
+                child = ChunkRow(
+                    document_id=pending.document_id,
+                    position=child_split.position,
+                    content=child_split.content,
+                    token_count=child_split.token_count,
+                    type_metadata=child_metadata,
+                    parent_chunk_id=parent.chunk_id,
+                )
+                session.add(child)
+                child_rows.append(child)
 
         document.status = DocumentStatus.EMBEDDING
         session.flush()
 
-        embedded = _embed_chunks(session, embeddings_client, db_chunks, model_name)
+        # ── Phase 3: Embed only child chunks ──
+        embedded = _embed_chunks(session, embeddings_client, child_rows, model_name)
         for chunk, vector in embedded:
-            # The composite PK (chunk_id, model_name) means we can add each
-            # embedding directly; re-embedding the same chunk under the same
-            # model would raise, but chunks are immutable in the happy path.
             session.add(
                 Embedding(
                     chunk_id=chunk.chunk_id,
