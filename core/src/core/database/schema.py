@@ -1,11 +1,12 @@
 """SQLAlchemy declarative base and table models.
 
-The schema matches ADR-0014:
+The schema matches ADR-0014 + ADR-0016 (parent-child):
 - UUIDv7 primary keys generated app-side.
 - Postgres enums for ``document_type`` and ``status`` with lowercase labels that
   match the Python ``StrEnum`` values.
 - CHECK constraints on ``error_message``, ``position``, and ``token_count``.
-- ``UNIQUE (document_id, position)`` on chunks.
+- ``parent_chunk_id`` self-referential FK with ``ON DELETE SET NULL``.
+- ``content_search`` tsvector column with GIN index (created in migration).
 - Composite PK ``(chunk_id, model_name)`` on embeddings.
 - No ``updated_at`` on chunks or embeddings.
 - HNSW index created in the Alembic migration, not here.
@@ -22,10 +23,9 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Text,
-    UniqueConstraint,
     text,
 )
-from sqlalchemy.dialects.postgresql import ENUM
+from sqlalchemy.dialects.postgresql import ENUM, TSVECTOR
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 from sqlalchemy.sql.elements import TextClause
@@ -101,7 +101,13 @@ class Document(Base):
 
 
 class Chunk(Base):
-    """An atomic retrievable unit produced by a document-type chunker."""
+    """An atomic retrievable unit produced by a document-type chunker.
+
+    A row may be a *parent* (structure-aware chunk, ``parent_chunk_id`` is NULL)
+    or a *child* (fixed-size split of a parent, ``parent_chunk_id`` points to the
+    parent). Only children are embedded and indexed for retrieval; parents exist
+    solely for parent-swap at query time (ADR-0016).
+    """
 
     __tablename__ = "chunks"
 
@@ -116,6 +122,14 @@ class Chunk(Base):
     content: Mapped[str]
     token_count: Mapped[int]
     type_metadata: Mapped[dict[str, object]] = mapped_column(JSON, default=dict)
+    parent_chunk_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("chunks.chunk_id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    content_search: Mapped[str | None] = mapped_column(
+        TSVECTOR,
+        nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=_utc_now,
@@ -125,7 +139,6 @@ class Chunk(Base):
     __table_args__ = (
         CheckConstraint("position >= 0", name="ck_chunk_position_non_negative"),
         CheckConstraint("token_count > 0", name="ck_chunk_token_count_positive"),
-        UniqueConstraint("document_id", "position", name="uq_chunk_document_position"),
     )
 
     document: Mapped["Document"] = relationship(back_populates="chunks")
