@@ -35,8 +35,9 @@ RUN groupadd -r app && useradd -r -g app app
 COPY --from=builder --chown=app:app /app/.venv ./.venv
 COPY --from=builder --chown=app:app /app/alembic.ini ./
 COPY --from=builder --chown=app:app /app/core/src/core/database/migrations ./core/src/core/database/migrations
+COPY --chown=app:app docker-entrypoint.sh /docker-entrypoint.sh
 ENV PATH="/app/.venv/bin:$PATH"
 
 USER app
 
-CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+ENTRYPOINT ["/docker-entrypoint.sh"]
