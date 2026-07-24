@@ -1,10 +1,14 @@
 """Health-check route: GET /health."""
 
+import logging
+
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
 from core.database.connection import get_engine
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["health"])
 
@@ -20,7 +24,8 @@ def health_check() -> dict[str, str] | JSONResponse:
         with get_engine().connect() as conn:
             conn.execute(text("SELECT 1"))
         return {"status": "ok"}
-    except Exception as _exc:
+    except Exception:
+        logger.exception("Health check failed")
         return JSONResponse(
             status_code=503,
             content={"status": "unhealthy", "detail": "Service unavailable"},

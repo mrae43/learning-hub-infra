@@ -5,6 +5,7 @@ to obtain the singleton engine or a new session respectively.  Tests can inject
 a test engine via ``set_engine()``.
 """
 
+import threading
 from collections.abc import Generator
 from contextlib import contextmanager
 
@@ -15,6 +16,7 @@ from core.config.settings import settings
 
 _engine: Engine | None = None
 _sessionmaker: sessionmaker[Session] | None = None
+_lock = threading.RLock()
 
 
 def get_engine() -> Engine:
@@ -24,7 +26,9 @@ def get_engine() -> Engine:
     """
     global _engine
     if _engine is None:
-        _engine = create_engine(settings.database_url, future=True)
+        with _lock:
+            if _engine is None:
+                _engine = create_engine(settings.database_url, future=True)
     return _engine
 
 
@@ -36,8 +40,12 @@ def set_engine(test_engine: Engine) -> None:
     subsequent ``get_session()`` calls bind to the new engine.
     """
     global _engine, _sessionmaker
-    _engine = test_engine
-    _sessionmaker = None
+    with _lock:
+        old_engine = _engine
+        _engine = test_engine
+        _sessionmaker = None
+    if old_engine is not None:
+        old_engine.dispose()
 
 
 def get_session() -> Session:
@@ -48,7 +56,9 @@ def get_session() -> Session:
     """
     global _sessionmaker
     if _sessionmaker is None:
-        _sessionmaker = sessionmaker(autocommit=False, autoflush=False, bind=get_engine())
+        with _lock:
+            if _sessionmaker is None:
+                _sessionmaker = sessionmaker(autocommit=False, autoflush=False, bind=get_engine())
     return _sessionmaker()
 
 

@@ -13,8 +13,6 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine, create_engine
 
-from core.database.connection import set_engine
-
 
 def test_health_returns_200_with_mock_engine(
     mock_client: TestClient, monkeypatch: pytest.MonkeyPatch
@@ -53,7 +51,6 @@ def test_health_returns_200_via_real_test_db(
     client: TestClient, test_engine: Engine, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Integration test: GET /health returns 200 via the real test database."""
-    set_engine(test_engine)
 
     response = client.get("/health")
 
