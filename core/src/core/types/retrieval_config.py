@@ -22,6 +22,9 @@ class RetrievalConfig(BaseModel):
             and sparse (tsvector ts_rank) results via Reciprocal Rank Fusion
             and perform parent-swap before returning (ADR-0016).
             When False, fall back to dense-only retrieval.
+        reranker: When True (default), the top-20 RRF-fused parent passages
+            are reranked through a ``Reranker`` and narrowed to ``top_k``.
+            When False, the RRF top-k is used directly (ADR-0016).
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -30,6 +33,7 @@ class RetrievalConfig(BaseModel):
     ef_search: int
     top_k: int
     hybrid_search: bool = True
+    reranker: bool = True
 
 
 __all__ = ["RetrievalConfig"]

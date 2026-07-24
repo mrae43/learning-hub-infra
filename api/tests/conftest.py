@@ -14,9 +14,9 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from api.dependencies import get_completion_provider, get_embedder
+from api.dependencies import get_completion_provider, get_embedder, get_reranker
 from api.server import create_app
-from core.clients import InMemoryEmbedder, MockCompletionProvider
+from core.clients import InMemoryEmbedder, MockCompletionProvider, NoopReranker
 
 IngestADocument = Callable[[str], str]
 
@@ -86,6 +86,7 @@ def client(override_route_db_session: object, monkeypatch: pytest.MonkeyPatch) -
     app = create_app()
     app.dependency_overrides[get_embedder] = _default_fake_embedder
     app.dependency_overrides[get_completion_provider] = _default_fake_llm_refusal_provider
+    app.dependency_overrides[get_reranker] = lambda: NoopReranker()
     return TestClient(app)
 
 
@@ -118,6 +119,7 @@ def mock_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     app = create_app()
     app.dependency_overrides[get_embedder] = _default_fake_embedder
     app.dependency_overrides[get_completion_provider] = _default_fake_llm_refusal_provider
+    app.dependency_overrides[get_reranker] = lambda: NoopReranker()
     return TestClient(app)
 
 

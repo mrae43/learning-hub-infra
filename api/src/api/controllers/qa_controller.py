@@ -15,12 +15,15 @@ Upstream failures (embeddings or inference) propagate
 ``UpstreamBadResponse`` / ``UpstreamUnavailable`` for the route layer to map
 to 502 / 503 (ADR-0014 § Error contract). DB-level failures propagate
 verbatim; the route's catch-all maps them to 500.
+
+Reranker rate-limit errors are handled in the retrieval layer — logged and
+fall back to RRF top-k, so they never reach this controller as an exception.
 """
 
 from sqlalchemy.orm import Session
 
 from api.prompt import build_messages
-from core.clients import CompletionProvider, Embedder
+from core.clients import CompletionProvider, Embedder, Reranker
 from core.types.responses import HarnessAResponse
 from core.types.retrieval_config import RetrievalConfig
 from retrieval_qa.retrieval.query import retrieve_relevant_chunks
@@ -33,6 +36,7 @@ def run_query(
     embeddings_client: Embedder,
     llm_client: CompletionProvider,
     config: RetrievalConfig,
+    reranker: Reranker | None = None,
 ) -> HarnessAResponse:
     """Run the full Harness A query flow and return a ``HarnessAResponse``.
 
@@ -43,7 +47,11 @@ def run_query(
             session's transaction.
         embeddings_client: Provider used to embed the query (1536-dim).
         llm_client: Provider used to generate the answer.
-        config: Retrieval configuration (model name, ef_search, top_k).
+        config: Retrieval configuration (model name, ef_search, top_k,
+            hybrid_search toggle, reranker toggle).
+        reranker: Reranker instance for cross-encoder reranking. When None
+            or when ``config.reranker`` is False, the RRF top-k is used
+            directly.
 
     Returns:
         A ``HarnessAResponse`` with ``answer`` always populated,
@@ -64,6 +72,7 @@ def run_query(
         session=session,
         config=config,
         query_text=query,
+        reranker=reranker,
     )
 
     messages = build_messages(query, chunks)

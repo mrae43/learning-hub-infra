@@ -10,12 +10,20 @@ from core.clients.llm_client import (
     LLMClient,
     MockCompletionProvider,
 )
+from core.clients.reranker_client import (
+    CohereReranker,
+    NoopReranker,
+    Reranker,
+)
 
 __all__ = [
+    "CohereReranker",
     "CompletionProvider",
     "Embedder",
     "EmbeddingsClient",
     "InMemoryEmbedder",
     "LLMClient",
     "MockCompletionProvider",
+    "NoopReranker",
+    "Reranker",
 ]
