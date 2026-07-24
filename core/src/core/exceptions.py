@@ -19,3 +19,7 @@ class UpstreamBadResponse(RetrievalError):
 
 class UpstreamUnavailable(RetrievalError):
     """Upstream API could not be reached or timed out (maps to 503)."""
+
+
+class RerankerRateLimitError(RetrievalError):
+    """Reranker API rate-limited (trigger graceful fallback to RRF top-k)."""

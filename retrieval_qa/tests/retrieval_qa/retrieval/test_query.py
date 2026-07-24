@@ -5,7 +5,9 @@ from unittest.mock import MagicMock
 import pytest
 from sqlalchemy.orm import Session
 
+from core.clients.reranker_client import NoopReranker
 from core.database.schema import Chunk, Document, Embedding
+from core.exceptions import RerankerRateLimitError
 from core.types.document import DocumentStatus, DocumentType
 from core.types.responses import CitedPassage
 from core.types.retrieval_config import RetrievalConfig
@@ -645,3 +647,176 @@ def test_sparse_only_parent_swap_returns_parent_content(
     assert len(results) == 1
     assert results[0].chunk_id == parent.chunk_id
     assert results[0].text == parent_text
+
+
+# ── Reranker tests ───────────────────────────────────────────────────────────
+
+
+def test_reranker_reorders_passages(test_session: Session) -> None:
+    """When a reranker returns passages in a different order, the final
+    CitedPassage list reflects the reranked order.
+    """
+    vector = [0.5] * 1536
+    texts = ["chunk alpha", "chunk beta", "chunk gamma"]
+    vectors = [[0.5 + i * 0.01] * 1536 for i in range(len(texts))]
+    _seed_paper(
+        test_session,
+        title="Rerank Order",
+        chunks=[(t, v, f"c{i}") for i, (t, v) in enumerate(zip(texts, vectors, strict=True))],
+    )
+    test_session.commit()
+
+    reverse_reranker = _ReverseReranker()
+    results = retrieve_relevant_chunks(
+        query_vector=vector,
+        session=test_session,
+        config=RetrievalConfig(model_name="text-embedding-3-small", ef_search=40, top_k=2),
+        query_text="chunk",
+        reranker=reverse_reranker,
+    )
+
+    assert len(results) == 2
+    assert results[0].text == "chunk gamma"
+    assert results[1].text == "chunk beta"
+
+
+def test_reranker_respects_top_k_when_narrowing(test_session: Session) -> None:
+    """The reranker narrows the candidate pool to the configured top_k."""
+    vector = [0.5] * 1536
+    texts = [f"passage {i}" for i in range(5)]
+    vectors = [[0.5 + i * 0.01] * 1536 for i in range(len(texts))]
+    _seed_paper(
+        test_session,
+        title="Narrow",
+        chunks=[(t, v, f"c{i}") for i, (t, v) in enumerate(zip(texts, vectors, strict=True))],
+    )
+    test_session.commit()
+
+    results = retrieve_relevant_chunks(
+        query_vector=vector,
+        session=test_session,
+        config=RetrievalConfig(model_name="text-embedding-3-small", ef_search=40, top_k=3),
+        query_text="passage",
+        reranker=NoopReranker(),
+    )
+
+    assert len(results) == 3
+
+
+def test_reranker_disabled_falls_back_to_rrf_top_k_directly(
+    test_session: Session,
+) -> None:
+    """When reranker=False in config, the RRF top_k is used directly without
+    fetching extra candidates for reranking.
+    """
+    vector = [0.5] * 1536
+    texts = [f"chunk {i} with keyword zeta{i}" for i in range(6)]
+    vectors = [[0.5 + i * 0.01] * 1536 for i in range(len(texts))]
+    _seed_paper(
+        test_session,
+        title="Rerank Off",
+        chunks=[(t, v, f"c{i}") for i, (t, v) in enumerate(zip(texts, vectors, strict=True))],
+    )
+    test_session.commit()
+
+    # reranker=False, so retrieval_limit stays at top_k=3 (not 20)
+    results = retrieve_relevant_chunks(
+        query_vector=vector,
+        session=test_session,
+        config=RetrievalConfig(
+            model_name="text-embedding-3-small",
+            ef_search=40,
+            top_k=3,
+            reranker=False,
+        ),
+        query_text="zeta",
+        reranker=NoopReranker(),
+    )
+
+    # With reranker=False, we don't enlarge the retrieval limit, so at most
+    # top_k=3 results come back from RRF. Even with a reranker instance
+    # passed, it is not called.
+    assert len(results) <= 3
+
+
+def test_rate_limit_fallback_to_rrf_top_k(test_session: Session) -> None:
+    """When the reranker raises RerankerRateLimitError, the system falls back
+    to the RRF top-k without crashing.
+    """
+    vector = [0.5] * 1536
+    texts = [f"fallback chunk {i}" for i in range(5)]
+    vectors = [[0.5 + i * 0.01] * 1536 for i in range(len(texts))]
+    _seed_paper(
+        test_session,
+        title="Rate Limit Fallback",
+        chunks=[(t, v, f"c{i}") for i, (t, v) in enumerate(zip(texts, vectors, strict=True))],
+    )
+    test_session.commit()
+
+    results = retrieve_relevant_chunks(
+        query_vector=vector,
+        session=test_session,
+        config=RetrievalConfig(model_name="text-embedding-3-small", ef_search=40, top_k=3),
+        query_text="fallback",
+        reranker=_RateLimitReranker(),
+    )
+
+    assert len(results) == 3
+    for result in results:
+        assert "fallback" in result.text
+
+
+def test_reranker_with_empty_passages_returns_empty(
+    test_session: Session,
+) -> None:
+    """When no passages are retrieved, the reranker receives an empty list
+    and returns an empty list.
+    """
+    vector = [0.5] * 1536
+    _seed_paper(
+        test_session,
+        title="Present",
+        chunks=[("some content", vector, "c1")],
+    )
+    test_session.commit()
+
+    results = retrieve_relevant_chunks(
+        query_vector=vector,
+        session=test_session,
+        config=RetrievalConfig(
+            model_name="some-other-model",  # dense: no embeddings
+            ef_search=40,
+            top_k=5,
+        ),
+        query_text="xyznonexistentkeyword12345",  # sparse: no match
+        reranker=NoopReranker(),
+    )
+
+    assert results == []
+
+
+# ── Test double rerankers ────────────────────────────────────────────────────
+
+
+class _ReverseReranker:
+    """Reranker that returns passages in reverse order for deterministic tests."""
+
+    def rerank(
+        self,
+        query: str,
+        passages: list[CitedPassage],
+        top_k: int,
+    ) -> list[CitedPassage]:
+        return list(reversed(passages))[:top_k]
+
+
+class _RateLimitReranker:
+    """Reranker that always raises RerankerRateLimitError."""
+
+    def rerank(
+        self,
+        query: str,
+        passages: list[CitedPassage],
+        top_k: int,
+    ) -> list[CitedPassage]:
+        raise RerankerRateLimitError("Simulated rate limit.")

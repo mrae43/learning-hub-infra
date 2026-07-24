@@ -40,6 +40,8 @@ class Settings(BaseSettings):
     inference_model: str = "gpt-4o-mini"
     max_upload_bytes: int = 100 * 1024 * 1024  # 100 MB placeholder
     allowed_file_extensions: set[str] = {"pdf", "epub", "md", "html"}
+    cohere_api_key: str | None = None
+    reranker_model: str = "rerank-v3.5"
 
 
 # Global singleton used by the application. Tests override via monkeypatch or

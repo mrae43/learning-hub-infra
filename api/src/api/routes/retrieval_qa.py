@@ -5,8 +5,8 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 
 from api.controllers.qa_controller import run_query
-from api.dependencies import get_completion_provider, get_embedder
-from core.clients import CompletionProvider, Embedder
+from api.dependencies import get_completion_provider, get_embedder, get_reranker
+from core.clients import CompletionProvider, Embedder, Reranker
 from core.config.settings import settings
 from core.database.connection import db_session
 from core.types.responses import HarnessARequest, HarnessAResponse
@@ -20,6 +20,7 @@ def query(
     body: HarnessARequest,
     embeddings_client: Annotated[Embedder, Depends(get_embedder)],
     llm_client: Annotated[CompletionProvider, Depends(get_completion_provider)],
+    reranker: Annotated[Reranker, Depends(get_reranker)],
 ) -> HarnessAResponse:
     """Answer a query against the ingested corpus.
 
@@ -40,4 +41,5 @@ def query(
                 ef_search=settings.hnsw_ef_search,
                 top_k=settings.query_top_k,
             ),
+            reranker=reranker,
         )

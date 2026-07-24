@@ -30,8 +30,18 @@ When ``RetrievalConfig.hybrid_search`` is True (default, ADR-0016):
 
 When ``hybrid_search`` is False, retrieval falls back to dense-only
 (existing behavior).
+
+When ``RetrievalConfig.reranker`` is True (default, ADR-0016):
+
+- After RRF fusion and parent swap, the top-20 parent passages are reranked
+  via the configured ``Reranker``. Only the top-k (default 5) reach the prompt.
+- When the reranker is ``NoopReranker`` (or ``reranker`` is False), the
+  RRF top-k is used directly.
+- When the reranker raises ``RerankerRateLimitError`` (Cohere 429), the system
+  logs the error and falls back to RRF top-k (no crash, no 5xx).
 """
 
+import logging
 from collections import OrderedDict
 from uuid import UUID
 
@@ -39,11 +49,18 @@ from sqlalchemy import text
 from sqlalchemy.exc import InterfaceError, OperationalError
 from sqlalchemy.orm import Session
 
-from core.exceptions import UpstreamUnavailable
+from core.clients.reranker_client import Reranker
+from core.exceptions import RerankerRateLimitError, UpstreamUnavailable
 from core.types.responses import CitedPassage
 from core.types.retrieval_config import RetrievalConfig
 
+logger = logging.getLogger(__name__)
+
 _RRF_K = 60
+
+# When reranking is active, fetch more candidates from each retrieval path
+# to give the reranker a bigger pool to re-rank from (ADR-0016).
+_RERANK_CANDIDATE_COUNT = 20
 
 _DENSE_SQL = text(
     """
@@ -96,14 +113,16 @@ def _dense_retrieve(
     session: Session,
     query_vector: list[float],
     config: RetrievalConfig,
+    limit: int | None = None,
 ) -> OrderedDict[UUID, float]:
     """Run dense (pgvector cosine) search and return chunk_id -> RRF score."""
+    top_k = limit if limit is not None else config.top_k
     result = session.execute(
         _DENSE_SQL,
         {
             "model_name": config.model_name,
             "query_vector": str(query_vector),
-            "top_k": config.top_k,
+            "top_k": top_k,
         },
     )
     scored: OrderedDict[UUID, float] = OrderedDict()
@@ -117,13 +136,15 @@ def _sparse_retrieve(
     session: Session,
     query_text: str,
     config: RetrievalConfig,
+    limit: int | None = None,
 ) -> OrderedDict[UUID, float]:
     """Run sparse (tsvector ts_rank) search and return chunk_id -> RRF score."""
+    top_k = limit if limit is not None else config.top_k
     result = session.execute(
         _SPARSE_SQL,
         {
             "query_text": query_text,
-            "top_k": config.top_k,
+            "top_k": top_k,
         },
     )
     scored: OrderedDict[UUID, float] = OrderedDict()
@@ -227,6 +248,7 @@ def retrieve_relevant_chunks(
     session: Session,
     config: RetrievalConfig,
     query_text: str | None = None,
+    reranker: Reranker | None = None,
 ) -> list[CitedPassage]:
     """Retrieve the top-k closest chunks for ``query_vector`` by cosine distance.
 
@@ -238,16 +260,24 @@ def retrieve_relevant_chunks(
     Rank Fusion, then performs parent-swap to replace matched child chunks
     with their enclosing parent chunks (ADR-0016).
 
+    When ``config.reranker`` is True and a ``reranker`` is supplied, the
+    top-20 RRF-fused parent passages are reranked and narrowed to ``top_k``.
+    On rate-limit errors, the system logs a warning and falls back to RRF
+    top-k (no crash).
+
     Args:
         query_vector: A 1536-dim query embedding.
         session: SQLAlchemy session bound to the documents database. The
             ``SET LOCAL`` is scoped to the current transaction, so callers
             should not commit before consuming the results.
         config: Retrieval configuration (model name, ef_search, top_k,
-            hybrid_search toggle).
+            hybrid_search toggle, reranker toggle).
         query_text: The original user query string, required for the sparse
             search path when ``config.hybrid_search`` is True. Ignored when
             hybrid_search is False.
+        reranker: Reranker instance for cross-encoder reranking. When None
+            or when ``config.reranker`` is False, the RRF top-k is used
+            directly.
 
     Returns:
         Chunks in descending relevance order. An empty list signals the
@@ -264,27 +294,44 @@ def retrieve_relevant_chunks(
             text("SET LOCAL hnsw.ef_search = :ef_search"), {"ef_search": config.ef_search}
         )
 
-        if config.hybrid_search and query_text:
-            dense_scored = _dense_retrieve(session, query_vector, config)
-            sparse_scored = _sparse_retrieve(session, query_text, config)
-            fused = _rrf_fuse(dense_scored, sparse_scored, config.top_k)
-            return _parent_swap(session, fused)
+        should_rerank = config.reranker and reranker is not None
+        retrieval_limit = _RERANK_CANDIDATE_COUNT if should_rerank else config.top_k
 
-        # Dense-only path (hybrid_search=False or no query_text provided)
-        rows = session.execute(
-            _DENSE_SQL,
-            {
-                "model_name": config.model_name,
-                "query_vector": str(query_vector),
-                "top_k": config.top_k,
-            },
-        )
-        chunks: list[CitedPassage] = []
-        for row in rows.fetchall():
-            chunk_id = row._mapping["chunk_id"]
-            text_content = row._mapping["text"]
-            chunks.append(CitedPassage(chunk_id=chunk_id, text=text_content))
-        return chunks
+        if config.hybrid_search and query_text:
+            dense_scored = _dense_retrieve(session, query_vector, config, limit=retrieval_limit)
+            sparse_scored = _sparse_retrieve(session, query_text, config, limit=retrieval_limit)
+            fused = _rrf_fuse(dense_scored, sparse_scored, retrieval_limit)
+            passages = _parent_swap(session, fused)
+        else:
+            # Dense-only path (hybrid_search=False or no query_text provided)
+            rows = session.execute(
+                _DENSE_SQL,
+                {
+                    "model_name": config.model_name,
+                    "query_vector": str(query_vector),
+                    "top_k": retrieval_limit,
+                },
+            )
+            passages = [
+                CitedPassage(
+                    chunk_id=row._mapping["chunk_id"],
+                    text=row._mapping["text"],
+                )
+                for row in rows.fetchall()
+            ]
+
+        if should_rerank and passages and reranker is not None:
+            try:
+                passages = reranker.rerank(
+                    query=query_text or "",
+                    passages=passages,
+                    top_k=config.top_k,
+                )
+            except RerankerRateLimitError as exc:
+                logger.warning("Reranker rate-limited, falling back to RRF top-k: %s", exc)
+                passages = passages[: config.top_k]
+
+        return passages
 
     except (OperationalError, InterfaceError) as exc:
         raise UpstreamUnavailable(f"Database unreachable: {exc}") from exc
