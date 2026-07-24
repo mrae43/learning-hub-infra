@@ -4,6 +4,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from api.routes.documents import router as documents_router
+from api.routes.health import router as health_router
 from api.routes.ingest import router as ingest_router
 from api.routes.retrieval_qa import router as query_router
 from core.exceptions import UpstreamBadResponse, UpstreamUnavailable
@@ -22,6 +23,7 @@ def _retrieval_error_handler(request: Request, exc: Exception, status_code: int)
 def create_app() -> FastAPI:
     """Create and configure the Learning Hub API."""
     app = FastAPI(title="Learning Hub", version="0.1.0")
+    app.include_router(health_router)
     app.include_router(ingest_router)
     app.include_router(documents_router)
     app.include_router(query_router)
