@@ -9,6 +9,7 @@ ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy
 
 # Copy workspace metadata.
 COPY pyproject.toml uv.lock ./
+COPY alembic.ini ./
 
 # Copy package metadata and source code (tests excluded from production image).
 COPY core/pyproject.toml ./core/
@@ -23,7 +24,7 @@ COPY ingestion/pyproject.toml ./ingestion/
 COPY ingestion/src ./ingestion/src
 
 # Install production dependencies and workspace packages.
-RUN uv sync --no-dev --frozen
+RUN uv sync --all-packages --no-dev --no-editable --frozen
 
 FROM python:3.12-slim
 WORKDIR /app
@@ -32,6 +33,8 @@ WORKDIR /app
 RUN groupadd -r app && useradd -r -g app app
 
 COPY --from=builder --chown=app:app /app/.venv ./.venv
+COPY --from=builder --chown=app:app /app/alembic.ini ./
+COPY --from=builder --chown=app:app /app/core/src/core/database/migrations ./core/src/core/database/migrations
 ENV PATH="/app/.venv/bin:$PATH"
 
 USER app
