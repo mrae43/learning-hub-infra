@@ -20,8 +20,8 @@ def health_check() -> dict[str, str] | JSONResponse:
         with get_engine().connect() as conn:
             conn.execute(text("SELECT 1"))
         return {"status": "ok"}
-    except Exception as exc:
+    except Exception as _exc:
         return JSONResponse(
             status_code=503,
-            content={"status": "unhealthy", "detail": str(exc)},
+            content={"status": "unhealthy", "detail": "Service unavailable"},
         )
