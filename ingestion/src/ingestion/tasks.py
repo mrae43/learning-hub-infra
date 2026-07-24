@@ -5,6 +5,8 @@ This module is the only place that couples the pipeline to the task runner;
 ``ingestion/pipeline.py`` remains a plain function.
 """
 
+import threading
+
 from fastapi import BackgroundTasks
 
 from core.clients import Embedder
@@ -14,6 +16,8 @@ from core.exceptions import IngestionError
 from core.types.document import DocumentStatus
 from ingestion.models import PendingIngestion
 from ingestion.pipeline import run_ingestion
+
+_INGESTION_SEMAPHORE = threading.Semaphore(2)
 
 
 def _execute_ingestion_task(
@@ -25,41 +29,45 @@ def _execute_ingestion_task(
 
     Opens its own database session so that a pipeline failure can be captured
     and persisted as ``status='failed'`` after rolling back the partial work.
+
+    A ``threading.Semaphore(2)`` bounds peak memory by capping the number of
+    ingestion pipelines that can run concurrently.
     """
-    session = get_session()
-    try:
-        title = ""
-        document = session.get(Document, pending.document_id)
-        if document is not None:
-            title = document.title
-
-        resolved = pending.model_copy(update={"title": title})
-        run_ingestion(
-            pending=resolved,
-            session=session,
-            embeddings_client=embedder,
-            model_name=model_name,
-        )
-        session.commit()
-    except Exception as exc:
-        session.rollback()
-        error_message = str(exc)
-        if isinstance(exc, IngestionError) and exc.__cause__ is not None:
-            error_message = f"{exc}: {exc.__cause__}"
-
-        # Update the document row in a fresh mini-transaction so the failure
-        # reason is retained after the main transaction rolls back.
+    with _INGESTION_SEMAPHORE:
+        session = get_session()
         try:
-            failure_session = get_session()
-            failure_document = failure_session.get(Document, pending.document_id)
-            if failure_document is not None:
-                failure_document.status = DocumentStatus.FAILED
-                failure_document.error_message = error_message
-                failure_session.commit()
+            title = ""
+            document = session.get(Document, pending.document_id)
+            if document is not None:
+                title = document.title
+
+            resolved = pending.model_copy(update={"title": title})
+            run_ingestion(
+                pending=resolved,
+                session=session,
+                embeddings_client=embedder,
+                model_name=model_name,
+            )
+            session.commit()
+        except Exception as exc:
+            session.rollback()
+            error_message = str(exc)
+            if isinstance(exc, IngestionError) and exc.__cause__ is not None:
+                error_message = f"{exc}: {exc.__cause__}"
+
+            # Update the document row in a fresh mini-transaction so the failure
+            # reason is retained after the main transaction rolls back.
+            try:
+                failure_session = get_session()
+                failure_document = failure_session.get(Document, pending.document_id)
+                if failure_document is not None:
+                    failure_document.status = DocumentStatus.FAILED
+                    failure_document.error_message = error_message
+                    failure_session.commit()
+            finally:
+                failure_session.close()
         finally:
-            failure_session.close()
-    finally:
-        session.close()
+            session.close()
 
 
 def schedule_ingestion(
