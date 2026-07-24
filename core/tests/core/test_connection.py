@@ -50,31 +50,6 @@ def test_get_session_returns_session() -> None:
     session.close()
 
 
-def test_deprecated_engine_importable() -> None:
-    """The deprecated ``engine`` alias is importable and returns an Engine."""
-    from core.database.connection import engine
-
-    assert isinstance(engine, Engine)
-
-
-def test_deprecated_session_local_importable() -> None:
-    """The deprecated ``SessionLocal`` alias is importable and callable."""
-    from core.database.connection import SessionLocal
-
-    assert callable(SessionLocal)
-    session = SessionLocal()
-    assert isinstance(session, Session)
-    session.close()
-
-
-def test_deprecated_aliases_from_package_init() -> None:
-    """``engine`` and ``SessionLocal`` are accessible via ``core.database``."""
-    from core.database import SessionLocal, engine
-
-    assert isinstance(engine, Engine)
-    assert callable(SessionLocal)
-
-
 def test_db_session_uses_get_session() -> None:
     """db_session() yields a valid session and commits/rollbacks correctly."""
     from core.database.connection import db_session

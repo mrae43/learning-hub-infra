@@ -3,14 +3,10 @@
 The engine is not created at import time.  Use ``get_engine()`` / ``get_session()``
 to obtain the singleton engine or a new session respectively.  Tests can inject
 a test engine via ``set_engine()``.
-
-``engine`` and ``SessionLocal`` remain importable as deprecated aliases that
-delegate to the lazy functions so existing consumers continue to work.
 """
 
 from collections.abc import Generator
 from contextlib import contextmanager
-from typing import Any
 
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session, sessionmaker
@@ -71,31 +67,3 @@ def db_session() -> Generator[Session, None, None]:
         raise
     finally:
         session.close()
-
-
-# ── Deprecated aliases ──────────────────────────────────────────────
-# These exist so that existing imports continue to work.  Prefer
-# ``get_engine()`` / ``get_session()`` in new code.
-_MODULE_DIR = frozenset(
-    {
-        "db_session",
-        "get_engine",
-        "get_session",
-        "set_engine",
-        "engine",
-        "SessionLocal",
-    }
-)
-
-
-def __getattr__(name: str) -> Any:
-    if name == "engine":
-        return get_engine()
-    if name == "SessionLocal":
-        return get_session
-    msg = f"module {__name__!r} has no attribute {name!r}"
-    raise AttributeError(msg)
-
-
-def __dir__() -> list[str]:
-    return sorted(_MODULE_DIR)
