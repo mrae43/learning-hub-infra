@@ -8,7 +8,7 @@ This module is the only place that couples the pipeline to the task runner;
 from fastapi import BackgroundTasks
 
 from core.clients import Embedder
-from core.database.connection import SessionLocal
+from core.database.connection import get_session
 from core.database.schema import Document
 from core.exceptions import IngestionError
 from core.types.document import DocumentStatus
@@ -26,7 +26,7 @@ def _execute_ingestion_task(
     Opens its own database session so that a pipeline failure can be captured
     and persisted as ``status='failed'`` after rolling back the partial work.
     """
-    session = SessionLocal()
+    session = get_session()
     try:
         title = ""
         document = session.get(Document, pending.document_id)
@@ -50,7 +50,7 @@ def _execute_ingestion_task(
         # Update the document row in a fresh mini-transaction so the failure
         # reason is retained after the main transaction rolls back.
         try:
-            failure_session = SessionLocal()
+            failure_session = get_session()
             failure_document = failure_session.get(Document, pending.document_id)
             if failure_document is not None:
                 failure_document.status = DocumentStatus.FAILED

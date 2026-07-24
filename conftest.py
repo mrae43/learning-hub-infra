@@ -9,7 +9,6 @@ import io
 import os
 import zipfile
 from collections.abc import Generator
-from contextlib import contextmanager
 from urllib.parse import urlparse
 
 import pytest
@@ -37,6 +36,7 @@ import retrieval_qa.retrieval.query  # noqa: F401
 # would shadow the installed package under importlib import mode and break
 # submodule imports like ``retrieval_qa.chunking.paper_chunker``.
 from core.config.settings import Settings
+from core.database.connection import set_engine
 from core.database.schema import Base
 
 # Test database name derived from the configured database URL.
@@ -243,7 +243,7 @@ def _create_enums(engine: Engine) -> None:
 
 
 @pytest.fixture
-def override_route_db_session(test_engine: Engine, monkeypatch: pytest.MonkeyPatch) -> None:
+def override_route_db_session(test_engine: Engine) -> None:
     """Make API route ``db_session`` contexts yield sessions on the test engine."""
     Base.metadata.drop_all(bind=test_engine)
     with test_engine.connect() as conn:
@@ -251,21 +251,4 @@ def override_route_db_session(test_engine: Engine, monkeypatch: pytest.MonkeyPat
         conn.commit()
     _create_enums(test_engine)
     Base.metadata.create_all(bind=test_engine)
-    SessionFactory = sessionmaker(bind=test_engine)
-
-    @contextmanager
-    def _test_db_session() -> Generator[Session, None, None]:
-        session = SessionFactory()
-        try:
-            yield session
-            session.commit()
-        except Exception:
-            session.rollback()
-            raise
-        finally:
-            session.close()
-
-    monkeypatch.setattr("api.routes.ingest.db_session", _test_db_session)
-    monkeypatch.setattr("api.routes.documents.db_session", _test_db_session)
-    monkeypatch.setattr("api.routes.retrieval_qa.db_session", _test_db_session)
-    monkeypatch.setattr("ingestion.tasks.SessionLocal", SessionFactory)
+    set_engine(test_engine)

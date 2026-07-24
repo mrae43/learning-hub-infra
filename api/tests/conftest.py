@@ -76,7 +76,7 @@ def set_dependency_override(client: TestClient, dependency: Any, override: Any) 
 
 
 @pytest.fixture
-def client(override_route_db_session: object, monkeypatch: pytest.MonkeyPatch) -> TestClient:
+def client(override_route_db_session: object) -> TestClient:
     """A TestClient with DB sessions and provider dependencies mocked.
 
     Real API calls belong only in the eval job (coding-standards.md). Both
