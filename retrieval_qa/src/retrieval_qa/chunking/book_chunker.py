@@ -11,7 +11,7 @@ import zipfile
 from collections.abc import Sequence
 from enum import StrEnum
 from html.parser import HTMLParser
-from io import BytesIO
+from pathlib import Path
 
 from pydantic import ConfigDict
 from pypdf import PdfReader
@@ -198,10 +198,10 @@ def _split_into_chapters(text: str) -> list[tuple[int, str | None, str]]:
     return sections
 
 
-def _extract_text_from_pdf(pdf_bytes: bytes) -> str:
-    """Extract text from a PDF byte stream."""
+def _extract_text_from_pdf(pdf_path: Path) -> str:
+    """Extract text from a PDF file on disk."""
     try:
-        reader = PdfReader(BytesIO(pdf_bytes))
+        reader = PdfReader(pdf_path)
     except Exception as exc:
         raise IngestionError(f"Failed to parse PDF: {exc}") from exc
 
@@ -283,7 +283,7 @@ def _extract_epub_text(
     return "\n\n".join(parts)
 
 
-def _extract_chapters_from_epub(epub_bytes: bytes) -> list[tuple[int, str | None, str]]:
+def _extract_chapters_from_epub(epub_path: Path) -> list[tuple[int, str | None, str]]:
     """Extract chapters from an EPUB using native HTML heading structure.
 
     Uses the EPUB spine order and HTML heading tags (``<h1>``--``<h6>``) to
@@ -292,7 +292,7 @@ def _extract_chapters_from_epub(epub_bytes: bytes) -> list[tuple[int, str | None
     chapter.  Falls back to regex heuristics when no heading tags are present.
     """
     try:
-        with zipfile.ZipFile(BytesIO(epub_bytes)) as archive:
+        with zipfile.ZipFile(epub_path) as archive:
             container_xml = archive.read("META-INF/container.xml").decode("utf-8")
             opf_path = _opf_root_path(container_xml)
             opf_dir = os.path.dirname(opf_path)
@@ -338,14 +338,19 @@ def _extract_chapters_from_epub(epub_bytes: bytes) -> list[tuple[int, str | None
         raise IngestionError(f"Failed to parse EPUB: {exc}") from exc
 
 
-def _detect_format(file_bytes: bytes) -> BookFormat:
-    """Detect whether ``file_bytes`` is a PDF or EPUB."""
-    if file_bytes.startswith(b"%PDF"):
+def _detect_format(file_path: Path) -> BookFormat:
+    """Detect whether a file at ``file_path`` is a PDF or EPUB."""
+    fd = os.open(file_path, os.O_RDONLY)
+    try:
+        head = os.read(fd, 4)
+    finally:
+        os.close(fd)
+    if head.startswith(b"%PDF"):
         return BookFormat.PDF
 
-    if file_bytes.startswith(b"PK"):
+    if head.startswith(b"PK"):
         try:
-            with zipfile.ZipFile(BytesIO(file_bytes)) as archive:
+            with zipfile.ZipFile(file_path) as archive:
                 if "mimetype" in archive.namelist():
                     mimetype = archive.read("mimetype").strip().lower()
                     if mimetype == b"application/epub+zip":
@@ -356,11 +361,11 @@ def _detect_format(file_bytes: bytes) -> BookFormat:
     raise IngestionError("Unsupported book format: expected PDF or EPUB")
 
 
-def chunk_book(file_bytes: bytes) -> list[BookChunk]:
+def chunk_book(file_path: Path) -> list[BookChunk]:
     """Extract text from a book PDF or EPUB and split it into chunks.
 
     Args:
-        file_bytes: Raw PDF or EPUB file contents.
+        file_path: Path to the PDF or EPUB file on disk.
 
     Returns:
         A list of chunks ordered by their appearance in the document.
@@ -369,14 +374,14 @@ def chunk_book(file_bytes: bytes) -> list[BookChunk]:
         IngestionError: The file could not be parsed or is not a supported
             book format.
     """
-    document_format = _detect_format(file_bytes)
+    document_format = _detect_format(file_path)
     if document_format is BookFormat.PDF:
-        raw_text = _extract_text_from_pdf(file_bytes)
+        raw_text = _extract_text_from_pdf(file_path)
         if not raw_text.strip():
             raise IngestionError("Book contains no extractable text")
         chapters = _split_into_chapters(raw_text)
     else:
-        chapters = _extract_chapters_from_epub(file_bytes)
+        chapters = _extract_chapters_from_epub(file_path)
 
     if not chapters:
         raise IngestionError("Book contains no extractable text")
@@ -414,9 +419,9 @@ class BookChunker(DocumentChunker):
 
     metadata_model = BookChunkMetadata
 
-    def chunk(self, file_bytes: bytes) -> Sequence[Chunk]:
+    def chunk(self, file_path: Path) -> Sequence[Chunk]:
         """Chunk a book PDF or EPUB into chapter-aware pieces."""
-        return chunk_book(file_bytes)
+        return chunk_book(file_path)
 
 
 register_chunker(DocumentType.BOOK, BookChunker)

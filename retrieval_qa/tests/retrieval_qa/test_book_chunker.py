@@ -1,7 +1,8 @@
 """Tests for the book chunker."""
 
-import io
 import zipfile
+from collections.abc import Callable
+from pathlib import Path
 
 import pytest
 
@@ -10,16 +11,12 @@ from core.types.chunk import BookChunkMetadata
 from retrieval_qa.chunking.book_chunker import chunk_book
 
 
-def _make_epub(chapters: list[tuple[str, str, str]]) -> bytes:
-    """Build an in-memory EPUB from chapter specs.
+def _make_epub(chapters: list[tuple[str, str, str]], epub_path: Path) -> Path:
+    """Build an EPUB file from chapter specs.
 
     Each tuple is ``(file_name, xhtml_body, spine_idref)``.
-
-    The *xhtml_body* is placed directly inside ``<body>...</body>``.
-    All chapters share the same OPF manifest/spine structure.
     """
-    buffer = io.BytesIO()
-    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+    with zipfile.ZipFile(epub_path, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.writestr("mimetype", "application/epub+zip", compress_type=zipfile.ZIP_STORED)
         zf.writestr(
             "META-INF/container.xml",
@@ -63,13 +60,16 @@ def _make_epub(chapters: list[tuple[str, str, str]]) -> bytes:
                 "<head><title>Test</title></head>"
                 f"<body>{body}</body></html>",
             )
-    buffer.seek(0)
-    return buffer.read()
+    return epub_path
 
 
-def test_book_chunker_emits_chapters(sample_book_pdf: bytes) -> None:
+def test_book_chunker_emits_chapters(
+    sample_book_pdf: bytes,
+    temp_file: Callable[..., Path],
+) -> None:
     """chunk_book extracts text and splits it into ordered chunks."""
-    chunks = chunk_book(sample_book_pdf)
+    pdf_path = temp_file(sample_book_pdf, "sample.pdf")
+    chunks = chunk_book(pdf_path)
 
     assert len(chunks) >= 1
     for chunk in chunks:
@@ -80,18 +80,23 @@ def test_book_chunker_emits_chapters(sample_book_pdf: bytes) -> None:
         assert chunk.metadata.heading is None or isinstance(chunk.metadata.heading, str)
 
 
-def test_book_chunker_detects_chapter_boundaries(sample_book_pdf: bytes) -> None:
+def test_book_chunker_detects_chapter_boundaries(
+    sample_book_pdf: bytes,
+    temp_file: Callable[..., Path],
+) -> None:
     """Detected chapter boundaries are reflected in chunk metadata."""
-    chunks = chunk_book(sample_book_pdf)
+    pdf_path = temp_file(sample_book_pdf, "sample.pdf")
+    chunks = chunk_book(pdf_path)
 
     chapters = [chunk.metadata.chapter for chunk in chunks]
     assert 1 in chapters
     assert 2 in chapters
 
 
-def test_book_chunker_epub(sample_book_epub: bytes) -> None:
+def test_book_chunker_epub(sample_book_epub: bytes, temp_file: Callable[..., Path]) -> None:
     """chunk_book can parse an EPUB with chapter structure."""
-    chunks = chunk_book(sample_book_epub)
+    epub_path = temp_file(sample_book_epub, "sample.epub")
+    chunks = chunk_book(epub_path)
 
     assert len(chunks) >= 1
     chapters = {chunk.metadata.chapter for chunk in chunks}
@@ -99,31 +104,35 @@ def test_book_chunker_epub(sample_book_epub: bytes) -> None:
     assert all(isinstance(chunk.metadata.chapter, int) for chunk in chunks)
 
 
-def test_book_chunker_rejects_invalid_bytes() -> None:
-    """A non-PDF/non-EPUB byte stream raises IngestionError."""
+def test_book_chunker_rejects_invalid_file(temp_file: Callable[..., Path]) -> None:
+    """A non-PDF/non-EPUB file raises IngestionError."""
+    file_path = temp_file(b"not a book", "invalid.bin")
     with pytest.raises(IngestionError):
-        chunk_book(b"not a book")
+        chunk_book(file_path)
 
 
-def test_book_chunk_metadata_validates_at_boundary(sample_book_pdf: bytes) -> None:
+def test_book_chunk_metadata_validates_at_boundary(
+    sample_book_pdf: bytes,
+    temp_file: Callable[..., Path],
+) -> None:
     """Chunks emitted by the book chunker validate against BookChunkMetadata."""
-    chunks = chunk_book(sample_book_pdf)
+    pdf_path = temp_file(sample_book_pdf, "sample.pdf")
+    chunks = chunk_book(pdf_path)
     for chunk in chunks:
-        # model_validate should succeed and extra='forbid' means unknown keys
-        # would have already raised during construction.
         assert BookChunkMetadata.model_validate(chunk.metadata.model_dump())
 
 
-def test_epub_chunks_by_heading_tags() -> None:
+def test_epub_chunks_by_heading_tags(tmp_path: Path) -> None:
     """EPUB with ``<h1>`` headings (no 'Chapter N' text) splits correctly."""
-    epub = _make_epub(
+    epub_path = _make_epub(
         [
             ("ch1.xhtml", "<h1>The Beginning</h1><p>First chapter content.</p>", "ch1"),
             ("ch2.xhtml", "<h1>The Middle</h1><p>Second chapter content.</p>", "ch2"),
             ("ch3.xhtml", "<h1>The End</h1><p>Third chapter content.</p>", "ch3"),
-        ]
+        ],
+        epub_path=tmp_path / "test.epub",
     )
-    chunks = chunk_book(epub)
+    chunks = chunk_book(epub_path)
 
     assert len(chunks) == 3
     assert [c.metadata.chapter for c in chunks] == [1, 2, 3]
@@ -135,14 +144,15 @@ def test_epub_chunks_by_heading_tags() -> None:
     assert all("Chapter" not in c.content for c in chunks)
 
 
-def test_epub_heading_content_included_in_chunk() -> None:
+def test_epub_heading_content_included_in_chunk(tmp_path: Path) -> None:
     """Heading text appears in both chunk content and metadata."""
-    epub = _make_epub(
+    epub_path = _make_epub(
         [
             ("ch1.xhtml", "<h1>Part One</h1><p>Some text.</p>", "ch1"),
-        ]
+        ],
+        epub_path=tmp_path / "test.epub",
     )
-    chunks = chunk_book(epub)
+    chunks = chunk_book(epub_path)
 
     assert len(chunks) == 1
     assert chunks[0].metadata.heading == "Part One"
@@ -150,9 +160,9 @@ def test_epub_heading_content_included_in_chunk() -> None:
     assert "Some text." in chunks[0].content
 
 
-def test_epub_subheadings_same_chapter() -> None:
+def test_epub_subheadings_same_chapter(tmp_path: Path) -> None:
     """``<h2>`` sub-headings produce additional chunks within the same chapter."""
-    epub = _make_epub(
+    epub_path = _make_epub(
         [
             (
                 "ch1.xhtml",
@@ -162,18 +172,19 @@ def test_epub_subheadings_same_chapter() -> None:
                 "<h2>Section B</h2><p>Content B.</p>",
                 "ch1",
             ),
-        ]
+        ],
+        epub_path=tmp_path / "test.epub",
     )
-    chunks = chunk_book(epub)
+    chunks = chunk_book(epub_path)
 
     assert len(chunks) == 3
     assert [c.metadata.chapter for c in chunks] == [1, 1, 1]
     assert [c.metadata.heading for c in chunks] == ["Chapter 1", "Section A", "Section B"]
 
 
-def test_epub_fallback_to_regex_when_no_headings() -> None:
+def test_epub_fallback_to_regex_when_no_headings(tmp_path: Path) -> None:
     """EPUB without heading tags falls back to regex heuristics."""
-    epub = _make_epub(
+    epub_path = _make_epub(
         [
             (
                 "ch1.xhtml",
@@ -185,9 +196,10 @@ def test_epub_fallback_to_regex_when_no_headings() -> None:
                 "<p>Chapter 2</p><p>The story continues.</p>",
                 "ch2",
             ),
-        ]
+        ],
+        epub_path=tmp_path / "test.epub",
     )
-    chunks = chunk_book(epub)
+    chunks = chunk_book(epub_path)
 
     # Regex should detect "Chapter 1" / "Chapter 2" as chapter boundaries
     chapters = {c.metadata.chapter for c in chunks}

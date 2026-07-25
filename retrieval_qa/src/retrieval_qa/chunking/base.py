@@ -2,6 +2,7 @@
 
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
+from pathlib import Path
 from typing import ClassVar
 
 from pydantic import BaseModel
@@ -17,11 +18,11 @@ class DocumentChunker(ABC):
     metadata_model: ClassVar[type[BaseModel]]
 
     @abstractmethod
-    def chunk(self, file_bytes: bytes) -> Sequence[Chunk]:
-        """Chunk ``file_bytes`` into a sequence of ``Chunk`` objects.
+    def chunk(self, file_path: Path) -> Sequence[Chunk]:
+        """Chunk a file into a sequence of ``Chunk`` objects.
 
         Args:
-            file_bytes: Raw uploaded file contents.
+            file_path: Path to the uploaded file on disk.
 
         Returns:
             Chunks ordered by their appearance in the document.

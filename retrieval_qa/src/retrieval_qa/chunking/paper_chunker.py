@@ -6,7 +6,7 @@ emitting ``PaperChunkMetadata`` for each chunk.
 
 import re
 from collections.abc import Sequence
-from io import BytesIO
+from pathlib import Path
 
 from pydantic import ConfigDict
 from pypdf import PdfReader
@@ -74,11 +74,11 @@ def _split_into_sections(text: str) -> list[tuple[str, str | None, str]]:
     return sections
 
 
-def chunk_paper(pdf_bytes: bytes) -> list[PaperChunk]:
+def chunk_paper(pdf_path: Path) -> list[PaperChunk]:
     """Extract text from a paper PDF and split it into chunks.
 
     Args:
-        pdf_bytes: Raw PDF file contents.
+        pdf_path: Path to the PDF file on disk.
 
     Returns:
         A list of chunks ordered by their appearance in the document.
@@ -87,7 +87,7 @@ def chunk_paper(pdf_bytes: bytes) -> list[PaperChunk]:
         IngestionError: The PDF could not be read.
     """
     try:
-        reader = PdfReader(BytesIO(pdf_bytes))
+        reader = PdfReader(pdf_path)
     except Exception as exc:
         raise IngestionError(f"Failed to parse PDF: {exc}") from exc
 
@@ -142,9 +142,9 @@ class PaperChunker(DocumentChunker):
 
     metadata_model = PaperChunkMetadata
 
-    def chunk(self, file_bytes: bytes) -> Sequence[Chunk]:
+    def chunk(self, file_path: Path) -> Sequence[Chunk]:
         """Chunk a paper PDF into section-aware pieces."""
-        return chunk_paper(file_bytes)
+        return chunk_paper(file_path)
 
 
 register_chunker(DocumentType.PAPER, PaperChunker)

@@ -1,6 +1,7 @@
 """Tests for the document-type chunker registry."""
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
+from pathlib import Path
 
 import pytest
 from pydantic import BaseModel
@@ -61,10 +62,14 @@ def test_chunker_classes_declare_metadata_model() -> None:
     assert issubclass(DocumentationChunker.metadata_model, BaseModel)
 
 
-def test_chunker_returns_chunk_base_model_objects(sample_paper_pdf: bytes) -> None:
+def test_chunker_returns_chunk_base_model_objects(
+    sample_paper_pdf: bytes,
+    temp_file: Callable[..., Path],
+) -> None:
     """Chunker instances return objects that inherit from the Chunk base model."""
+    pdf_path = temp_file(sample_paper_pdf, "sample.pdf")
     chunker = get_chunker(DocumentType.PAPER)
-    result = chunker.chunk(sample_paper_pdf)
+    result = chunker.chunk(pdf_path)
     assert isinstance(result, Sequence)
     assert len(result) >= 1
     for chunk in result:
@@ -91,7 +96,7 @@ def test_register_chunker_allows_extension_without_editing_existing() -> None:
     class FakeChunker(DocumentChunker):
         metadata_model = FakeMetadata
 
-        def chunk(self, file_bytes: bytes) -> Sequence[Chunk]:
+        def chunk(self, file_path: Path) -> Sequence[Chunk]:
             return []
 
     # Temporarily swap the paper chunker to simulate adding a new document type.

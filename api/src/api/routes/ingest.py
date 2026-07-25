@@ -1,5 +1,9 @@
 """Ingestion route: POST /ingest."""
 
+import atexit
+import contextlib
+import os
+import tempfile
 from pathlib import Path
 from typing import Annotated
 from uuid import UUID
@@ -35,19 +39,41 @@ def _extension(filename: str | None) -> str | None:
     return suffix if suffix else None
 
 
-async def _read_upload_with_limit(upload: UploadFile, max_bytes: int) -> bytes:
-    """Read upload contents, raising 413 if the limit is exceeded."""
-    chunks: list[bytes] = []
+# Track temp files handed off to background tasks so the atexit handler can
+# clean them up if the process exits before the background task runs.
+_pending_temp_files: set[Path] = set()
+
+
+@atexit.register
+def _cleanup_pending_temp_files() -> None:
+    for path in _pending_temp_files:
+        with contextlib.suppress(OSError):
+            path.unlink(missing_ok=True)
+
+
+async def _save_upload_to_temp(upload: UploadFile, max_bytes: int) -> Path:
+    """Write upload to a temp file, raising 413 if the limit is exceeded.
+
+    Returns the ``Path`` to the temp file, which the caller is responsible for
+    cleaning up after the background ingestion task completes.
+    """
+    suffix = Path(upload.filename or "upload").suffix or ".tmp"
+    fd, path = tempfile.mkstemp(suffix=suffix)
     total = 0
-    while True:
-        chunk = await upload.read(8192)
-        if not chunk:
-            break
-        total += len(chunk)
-        if total > max_bytes:
-            raise HTTPException(status_code=413, detail="File exceeds maximum upload size")
-        chunks.append(chunk)
-    return b"".join(chunks)
+    try:
+        with os.fdopen(fd, "wb") as f:
+            while True:
+                chunk = await upload.read(8192)
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > max_bytes:
+                    raise HTTPException(status_code=413, detail="File exceeds maximum upload size")
+                f.write(chunk)
+    except Exception:
+        os.unlink(path)
+        raise
+    return Path(path)
 
 
 @router.post("/ingest", status_code=202, response_model=DocumentStatusResponse)
@@ -73,7 +99,7 @@ async def ingest_document(
             detail=f"Unsupported file type: {extension or 'unknown'}",
         )
 
-    file_bytes = await _read_upload_with_limit(file, settings.max_upload_bytes)
+    file_path = await _save_upload_to_temp(file, settings.max_upload_bytes)
     source_filename = file.filename or "upload"
 
     try:
@@ -88,6 +114,7 @@ async def ingest_document(
             document_id: UUID = document.document_id
             response_body = DocumentStatusResponse.model_validate(document)
     except Exception as exc:
+        os.unlink(file_path)
         raise HTTPException(status_code=500, detail=f"Failed to create document: {exc}") from exc
 
     schedule_ingestion(
@@ -97,11 +124,13 @@ async def ingest_document(
             title=title,
             document_type=document_type,
             source_filename=source_filename,
-            file_bytes=file_bytes,
+            file_path=file_path,
         ),
         embedder=embedder,
         model_name=settings.embedding_model,
     )
+
+    _pending_temp_files.add(file_path)
 
     location = request.url_for("get_document", document_id=str(document_id))
     response.headers["Location"] = str(location)

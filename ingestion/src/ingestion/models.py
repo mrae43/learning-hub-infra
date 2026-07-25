@@ -1,5 +1,6 @@
 """Pydantic models for the ingestion package."""
 
+from pathlib import Path
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -20,4 +21,4 @@ class PendingIngestion(BaseModel):
     title: str
     document_type: DocumentType
     source_filename: str
-    file_bytes: bytes
+    file_path: Path
