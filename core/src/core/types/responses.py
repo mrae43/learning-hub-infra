@@ -14,7 +14,7 @@ class HarnessARequest(BaseModel):
     for it (alongside the missing-field case).
     """
 
-    query: str = Field(min_length=1)
+    query: str = Field(min_length=1, max_length=2000)
 
 
 class CitedPassage(BaseModel):

@@ -18,6 +18,7 @@ from fastapi import (
     Response,
     UploadFile,
 )
+from pydantic import Field
 
 from api.dependencies import get_embedder
 from core.clients import Embedder
@@ -28,7 +29,26 @@ from core.types.document import DocumentStatusResponse, DocumentType
 from ingestion.models import PendingIngestion
 from ingestion.tasks import schedule_ingestion
 
+MAGIC_PDF = b"%PDF"
+MAGIC_ZIP = b"PK"
+
 router = APIRouter(tags=["ingestion"])
+
+
+async def _validate_content_type(file: UploadFile, extension: str) -> None:
+    head = await file.read(4)
+    await file.seek(0)
+
+    if extension == "pdf" and not head.startswith(MAGIC_PDF):
+        raise HTTPException(
+            status_code=415,
+            detail="File content does not match PDF format",
+        )
+    if extension == "epub" and not head.startswith(MAGIC_ZIP):
+        raise HTTPException(
+            status_code=415,
+            detail="File content does not match EPUB format",
+        )
 
 
 def _extension(filename: str | None) -> str | None:
@@ -82,15 +102,15 @@ async def ingest_document(
     response: Response,
     background_tasks: BackgroundTasks,
     file: UploadFile,
-    title: Annotated[str, Form(...)],
+    title: Annotated[str, Form(...), Field(max_length=500)],
     document_type: Annotated[DocumentType, Form(...)],
     embedder: Annotated[Embedder, Depends(get_embedder)],
 ) -> DocumentStatusResponse:
     """Accept a document for background ingestion.
 
     Returns 202 Accepted with a ``Location`` header pointing at the status
-    endpoint. Pre-flight checks return 413 for oversized files and 415 for
-    unsupported extensions; missing fields return 422 via FastAPI defaults.
+    endpoint.     Pre-flight checks return 415 for unsupported content/mime type and 413 for
+    oversized files; missing fields return 422 via FastAPI defaults.
     """
     extension = _extension(file.filename)
     if extension is None or extension not in settings.allowed_file_extensions:
@@ -98,6 +118,8 @@ async def ingest_document(
             status_code=415,
             detail=f"Unsupported file type: {extension or 'unknown'}",
         )
+
+    await _validate_content_type(file, extension)
 
     file_path = await _save_upload_to_temp(file, settings.max_upload_bytes)
     source_filename = file.filename or "upload"

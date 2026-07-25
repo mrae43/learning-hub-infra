@@ -58,7 +58,7 @@ class LLMClient:
 
     def _get_client(self) -> OpenAI:
         if self._client is None:
-            self._client = OpenAI(api_key=self._api_key)
+            self._client = OpenAI(api_key=self._api_key, timeout=60.0, max_retries=2)
         return self._client
 
     def chat(self, messages: Sequence[ChatMessage]) -> str:
