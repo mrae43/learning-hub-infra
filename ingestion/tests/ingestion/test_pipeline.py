@@ -1,5 +1,7 @@
 """Integration tests for the ingestion pipeline."""
 
+from collections.abc import Callable
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -28,8 +30,10 @@ def test_pipeline_happy_path_reaches_ready(
     test_session: Session,
     fake_embeddings_client: MagicMock,
     sample_paper_pdf: bytes,
+    temp_file: Callable[..., Path],
 ) -> None:
     """A paper ingestion advances validating -> chunking -> embedding -> ready."""
+    pdf_path = temp_file(sample_paper_pdf, "sample.pdf")
     document = Document(
         title="Sample Paper",
         document_type=DocumentType.PAPER,
@@ -44,7 +48,7 @@ def test_pipeline_happy_path_reaches_ready(
             title="Sample Paper",
             document_type=DocumentType.PAPER,
             source_filename="sample.pdf",
-            file_bytes=sample_paper_pdf,
+            file_path=pdf_path,
         ),
         session=test_session,
         embeddings_client=fake_embeddings_client,
@@ -86,8 +90,10 @@ def test_pipeline_happy_path_reaches_ready(
 def test_pipeline_failure_marks_failed_with_error(
     test_session: Session,
     sample_paper_pdf: bytes,
+    temp_file: Callable[..., Path],
 ) -> None:
     """A mocked embeddings client that raises surfaces as a failure."""
+    pdf_path = temp_file(sample_paper_pdf, "sample.pdf")
     document = Document(
         title="Failing Paper",
         document_type=DocumentType.PAPER,
@@ -106,7 +112,7 @@ def test_pipeline_failure_marks_failed_with_error(
                 title="Failing Paper",
                 document_type=DocumentType.PAPER,
                 source_filename="fail.pdf",
-                file_bytes=sample_paper_pdf,
+                file_path=pdf_path,
             ),
             session=test_session,
             embeddings_client=failing_client,
@@ -124,8 +130,10 @@ def test_pipeline_book_happy_path_reaches_ready(
     test_session: Session,
     fake_embeddings_client: MagicMock,
     sample_book_pdf: bytes,
+    temp_file: Callable[..., Path],
 ) -> None:
     """A book ingestion advances validating -> chunking -> embedding -> ready."""
+    pdf_path = temp_file(sample_book_pdf, "sample.pdf")
     document = Document(
         title="Sample Book",
         document_type=DocumentType.BOOK,
@@ -140,7 +148,7 @@ def test_pipeline_book_happy_path_reaches_ready(
             title="Sample Book",
             document_type=DocumentType.BOOK,
             source_filename="sample.pdf",
-            file_bytes=sample_book_pdf,
+            file_path=pdf_path,
         ),
         session=test_session,
         embeddings_client=fake_embeddings_client,
@@ -178,8 +186,10 @@ def test_pipeline_documentation_happy_path_reaches_ready(
     test_session: Session,
     fake_embeddings_client: MagicMock,
     sample_documentation_md: bytes,
+    temp_file: Callable[..., Path],
 ) -> None:
     """A documentation ingestion advances validating -> chunking -> embedding -> ready."""
+    md_path = temp_file(sample_documentation_md, "docs.md")
     document = Document(
         title="Sample Docs",
         document_type=DocumentType.DOCUMENTATION,
@@ -194,7 +204,7 @@ def test_pipeline_documentation_happy_path_reaches_ready(
             title="Sample Docs",
             document_type=DocumentType.DOCUMENTATION,
             source_filename="docs.md",
-            file_bytes=sample_documentation_md,
+            file_path=md_path,
         ),
         session=test_session,
         embeddings_client=fake_embeddings_client,
@@ -228,8 +238,10 @@ def test_reingestion_creates_new_document_id(
     test_session: Session,
     fake_embeddings_client: MagicMock,
     sample_paper_pdf: bytes,
+    temp_file: Callable[..., Path],
 ) -> None:
     """Re-uploading creates a new row; old chunks and embeddings coexist."""
+    pdf_path = temp_file(sample_paper_pdf, "sample.pdf")
     first = Document(
         title="Paper",
         document_type=DocumentType.PAPER,
@@ -243,7 +255,7 @@ def test_reingestion_creates_new_document_id(
             title="Paper",
             document_type=DocumentType.PAPER,
             source_filename="sample.pdf",
-            file_bytes=sample_paper_pdf,
+            file_path=pdf_path,
         ),
         session=test_session,
         embeddings_client=fake_embeddings_client,
@@ -255,6 +267,7 @@ def test_reingestion_creates_new_document_id(
         test_session.query(Chunk).filter(Chunk.document_id == first.document_id).count()
     )
 
+    second_pdf_path = temp_file(sample_paper_pdf, "sample2.pdf")
     second = Document(
         title="Paper",
         document_type=DocumentType.PAPER,
@@ -268,7 +281,7 @@ def test_reingestion_creates_new_document_id(
             title="Paper",
             document_type=DocumentType.PAPER,
             source_filename="sample.pdf",
-            file_bytes=sample_paper_pdf,
+            file_path=second_pdf_path,
         ),
         session=test_session,
         embeddings_client=fake_embeddings_client,
@@ -376,7 +389,7 @@ class TestPipelineValidation:
                         title="Bad Book",
                         document_type=DocumentType.BOOK,
                         source_filename="bad.pdf",
-                        file_bytes=b"irrelevant",
+                        file_path=Path("/tmp/fake"),
                     ),
                     session=test_session,
                     embeddings_client=fake_embeddings_client,
@@ -412,7 +425,7 @@ class TestPipelineValidation:
                         title="Bad Paper",
                         document_type=DocumentType.PAPER,
                         source_filename="bad.pdf",
-                        file_bytes=b"irrelevant",
+                        file_path=Path("/tmp/fake"),
                     ),
                     session=test_session,
                     embeddings_client=fake_embeddings_client,
@@ -427,8 +440,10 @@ class TestPipelineValidation:
         test_session: Session,
         fake_embeddings_client: MagicMock,
         sample_book_pdf: bytes,
+        temp_file: Callable[..., Path],
     ) -> None:
         """Existing book happy path is not broken by validation step."""
+        pdf_path = temp_file(sample_book_pdf, "sample.pdf")
         document = Document(
             title="Sample Book",
             document_type=DocumentType.BOOK,
@@ -443,7 +458,7 @@ class TestPipelineValidation:
                 title="Sample Book",
                 document_type=DocumentType.BOOK,
                 source_filename="sample.pdf",
-                file_bytes=sample_book_pdf,
+                file_path=pdf_path,
             ),
             session=test_session,
             embeddings_client=fake_embeddings_client,
@@ -474,8 +489,10 @@ class TestParentChildIngestion:
         test_session: Session,
         fake_embeddings_client: MagicMock,
         sample_paper_pdf: bytes,
+        temp_file: Callable[..., Path],
     ) -> None:
         """Parent rows are stored without embeddings; children are embedded."""
+        pdf_path = temp_file(sample_paper_pdf, "sample.pdf")
         document = Document(
             title="PC Paper",
             document_type=DocumentType.PAPER,
@@ -490,7 +507,7 @@ class TestParentChildIngestion:
                 title="PC Paper",
                 document_type=DocumentType.PAPER,
                 source_filename="pc.pdf",
-                file_bytes=sample_paper_pdf,
+                file_path=pdf_path,
             ),
             session=test_session,
             embeddings_client=fake_embeddings_client,
@@ -550,7 +567,7 @@ class TestParentChildIngestion:
                     title="Big Parent",
                     document_type=DocumentType.PAPER,
                     source_filename="big.pdf",
-                    file_bytes=b"fake",
+                    file_path=Path("/tmp/fake"),
                 ),
                 session=test_session,
                 embeddings_client=fake_embeddings_client,
@@ -598,7 +615,7 @@ class TestParentChildIngestion:
                     title="Small Parent",
                     document_type=DocumentType.PAPER,
                     source_filename="small.pdf",
-                    file_bytes=b"fake",
+                    file_path=Path("/tmp/fake"),
                 ),
                 session=test_session,
                 embeddings_client=fake_embeddings_client,
@@ -644,7 +661,7 @@ class TestParentChildIngestion:
                     title="Inherit Test",
                     document_type=DocumentType.BOOK,
                     source_filename="inherit.pdf",
-                    file_bytes=b"fake",
+                    file_path=Path("/tmp/fake"),
                 ),
                 session=test_session,
                 embeddings_client=fake_embeddings_client,
@@ -695,7 +712,7 @@ class TestParentChildIngestion:
                     title="Position Test",
                     document_type=DocumentType.PAPER,
                     source_filename="pos.pdf",
-                    file_bytes=b"fake",
+                    file_path=Path("/tmp/fake"),
                 ),
                 session=test_session,
                 embeddings_client=fake_embeddings_client,

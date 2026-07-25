@@ -8,7 +8,8 @@ If the database is unavailable, the fixtures skip the test.
 import io
 import os
 import zipfile
-from collections.abc import Generator
+from collections.abc import Callable, Generator
+from pathlib import Path
 from urllib.parse import urlparse
 
 import pytest
@@ -102,6 +103,27 @@ def test_session(test_engine: Engine) -> Generator[Session, None, None]:
         yield session
     finally:
         session.close()
+
+
+@pytest.fixture
+def temp_file(tmp_path: Path) -> Callable[..., Path]:
+    """Write fixture bytes to a temp file and return the Path.
+
+    Usage::
+
+        pdf_path = temp_file(sample_paper_pdf, "sample.pdf")
+        md_path = temp_file(sample_documentation_md, "docs.md")
+
+    The file is created under ``tmp_path`` and cleaned up automatically by
+    pytest's tmp_path lifecycle.
+    """
+
+    def _write(content: bytes, filename: str = "temp") -> Path:
+        path = tmp_path / filename
+        path.write_bytes(content)
+        return path
+
+    return _write
 
 
 @pytest.fixture

@@ -1,6 +1,7 @@
 """Background ingestion pipeline for uploaded documents."""
 
 from collections.abc import Sequence
+from pathlib import Path
 
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
@@ -54,7 +55,7 @@ def _chunk_inputs(
 
 def _chunk_document(
     document_type: DocumentType,
-    file_bytes: bytes,
+    file_path: Path,
 ) -> list[tuple[str, dict[str, object], int]]:
     """Return (content, type_metadata, token_count) tuples for a document.
 
@@ -63,7 +64,7 @@ def _chunk_document(
     function does not need to change.
     """
     chunker_class = get_chunker_class(document_type)
-    return _chunk_inputs(chunker_class().chunk(file_bytes))
+    return _chunk_inputs(chunker_class().chunk(file_path))
 
 
 def _embed_chunks(
@@ -124,7 +125,7 @@ def run_ingestion(
 
     try:
         # validating phase: ensure the file is parseable for the document type.
-        chunk_inputs = _chunk_document(pending.document_type, pending.file_bytes)
+        chunk_inputs = _chunk_document(pending.document_type, pending.file_path)
 
         document.status = DocumentStatus.CHUNKING
         session.flush()

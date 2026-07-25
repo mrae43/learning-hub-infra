@@ -8,10 +8,11 @@ PDF page breaks). Sections include sub-headings and API endpoint lines such as
 ``GET /api/v1/users``.
 """
 
+import os
 import re
 from collections.abc import Sequence
 from enum import StrEnum
-from io import BytesIO
+from pathlib import Path
 
 from pydantic import ConfigDict
 from pypdf import PdfReader
@@ -78,22 +79,27 @@ class _HTMLTextExtractor(_BaseHTMLTextExtractor):
             super().handle_endtag(tag)
 
 
-def _detect_format(file_bytes: bytes) -> DocumentationFormat:
-    """Detect whether ``file_bytes`` is PDF, HTML, or Markdown/text."""
-    if file_bytes.startswith(b"%PDF"):
+def _detect_format(file_path: Path) -> DocumentationFormat:
+    """Detect whether a file at ``file_path`` is PDF, HTML, or Markdown/text."""
+    fd = os.open(file_path, os.O_RDONLY)
+    try:
+        raw = os.read(fd, 2048)
+    finally:
+        os.close(fd)
+    if raw.startswith(b"%PDF"):
         return DocumentationFormat.PDF
 
-    head = file_bytes[:2048].lower()
+    head = raw.lower()
     if b"<!doctype html" in head or b"<html" in head:
         return DocumentationFormat.HTML
 
     return DocumentationFormat.MARKDOWN
 
 
-def _extract_text_from_html(html_bytes: bytes) -> str:
+def _extract_text_from_html(html_path: Path) -> str:
     """Strip HTML tags and convert headings to Markdown-style markers."""
     try:
-        text = html_bytes.decode("utf-8")
+        text = html_path.read_bytes().decode("utf-8")
     except UnicodeDecodeError as exc:
         raise IngestionError(f"Failed to decode HTML as UTF-8: {exc}") from exc
 
@@ -103,14 +109,14 @@ def _extract_text_from_html(html_bytes: bytes) -> str:
     return extractor.get_text()
 
 
-def _extract_text_from_pdf(pdf_bytes: bytes) -> str:
+def _extract_text_from_pdf(pdf_path: Path) -> str:
     """Extract text from a PDF, inserting a page marker before each page.
 
     The page markers let the Markdown-style splitter treat each PDF page as a
     top-level documentation page.
     """
     try:
-        reader = PdfReader(BytesIO(pdf_bytes))
+        reader = PdfReader(pdf_path)
     except Exception as exc:
         raise IngestionError(f"Failed to parse PDF: {exc}") from exc
 
@@ -175,27 +181,27 @@ def _split_documentation(text: str) -> list[tuple[str, str | None, str]]:
     return sections
 
 
-def _extract_text(file_bytes: bytes, document_format: DocumentationFormat) -> str:
+def _extract_text(file_path: Path, document_format: DocumentationFormat) -> str:
     """Extract plain text from a documentation file in the given format."""
     match document_format:
         case DocumentationFormat.PDF:
-            return _extract_text_from_pdf(file_bytes)
+            return _extract_text_from_pdf(file_path)
         case DocumentationFormat.HTML:
-            return _extract_text_from_html(file_bytes)
+            return _extract_text_from_html(file_path)
         case DocumentationFormat.MARKDOWN:
             try:
-                return file_bytes.decode("utf-8")
+                return file_path.read_bytes().decode("utf-8")
             except UnicodeDecodeError as exc:
                 raise IngestionError(f"Failed to decode Markdown as UTF-8: {exc}") from exc
         case _ as unreachable:
             raise IngestionError(f"Unsupported documentation format: {unreachable}")
 
 
-def chunk_documentation(file_bytes: bytes) -> list[DocumentationChunk]:
+def chunk_documentation(file_path: Path) -> list[DocumentationChunk]:
     """Extract text from a documentation file and split it into chunks.
 
     Args:
-        file_bytes: Raw Markdown, HTML, or PDF file contents.
+        file_path: Path to the Markdown, HTML, or PDF file on disk.
 
     Returns:
         A list of chunks ordered by their appearance in the document.
@@ -204,8 +210,8 @@ def chunk_documentation(file_bytes: bytes) -> list[DocumentationChunk]:
         IngestionError: The file could not be parsed or contains no extractable
             text.
     """
-    document_format = _detect_format(file_bytes)
-    raw_text = _extract_text(file_bytes, document_format)
+    document_format = _detect_format(file_path)
+    raw_text = _extract_text(file_path, document_format)
 
     if not raw_text.strip():
         raise IngestionError("Documentation contains no extractable text")
@@ -246,9 +252,9 @@ class DocumentationChunker(DocumentChunker):
 
     metadata_model = DocumentationChunkMetadata
 
-    def chunk(self, file_bytes: bytes) -> Sequence[Chunk]:
+    def chunk(self, file_path: Path) -> Sequence[Chunk]:
         """Chunk a Markdown/HTML/PDF documentation file into page-aware pieces."""
-        return chunk_documentation(file_bytes)
+        return chunk_documentation(file_path)
 
 
 register_chunker(DocumentType.DOCUMENTATION, DocumentationChunker)

@@ -32,6 +32,8 @@ def _execute_ingestion_task(
 
     A ``threading.Semaphore(2)`` bounds peak memory by capping the number of
     ingestion pipelines that can run concurrently.
+
+    Cleans up the temp file at ``pending.file_path`` when done.
     """
     with _INGESTION_SEMAPHORE:
         session = get_session()
@@ -68,6 +70,7 @@ def _execute_ingestion_task(
                 failure_session.close()
         finally:
             session.close()
+            pending.file_path.unlink(missing_ok=True)
 
 
 def schedule_ingestion(

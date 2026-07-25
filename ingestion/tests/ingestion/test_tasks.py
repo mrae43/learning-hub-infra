@@ -1,6 +1,7 @@
 """Tests for the FastAPI background-tasks glue layer."""
 
 import threading
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
@@ -14,7 +15,7 @@ _SHARED_PENDING = PendingIngestion(
     title="Test",
     document_type=DocumentType.PAPER,
     source_filename="test.pdf",
-    file_bytes=b"data",
+    file_path=Path("/tmp/fake"),
 )
 
 
@@ -30,7 +31,7 @@ def test_schedule_ingestion_adds_background_task() -> None:
         title="Test Document",
         document_type=DocumentType.PAPER,
         source_filename="test.pdf",
-        file_bytes=b"fake-pdf-bytes",
+        file_path=Path("/tmp/fake"),
     )
 
     schedule_ingestion(
