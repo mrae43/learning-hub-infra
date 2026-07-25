@@ -70,7 +70,7 @@ class CohereReranker:
         if self._client is None:
             if self._api_key is None:
                 raise UpstreamUnavailable("Cohere API key not configured (COHERE_API_KEY)")
-            self._client = cohere.ClientV2(api_key=self._api_key)
+            self._client = cohere.ClientV2(api_key=self._api_key, timeout=30.0, max_retries=2)
         return self._client
 
     def rerank(

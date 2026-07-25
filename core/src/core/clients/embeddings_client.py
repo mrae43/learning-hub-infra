@@ -52,7 +52,7 @@ class EmbeddingsClient:
 
     def _get_client(self) -> OpenAI:
         if self._client is None:
-            self._client = OpenAI(api_key=self._api_key)
+            self._client = OpenAI(api_key=self._api_key, timeout=30.0, max_retries=2)
         return self._client
 
     def embed(self, texts: Sequence[str]) -> list[list[float]]:
@@ -85,7 +85,7 @@ class EmbeddingsClient:
     async def aembed(self, texts: Sequence[str]) -> list[list[float]]:
         """Embed a batch of texts asynchronously."""
         if self._async_client is None:
-            self._async_client = AsyncOpenAI(api_key=self._api_key)
+            self._async_client = AsyncOpenAI(api_key=self._api_key, timeout=30.0, max_retries=2)
         try:
             response = await self._async_client.embeddings.create(
                 input=list(texts),
