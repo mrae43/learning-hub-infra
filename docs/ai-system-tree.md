@@ -8,9 +8,11 @@ learning-hub/
 │   │   │   ├── base.py               # Base chunker class
 │   │   │   ├── paper_chunker.py
 │   │   │   ├── book_chunker.py
-│   │   │   └── documentation_chunker.py
+│   │   │   ├── documentation_chunker.py
+│   │   │   └── _html_utils.py         # HTML parsing helpers
 │   │   ├── retrieval/                # Retrieve from pgvector
 │   │   │   └── query.py
+│   │   ├── _utils.py                 # Internal utility functions
 │   │   └── __init__.py
 │   ├── tests/retrieval_qa/           # chunker + retrieval tests
 │   ├── pyproject.toml
@@ -36,7 +38,8 @@ learning-hub/
 │   │   │   └── __init__.py
 │   │   ├── clients/                  # API clients (hosted inference, embeddings)
 │   │   │   ├── llm_client.py
-│   │   │   └── embeddings_client.py
+│   │   │   ├── embeddings_client.py
+│   │   │   └── reranker_client.py
 │   │   ├── database/                 # pgvector wrapper, Alembic migrations
 │   │   │   ├── connection.py
 │   │   │   ├── schema.py
@@ -50,6 +53,7 @@ learning-hub/
 │   ├── src/api/
 │   │   ├── routes/
 │   │   │   ├── retrieval_qa.py       # /query endpoint
+│   │   │   ├── health.py             # /health endpoint
 │   │   │   ├── ingest.py             # /ingest endpoint
 │   │   │   └── documents.py          # /documents/{id} endpoint
 │   │   ├── controllers/
@@ -68,6 +72,7 @@ learning-hub/
 │   │   ├── models.py                 # Pydantic models for ingestion
 │   │   ├── tasks.py                  # FastAPI BackgroundTasks logic
 │   │   ├── pipeline.py               # Ingest → chunk → embed → store
+│   │   ├── splitting.py              # Document splitting logic
 │   │   └── __init__.py
 │   ├── tests/ingestion/
 │   ├── pyproject.toml
@@ -75,7 +80,7 @@ learning-hub/
 ├── scripts/
 │   └── generate_eval_vectors.py      # Eval vector generation utility
 ├── docs/
-│   ├── adr/                          # 0001–0017 (skip 0008; 0015 supersedes 0007 scorer)
+│   ├── adr/                          # 0001–0018 (skip 0008; 0015 supersedes 0007 scorer)
 │   ├── ai-system-tree.md
 │   ├── tech-stack.md
 │   ├── coding-standards.md
