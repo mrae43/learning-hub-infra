@@ -57,7 +57,9 @@ def document_type_for(real_document_path: Path) -> DocumentType:
     pytest.skip(f"Unsupported extension for this test: {suffix}")
 
 
-def _make_pending_document(session, real_document_path: Path, document_type: DocumentType) -> PendingIngestion:
+def _make_pending_document(
+    session, real_document_path: Path, document_type: DocumentType
+) -> PendingIngestion:
     document = Document(
         title=f"Integration test: {real_document_path.name}",
         document_type=document_type,
@@ -126,7 +128,9 @@ def test_real_ingestion_end_to_end(
 
     for emb in embeddings:
         vector = emb.embedding
-        assert len(vector) == 1536, f"expected 1536-dim vector for text-embedding-3-small, got {len(vector)}"
+        assert len(vector) == 1536, (
+            f"expected 1536-dim vector for text-embedding-3-small, got {len(vector)}"
+        )
         assert any(v != 0 for v in vector), "embedding is all-zero -- likely a silent API failure"
         assert len({round(v, 6) for v in vector}) > 1, "embedding is constant -- suspicious"
         assert emb.model_name == settings.embedding_model
