@@ -42,6 +42,9 @@ explicit_package_bases = true
 
 [tool.pytest.ini_options]
 addopts = "--strict-markers --import-mode=importlib"
+markers = [
+    "integration: runs against real APIs and real Postgres, costs money, excluded from default CI runs",
+]
 filterwarnings = [
     "ignore:There is no current event loop:DeprecationWarning",
 ]
