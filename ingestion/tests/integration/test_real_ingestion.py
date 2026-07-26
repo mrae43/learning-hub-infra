@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 
 import pytest
+from sqlalchemy.orm import Session
 
 from core.clients.embeddings_client import EmbeddingsClient
 from core.config.settings import settings
@@ -18,7 +19,6 @@ from core.database.schema import Document, Embedding
 from core.types.document import DocumentStatus, DocumentType
 from ingestion.models import PendingIngestion
 from ingestion.pipeline import run_ingestion
-from sqlalchemy.orm import Session
 
 pytestmark = pytest.mark.integration
 
