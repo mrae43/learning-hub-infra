@@ -67,28 +67,50 @@ def _chunk_document(
     return _chunk_inputs(chunker_class().chunk(file_path))
 
 
+_MAX_TOKENS_PER_EMBEDDING_BATCH = 100_000
+
+
 def _embed_chunks(
     session: Session,
     client: Embedder,
     chunks: Sequence[ChunkRow],
     model_name: str,
 ) -> list[tuple[ChunkRow, list[float]]]:
-    """Embed chunk contents and return (chunk, vector) pairs."""
+    """Embed chunk contents and return (chunk, vector) pairs.
+
+    Batches chunks by cumulative token count to stay within the
+    embedding API's per-request token limit (OpenAI enforces 300k).
+    """
     if not chunks:
         return []
 
-    texts = [chunk.content for chunk in chunks]
-    try:
-        vectors = client.embed(texts)
-    except Exception as exc:
-        raise IngestionError(f"Embedding call failed: {exc}") from exc
+    batches: list[list[ChunkRow]] = [[]]
+    batch_tokens: list[int] = [0]
 
-    if len(vectors) != len(chunks):
-        raise IngestionError(
-            f"Embedding response length mismatch: expected {len(chunks)}, got {len(vectors)}"
-        )
+    for chunk in chunks:
+        if batch_tokens[-1] + chunk.token_count > _MAX_TOKENS_PER_EMBEDDING_BATCH:
+            batches.append([])
+            batch_tokens.append(0)
+        batches[-1].append(chunk)
+        batch_tokens[-1] += chunk.token_count
 
-    return list(zip(chunks, vectors, strict=True))
+    result: list[tuple[ChunkRow, list[float]]] = []
+    for batch_chunks in batches:
+        texts = [c.content for c in batch_chunks]
+        try:
+            vectors = client.embed(texts)
+        except Exception as exc:
+            raise IngestionError(f"Embedding call failed: {exc}") from exc
+
+        if len(vectors) != len(batch_chunks):
+            raise IngestionError(
+                f"Embedding response length mismatch: "
+                f"expected {len(batch_chunks)}, got {len(vectors)}"
+            )
+
+        result.extend(zip(batch_chunks, vectors, strict=True))
+
+    return result
 
 
 def _sanitize_text(text: str) -> str:
