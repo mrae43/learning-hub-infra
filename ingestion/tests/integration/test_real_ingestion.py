@@ -18,6 +18,7 @@ from core.database.schema import Document, Embedding
 from core.types.document import DocumentStatus, DocumentType
 from ingestion.models import PendingIngestion
 from ingestion.pipeline import run_ingestion
+from sqlalchemy.orm import Session
 
 pytestmark = pytest.mark.integration
 
@@ -58,7 +59,7 @@ def document_type_for(real_document_path: Path) -> DocumentType:
 
 
 def _make_pending_document(
-    session, real_document_path: Path, document_type: DocumentType
+    session: Session, real_document_path: Path, document_type: DocumentType
 ) -> PendingIngestion:
     document = Document(
         title=f"Integration test: {real_document_path.name}",
@@ -78,7 +79,7 @@ def _make_pending_document(
 
 
 def test_real_ingestion_end_to_end(
-    test_session,
+    test_session: Session,
     real_document_path: Path,
     document_type_for: DocumentType,
 ) -> None:
@@ -137,7 +138,7 @@ def test_real_ingestion_end_to_end(
 
 
 def test_real_ingestion_is_grounded(
-    test_session,
+    test_session: Session,
     real_document_path: Path,
     document_type_for: DocumentType,
 ) -> None:
