@@ -91,6 +91,11 @@ def _embed_chunks(
     return list(zip(chunks, vectors, strict=True))
 
 
+def _sanitize_text(text: str) -> str:
+    """Remove characters that PostgreSQL text columns cannot store."""
+    return text.replace("\x00", "")
+
+
 def run_ingestion(
     pending: PendingIngestion,
     session: Session,
@@ -137,7 +142,7 @@ def run_ingestion(
             parent = ChunkRow(
                 document_id=pending.document_id,
                 position=parent_position,
-                content=content,
+                content=_sanitize_text(content),
                 token_count=token_count,
                 type_metadata=type_metadata,
                 parent_chunk_id=None,
@@ -157,7 +162,7 @@ def run_ingestion(
                 child = ChunkRow(
                     document_id=pending.document_id,
                     position=child_split.position,
-                    content=child_split.content,
+                    content=_sanitize_text(child_split.content),
                     token_count=child_split.token_count,
                     type_metadata=child_metadata,
                     parent_chunk_id=parent.chunk_id,
