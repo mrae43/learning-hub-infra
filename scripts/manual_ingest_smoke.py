@@ -73,7 +73,9 @@ def poll_until_terminal(base_url: str, document_id: str) -> dict:
         if status in TERMINAL_STATUSES:
             return body
         time.sleep(POLL_INTERVAL_SECONDS)
-    raise TimeoutError(f"Document {document_id} did not reach a terminal status in {POLL_TIMEOUT_SECONDS}s")
+    raise TimeoutError(
+        f"Document {document_id} did not reach a terminal status in {POLL_TIMEOUT_SECONDS}s"
+    )
 
 
 def query(base_url: str, query_text: str) -> dict:
@@ -83,7 +85,9 @@ def query(base_url: str, query_text: str) -> dict:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument("file", type=Path, help="Path to a real PDF or EPUB")
     parser.add_argument("--type", required=True, choices=["paper", "book", "documentation"])
     parser.add_argument("--title", default=None)
@@ -123,7 +127,7 @@ def main() -> int:
                 for p in cited
             )
             if not grounded or not hit:
-                print(f"[FAIL] expected substring {args.expect!r} not found in grounded cited passages")
+                print(f"[FAIL] substring {args.expect!r} not found in grounded cited passages")
                 return 1
             print("[PASS] grounded, expected content found in cited passages")
 
