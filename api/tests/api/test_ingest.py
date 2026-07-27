@@ -143,6 +143,34 @@ def test_ingest_unsupported_extension_returns_415(
     assert response.status_code == 415
 
 
+def test_ingest_pdf_with_non_pdf_content_returns_415(
+    client: TestClient,
+) -> None:
+    """A .pdf file whose content does not match PDF format returns 415."""
+    response = client.post(
+        "/ingest",
+        files={"file": ("bad.pdf", b"this is not a pdf", "application/pdf")},
+        data={"title": "Bad PDF", "document_type": "paper"},
+    )
+    assert response.status_code == 415
+    body = response.json()
+    assert "does not match PDF format" in body["detail"]
+
+
+def test_ingest_epub_with_non_epub_content_returns_415(
+    client: TestClient,
+) -> None:
+    """An .epub file whose content does not match EPUB format returns 415."""
+    response = client.post(
+        "/ingest",
+        files={"file": ("bad.epub", b"plain text not a zip", "application/epub+zip")},
+        data={"title": "Bad EPUB", "document_type": "book"},
+    )
+    assert response.status_code == 415
+    body = response.json()
+    assert "does not match EPUB format" in body["detail"]
+
+
 def test_ingest_missing_title_returns_422(
     client: TestClient,
     sample_paper_pdf: bytes,
