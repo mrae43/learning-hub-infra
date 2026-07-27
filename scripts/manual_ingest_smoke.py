@@ -46,6 +46,20 @@ TERMINAL_STATUSES = {"ready", "failed"}
 
 
 def ingest(base_url: str, file_path: Path, document_type: str, title: str) -> str:
+    """POST a document file to the /ingest endpoint and return its document ID.
+
+    Args:
+        base_url: Base URL of the running API server.
+        file_path: Path to the document file to ingest.
+        document_type: One of the supported DocumentType values.
+        title: Display title for the document.
+
+    Returns:
+        The document ID string from the accepted ingestion job.
+
+    Exits with status 1 if the server does not return HTTP 202
+    or omits a valid Location header.
+    """
     with file_path.open("rb") as f:
         resp = requests.post(
             f"{base_url}/ingest",
@@ -70,6 +84,19 @@ def ingest(base_url: str, file_path: Path, document_type: str, title: str) -> st
 
 
 def poll_until_terminal(base_url: str, document_id: str) -> dict[str, Any]:
+    """Poll GET /documents/{id} until the document reaches a terminal status.
+
+    Args:
+        base_url: Base URL of the running API server.
+        document_id: The document ID returned by ingest().
+
+    Returns:
+        The final document status dict (status, title, etc.).
+
+    Raises:
+        TimeoutError: If the document does not reach a terminal status
+            within POLL_TIMEOUT_SECONDS.
+    """
     start = time.monotonic()
     last_status = None
     while time.monotonic() - start < POLL_TIMEOUT_SECONDS:
@@ -90,6 +117,15 @@ def poll_until_terminal(base_url: str, document_id: str) -> dict[str, Any]:
 
 
 def query(base_url: str, query_text: str) -> dict[str, Any]:
+    """Send a query to the /query endpoint and return the response.
+
+    Args:
+        base_url: Base URL of the running API server.
+        query_text: The question to ask.
+
+    Returns:
+        The full query response dict (answer, grounded, cited_passages, etc.).
+    """
     resp = requests.post(f"{base_url}/query", json={"query": query_text}, timeout=60)
     resp.raise_for_status()
     body = resp.json()
@@ -97,6 +133,15 @@ def query(base_url: str, query_text: str) -> dict[str, Any]:
 
 
 def main() -> int:
+    """Orchestrate a manual smoke test: ingest, poll, and optionally query.
+
+    Parses CLI arguments, runs the ingest-poll cycle, and if --query is
+    provided, sends a follow-up query and validates cited passages against
+    the --expect substring.
+
+    Returns:
+        0 on success, 1 on failure.
+    """
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
