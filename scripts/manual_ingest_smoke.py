@@ -34,6 +34,8 @@ import os
 import sys
 import time
 from pathlib import Path
+from typing import Any
+from urllib.parse import urlparse
 
 import requests
 
@@ -51,14 +53,23 @@ def ingest(base_url: str, file_path: Path, document_type: str, title: str) -> st
             data={"title": title, "document_type": document_type},
             timeout=60,
         )
-    resp.raise_for_status()
+    if resp.status_code != 202:
+        print(f"[FAIL] expected 202, got {resp.status_code}: {resp.text[:500]}")
+        sys.exit(1)
     body = resp.json()
     document_id = body["document_id"]
-    print(f"[ingest] 202 accepted, document_id={document_id}, status={body.get('status')}")
-    return document_id
+    location = resp.headers.get("location")
+    if location is None or urlparse(location).path != f"/documents/{document_id}":
+        print(f"[FAIL] Location header missing or invalid: {location!r}")
+        sys.exit(1)
+    print(
+        f"[ingest] 202 accepted, document_id={document_id},"
+        f" status={body.get('status')}, location={location}"
+    )
+    return str(document_id)
 
 
-def poll_until_terminal(base_url: str, document_id: str) -> dict:
+def poll_until_terminal(base_url: str, document_id: str) -> dict[str, Any]:
     start = time.monotonic()
     last_status = None
     while time.monotonic() - start < POLL_TIMEOUT_SECONDS:
@@ -71,17 +82,18 @@ def poll_until_terminal(base_url: str, document_id: str) -> dict:
             print(f"[poll] t={elapsed:5.1f}s status={status}")
             last_status = status
         if status in TERMINAL_STATUSES:
-            return body
+            return dict(body)
         time.sleep(POLL_INTERVAL_SECONDS)
     raise TimeoutError(
         f"Document {document_id} did not reach a terminal status in {POLL_TIMEOUT_SECONDS}s"
     )
 
 
-def query(base_url: str, query_text: str) -> dict:
+def query(base_url: str, query_text: str) -> dict[str, Any]:
     resp = requests.post(f"{base_url}/query", json={"query": query_text}, timeout=60)
     resp.raise_for_status()
-    return resp.json()
+    body = resp.json()
+    return dict(body)
 
 
 def main() -> int:

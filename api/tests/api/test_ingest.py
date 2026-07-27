@@ -2,13 +2,40 @@
 
 import uuid
 from collections.abc import Callable
+from typing import cast
 from unittest.mock import MagicMock
+from urllib.parse import urlparse
 
 import pytest
 from fastapi.testclient import TestClient
+from httpx2 import Response
 
 from api.dependencies import get_completion_provider, get_embedder
 from api.tests.conftest import _default_fake_llm_provider, set_dependency_override
+
+
+def _assert_ingest_response(
+    response: Response,
+    expected_title: str,
+    expected_doc_type: str,
+    expected_filename: str,
+) -> str:
+    """Assert the POST /ingest response contract: 202 + Location header + body."""
+    assert response.status_code == 202
+    body = response.json()
+    document_id = cast(str, body["document_id"])
+    location = response.headers.get("location")
+    assert location is not None, "Location header must be present"
+    parsed = urlparse(location)
+    assert parsed.path == f"/documents/{document_id}", (
+        f"Location {location!r} should point at /documents/{document_id}"
+    )
+    assert body["status"] == "validating"
+    assert body["title"] == expected_title
+    assert body["document_type"] == expected_doc_type
+    assert body["source_filename"] == expected_filename
+    assert body["error_message"] is None
+    return document_id
 
 
 def test_ingest_returns_202_with_location_header(
@@ -21,15 +48,7 @@ def test_ingest_returns_202_with_location_header(
         files={"file": ("sample.pdf", sample_paper_pdf, "application/pdf")},
         data={"title": "Sample Paper", "document_type": "paper"},
     )
-
-    assert response.status_code == 202
-    assert "location" in {k.lower() for k in response.headers}
-    body = response.json()
-    assert body["status"] == "validating"
-    assert body["title"] == "Sample Paper"
-    assert body["document_type"] == "paper"
-    assert body["source_filename"] == "sample.pdf"
-    assert body["error_message"] is None
+    _assert_ingest_response(response, "Sample Paper", "paper", "sample.pdf")
 
 
 def test_ingest_pipeline_transitions_to_ready(
@@ -42,7 +61,7 @@ def test_ingest_pipeline_transitions_to_ready(
         files={"file": ("sample.pdf", sample_paper_pdf, "application/pdf")},
         data={"title": "Sample Paper", "document_type": "paper"},
     )
-    document_id = response.json()["document_id"]
+    document_id = _assert_ingest_response(response, "Sample Paper", "paper", "sample.pdf")
 
     status = client.get(f"/documents/{document_id}").json()["status"]
     assert status == "ready"
@@ -58,8 +77,7 @@ def test_ingest_book_pipeline_transitions_to_ready(
         files={"file": ("sample.pdf", sample_book_pdf, "application/pdf")},
         data={"title": "Sample Book", "document_type": "book"},
     )
-    assert response.status_code == 202
-    document_id = response.json()["document_id"]
+    document_id = _assert_ingest_response(response, "Sample Book", "book", "sample.pdf")
 
     status = client.get(f"/documents/{document_id}").json()["status"]
     assert status == "ready"
@@ -75,8 +93,7 @@ def test_ingest_book_epub_pipeline_transitions_to_ready(
         files={"file": ("sample.epub", sample_book_epub, "application/epub+zip")},
         data={"title": "Sample Book", "document_type": "book"},
     )
-    assert response.status_code == 202
-    document_id = response.json()["document_id"]
+    document_id = _assert_ingest_response(response, "Sample Book", "book", "sample.epub")
 
     status = client.get(f"/documents/{document_id}").json()["status"]
     assert status == "ready"
@@ -92,8 +109,7 @@ def test_ingest_documentation_pipeline_transitions_to_ready(
         files={"file": ("docs.md", sample_documentation_md, "text/markdown")},
         data={"title": "Sample Docs", "document_type": "documentation"},
     )
-    assert response.status_code == 202
-    document_id = response.json()["document_id"]
+    document_id = _assert_ingest_response(response, "Sample Docs", "documentation", "docs.md")
 
     status = client.get(f"/documents/{document_id}").json()["status"]
     assert status == "ready"
@@ -171,8 +187,7 @@ def test_ingest_pipeline_failure_marks_failed(
         files={"file": ("sample.pdf", sample_paper_pdf, "application/pdf")},
         data={"title": "Failing Paper", "document_type": "paper"},
     )
-    assert response.status_code == 202
-    document_id = response.json()["document_id"]
+    document_id = _assert_ingest_response(response, "Failing Paper", "paper", "sample.pdf")
 
     status_response = client.get(f"/documents/{document_id}")
     assert status_response.status_code == 200
