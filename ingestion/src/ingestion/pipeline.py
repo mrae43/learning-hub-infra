@@ -67,7 +67,7 @@ def _chunk_document(
     return _chunk_inputs(chunker_class().chunk(file_path))
 
 
-_MAX_TOKENS_PER_EMBEDDING_BATCH = 100_000
+_MAX_TOKENS_PER_EMBEDDING_BATCH = 300_000
 
 
 def _embed_chunks(

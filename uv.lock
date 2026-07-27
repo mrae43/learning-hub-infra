@@ -1070,8 +1070,8 @@ dev = [
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "reportlab", specifier = ">=4.0" },
     { name = "ruff", specifier = ">=0.16.0" },
-    { name = "types-pyyaml", specifier = ">=6.0" },
-    { name = "types-reportlab", specifier = ">=4.0" },
+    { name = "types-pyyaml", specifier = ">=6.0.12.20260724" },
+    { name = "types-reportlab", specifier = ">=4.5.1.20260724" },
 ]
 
 [[package]]
