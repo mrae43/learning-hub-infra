@@ -43,6 +43,7 @@ DEFAULT_BASE_URL = "http://localhost:8000"
 POLL_INTERVAL_SECONDS = 2
 POLL_TIMEOUT_SECONDS = 180
 TERMINAL_STATUSES = {"ready", "failed"}
+EXPECTED_TRANSITIONS = ("validating", "chunking", "embedding", "ready")
 
 
 def ingest(base_url: str, file_path: Path, document_type: str, title: str) -> str:
@@ -83,7 +84,7 @@ def ingest(base_url: str, file_path: Path, document_type: str, title: str) -> st
     return str(document_id)
 
 
-def poll_until_terminal(base_url: str, document_id: str) -> dict[str, Any]:
+def poll_until_terminal(base_url: str, document_id: str) -> tuple[dict[str, Any], list[str]]:
     """Poll GET /documents/{id} until the document reaches a terminal status.
 
     Args:
@@ -91,25 +92,27 @@ def poll_until_terminal(base_url: str, document_id: str) -> dict[str, Any]:
         document_id: The document ID returned by ingest().
 
     Returns:
-        The final document status dict (status, title, etc.).
+        A tuple of ``(final_status_dict, observed_statuses)`` where
+        ``observed_statuses`` is the chronological list of distinct status
+        values seen during polling.
 
     Raises:
         TimeoutError: If the document does not reach a terminal status
             within POLL_TIMEOUT_SECONDS.
     """
     start = time.monotonic()
-    last_status = None
+    observed_statuses: list[str] = []
     while time.monotonic() - start < POLL_TIMEOUT_SECONDS:
         resp = requests.get(f"{base_url}/documents/{document_id}", timeout=10)
         resp.raise_for_status()
         body = resp.json()
         status = str(body.get("status", "")).lower()
-        if status != last_status:
+        if not observed_statuses or status != observed_statuses[-1]:
             elapsed = time.monotonic() - start
             print(f"[poll] t={elapsed:5.1f}s status={status}")
-            last_status = status
+            observed_statuses.append(status)
         if status in TERMINAL_STATUSES:
-            return dict(body)
+            return dict(body), observed_statuses
         time.sleep(POLL_INTERVAL_SECONDS)
     raise TimeoutError(
         f"Document {document_id} did not reach a terminal status in {POLL_TIMEOUT_SECONDS}s"
@@ -161,12 +164,21 @@ def main() -> int:
     started = time.monotonic()
 
     document_id = ingest(args.base_url, args.file, args.type, title)
-    final = poll_until_terminal(args.base_url, document_id)
+    final, observed_statuses = poll_until_terminal(args.base_url, document_id)
     elapsed = time.monotonic() - started
 
     status = str(final.get("status", "")).lower()
     if status != "ready":
         print(f"[FAIL] ingestion ended in status={status!r}: {final}")
+        return 1
+
+    # Check that observed statuses contain the expected sequence in order.
+    expected_iter = iter(s for s in observed_statuses if s in EXPECTED_TRANSITIONS)
+    if not all(exp in expected_iter for exp in EXPECTED_TRANSITIONS):
+        print(
+            f"[FAIL] Expected status transition {list(EXPECTED_TRANSITIONS)}, "
+            f"got {observed_statuses}"
+        )
         return 1
 
     print(f"[PASS] ingestion READY in {elapsed:.1f}s")

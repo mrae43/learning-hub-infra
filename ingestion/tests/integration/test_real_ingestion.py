@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 
 import pytest
+from sqlalchemy import event
 from sqlalchemy.orm import Session
 
 from core.clients.embeddings_client import EmbeddingsClient
@@ -104,17 +105,38 @@ def test_real_ingestion_end_to_end(
     pending = _make_pending_document(test_session, real_document_path, document_type_for)
     client = EmbeddingsClient()  # picks up settings.openai_api_key / OPENAI_API_KEY
 
-    run_ingestion(
-        pending=pending,
-        session=test_session,
-        embeddings_client=client,
-        model_name=settings.embedding_model,
-    )
+    captured_statuses: list[DocumentStatus] = [DocumentStatus.VALIDATING]
+
+    @event.listens_for(Document, "before_update")
+    def _capture_status(mapper: object, connection: object, target: Document) -> None:
+        if target.document_id == pending.document_id:
+            captured_statuses.append(target.status)
+
+    try:
+        run_ingestion(
+            pending=pending,
+            session=test_session,
+            embeddings_client=client,
+            model_name=settings.embedding_model,
+        )
+    finally:
+        event.remove(Document, "before_update", _capture_status)
+
     test_session.commit()
 
     document = test_session.get(Document, pending.document_id)
     assert document is not None
     assert document.status == DocumentStatus.READY, document.error_message
+    expected_statuses = [
+        DocumentStatus.VALIDATING,
+        DocumentStatus.CHUNKING,
+        DocumentStatus.EMBEDDING,
+        DocumentStatus.READY,
+    ]
+    assert captured_statuses == expected_statuses, (
+        f"Expected status transition {[s.value for s in expected_statuses]}, "
+        f"got {[s.value for s in captured_statuses]}"
+    )
 
     all_chunks = (
         test_session.query(ChunkRow).filter(ChunkRow.document_id == pending.document_id).all()
