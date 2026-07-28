@@ -6,6 +6,7 @@ and costs real money. It reuses the existing conftest.py fixtures
 pgvector database, not a mock.
 """
 
+import logging
 import os
 from pathlib import Path
 
@@ -82,6 +83,7 @@ def test_real_ingestion_end_to_end(
     test_session: Session,
     real_document_path: Path,
     document_type_for: DocumentType,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Full pipeline against real Postgres + real OpenAI embeddings.
 
@@ -93,8 +95,11 @@ def test_real_ingestion_end_to_end(
       - every child chunk has exactly one embedding at the right dimensionality
       - embeddings aren't degenerate (all-zero or constant), which is how a
         silent upstream failure tends to show up rather than raising
+      - cost tracking log includes chunk count, API call count, and estimated cost
     """
     _skip_unless_live()
+
+    caplog.set_level(logging.INFO)
 
     pending = _make_pending_document(test_session, real_document_path, document_type_for)
     client = EmbeddingsClient()  # picks up settings.openai_api_key / OPENAI_API_KEY
@@ -135,6 +140,16 @@ def test_real_ingestion_end_to_end(
         assert any(v != 0 for v in vector), "embedding is all-zero -- likely a silent API failure"
         assert len({round(v, 6) for v in vector}) > 1, "embedding is constant -- suspicious"
         assert emb.model_name == settings.embedding_model
+
+    # Verify cost tracking log is present
+    cost_records = [r for r in caplog.records if "estimated cost" in r.message]
+    assert cost_records, "expected cost tracking log message"
+    assert "chunks" in cost_records[0].message, (
+        f"expected 'chunks' in cost log, got: {cost_records[0].message}"
+    )
+    assert "embedding API calls" in cost_records[0].message, (
+        f"expected 'embedding API calls' in cost log, got: {cost_records[0].message}"
+    )
 
 
 def test_real_ingestion_is_grounded(

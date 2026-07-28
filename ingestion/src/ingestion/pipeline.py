@@ -1,5 +1,6 @@
 """Background ingestion pipeline for uploaded documents."""
 
+import logging
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -15,6 +16,20 @@ from core.types.document import DocumentStatus, DocumentType
 from ingestion.models import PendingIngestion
 from ingestion.splitting import recursive_fixed_size_split
 from retrieval_qa.chunking import chunker_registry, get_chunker_class
+
+logger = logging.getLogger(__name__)
+
+# Per-model cost in USD per 1M input tokens (source: OpenAI pricing page).
+_EMBEDDING_MODEL_PRICES: dict[str, float] = {
+    "text-embedding-3-small": 0.02,
+    "text-embedding-3-large": 0.13,
+    "text-embedding-ada-002": 0.02,
+    "text-embedding-004": 0.02,
+}
+
+
+def _get_embedding_cost(model_name: str) -> float:
+    return _EMBEDDING_MODEL_PRICES.get(model_name, 0.02)
 
 
 def _validate_type_metadata(
@@ -75,14 +90,19 @@ def _embed_chunks(
     client: Embedder,
     chunks: Sequence[ChunkRow],
     model_name: str,
-) -> list[tuple[ChunkRow, list[float]]]:
-    """Embed chunk contents and return (chunk, vector) pairs.
+) -> tuple[list[tuple[ChunkRow, list[float]]], int]:
+    """Embed chunk contents and return (chunk, vector) pairs and API call count.
 
     Batches chunks by cumulative token count to stay within the
     embedding API's per-request token limit (OpenAI enforces 300k).
+
+    Returns:
+        A tuple of (results, api_calls) where ``results`` is a list of
+        (chunk, vector) pairs and ``api_calls`` is the number of API
+        calls made.
     """
     if not chunks:
-        return []
+        return [], 0
 
     batches: list[list[ChunkRow]] = [[]]
     batch_tokens: list[int] = [0]
@@ -110,7 +130,7 @@ def _embed_chunks(
 
         result.extend(zip(batch_chunks, vectors, strict=True))
 
-    return result
+    return result, len(batches)
 
 
 def _sanitize_text(text: str) -> str:
@@ -196,7 +216,7 @@ def run_ingestion(
         session.flush()
 
         # ── Phase 3: Embed only child chunks ──
-        embedded = _embed_chunks(session, embeddings_client, child_rows, model_name)
+        embedded, api_calls = _embed_chunks(session, embeddings_client, child_rows, model_name)
         for chunk, vector in embedded:
             session.add(
                 Embedding(
@@ -212,6 +232,21 @@ def run_ingestion(
         raise
     except Exception as exc:
         raise IngestionError(f"Unexpected ingestion failure: {exc}") from exc
+
+    total_chunks = len(parent_rows) + len(child_rows)
+    total_tokens = sum(c.token_count for c in child_rows)
+    cost_per_1m = _get_embedding_cost(model_name)
+    estimated_cost = total_tokens / 1_000_000 * cost_per_1m
+    logger.info(
+        "Ingestion complete for %s: %d chunks (%d parents + %d children), "
+        "%d embedding API calls, ~$%.4f estimated cost",
+        pending.title,
+        total_chunks,
+        len(parent_rows),
+        len(child_rows),
+        api_calls,
+        estimated_cost,
+    )
 
 
 __all__ = ["run_ingestion"]
