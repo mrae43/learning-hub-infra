@@ -1,0 +1,256 @@
+queries:
+  # ── DDIA Excerpts (book) ──────────────────────────────────────────────
+  - query: What is leader-based replication in distributed databases?
+    stratum: concept_lookup
+    expected_signature: leader-based replication
+    source_document: eval_corpus/books/ddia-excerpts.md
+
+  - query: What does the ACID acronym stand for in database transactions?
+    stratum: concept_lookup
+    expected_signature: Atomicity, Consistency, Isolation, and Durability
+    source_document: eval_corpus/books/ddia-excerpts.md
+
+  - query: What is the name of the programming model for distributed large-scale data processing described in the chapter?
+    stratum: exact_match
+    expected_signature: MapReduce
+    source_document: eval_corpus/books/ddia-excerpts.md
+
+  - query: What formula computes the combined score in Reciprocal Rank Fusion for hybrid search?
+    stratum: exact_match
+    expected_signature: RRF_score
+    source_document: eval_corpus/synthetic/rag-system-reference.md
+
+  - query: Why can synchronous replication block a write from completing?
+    stratum: context_dependent
+    expected_signature: if the synchronous follower doesn't respond, the write cannot be processed
+    source_document: eval_corpus/books/ddia-excerpts.md
+
+  - query: What is the advantage of hash-based partitioning over range-based partitioning for distributing keys?
+    stratum: context_dependent
+    expected_signature: distributing keys quite evenly across partitions
+    source_document: eval_corpus/books/ddia-excerpts.md
+
+  - query: Compare how batch processing with MapReduce handles data differently from stream processing with event logs?
+    stratum: multi_hop
+    expected_signature: streams are unbounded
+    source_document: eval_corpus/books/ddia-excerpts.md
+
+  - query: How does the choice of isolation level in transactions affect the trade-off between consistency guarantees and system performance?
+    stratum: multi_hop
+    expected_signature: Serializable isolation is the strongest level
+    source_document: eval_corpus/books/ddia-excerpts.md
+
+  # ── Deep Learning Concepts (book) ─────────────────────────────────────
+  - query: What is backpropagation and how does it compute gradients?
+    stratum: concept_lookup
+    expected_signature: applying the chain rule from calculus to propagate error signals backward
+    source_document: eval_corpus/books/deep-learning-concepts.md
+
+  - query: What is the ReLU activation function in neural networks?
+    stratum: concept_lookup
+    expected_signature: f(x) = max(0, x)
+    source_document: eval_corpus/books/deep-learning-concepts.md
+
+  - query: What is dropout regularization and how does it prevent overfitting?
+    stratum: concept_lookup
+    expected_signature: randomly selected neurons are omitted during training
+    source_document: eval_corpus/books/deep-learning-concepts.md
+
+  - query: What loss function is the standard choice for classification tasks?
+    stratum: exact_match
+    expected_signature: cross-entropy loss
+    source_document: eval_corpus/books/deep-learning-concepts.md
+
+  - query: What does the acronym LSTM stand for in recurrent neural network architectures?
+    stratum: exact_match
+    expected_signature: Long Short-Term Memory
+    source_document: eval_corpus/books/deep-learning-concepts.md
+
+  - query: Why do standard RNNs struggle to learn long-range dependencies in sequential data?
+    stratum: context_dependent
+    expected_signature: gradients tend to either vanish or explode
+    source_document: eval_corpus/books/deep-learning-concepts.md
+
+  - query: How do residual connections in ResNet enable training of very deep neural networks?
+    stratum: context_dependent
+    expected_signature: skip connections (residual connections) that allow gradients to flow directly
+    source_document: eval_corpus/books/deep-learning-concepts.md
+
+  - query: Compare how CNNs use convolutions for spatial data with how Transformers use self-attention for sequences.
+    stratum: multi_hop
+    expected_signature: The Transformer architecture is built entirely on self-attention
+    source_document: eval_corpus/books/deep-learning-concepts.md
+
+  - query: How does multi-head attention allow Transformers to capture different types of relationships in the input?
+    stratum: multi_hop
+    expected_signature: attend to information from different representation subspaces at different positions
+    source_document: eval_corpus/books/deep-learning-concepts.md
+
+  # ── FlashAttention (paper) ────────────────────────────────────────────
+  - query: What is the main idea behind the FlashAttention algorithm?
+    stratum: concept_lookup
+    expected_signature: tile the attention computation
+    source_document: eval_corpus/papers/flash-attention.md
+
+  - query: What are the key components of the GPU memory hierarchy relevant to FlashAttention?
+    stratum: concept_lookup
+    expected_signature: HBM to fast SRAM
+    source_document: eval_corpus/papers/flash-attention.md
+
+  - query: What does HBM stand for in the context of GPU memory architecture?
+    stratum: exact_match
+    expected_signature: high-bandwidth memory
+    source_document: eval_corpus/papers/flash-attention.md
+
+  - query: What does SRAM stand for and what role does it play in the GPU memory hierarchy?
+    stratum: exact_match
+    expected_signature: shared memory
+    source_document: eval_corpus/papers/flash-attention.md
+
+  - query: Why does FlashAttention recompute the attention scores during the backward pass instead of storing them?
+    stratum: context_dependent
+    expected_signature: trades off additional FLOPs for reduced memory reads/writes
+    source_document: eval_corpus/papers/flash-attention.md
+
+  - query: How does Block-Sparse FlashAttention reduce computation for very long sequences?
+    stratum: context_dependent
+    expected_signature: block-sparse mask to skip computation and memory access for zero blocks
+    source_document: eval_corpus/papers/flash-attention.md
+
+  - query: How does the tiling strategy in FlashAttention exploit the GPU memory hierarchy to improve performance?
+    stratum: multi_hop
+    expected_signature: loading blocks of data from slow HBM to fast SRAM
+    source_document: eval_corpus/papers/flash-attention.md
+
+  - query: Compare how standard attention materializes the attention matrix versus how FlashAttention avoids doing so.
+    stratum: multi_hop
+    expected_signature: standard attention implementation materializes the N x N attention matrix
+    source_document: eval_corpus/papers/flash-attention.md
+
+  # ── vLLM PagedAttention (paper) ───────────────────────────────────────
+  - query: What is PagedAttention and how does it manage the KV cache?
+    stratum: concept_lookup
+    expected_signature: manages the KV cache in fixed-size blocks
+    source_document: eval_corpus/papers/vllm-paged-attention.md
+
+  - query: What is iteration-level scheduling in the vLLM serving system?
+    stratum: concept_lookup
+    expected_signature: decides which sequences to process at each iteration
+    source_document: eval_corpus/papers/vllm-paged-attention.md
+
+  - query: What mechanism in vLLM allows efficient memory sharing across sequences with common prefixes?
+    stratum: exact_match
+    expected_signature: copy-on-write
+    source_document: eval_corpus/papers/vllm-paged-attention.md
+
+  - query: What data structure maps logical KV cache blocks to physical memory locations in vLLM?
+    stratum: exact_match
+    expected_signature: block table
+    source_document: eval_corpus/papers/vllm-paged-attention.md
+
+  - query: How does PagedAttention eliminate internal memory fragmentation that affects standard KV cache management?
+    stratum: context_dependent
+    expected_signature: allocating blocks on demand, only when tokens are generated
+    source_document: eval_corpus/papers/vllm-paged-attention.md
+
+  - query: How does the memory-aware scheduler in vLLM prevent out-of-memory errors?
+    stratum: context_dependent
+    expected_signature: tracks available physical blocks and only admits sequences when sufficient physical blocks are available
+    source_document: eval_corpus/papers/vllm-paged-attention.md
+
+  - query: How does the block table abstraction in PagedAttention draw inspiration from operating system memory management?
+    stratum: multi_hop
+    expected_signature: analogous to how virtual memory pages map to physical memory frames
+    source_document: eval_corpus/papers/vllm-paged-attention.md
+
+  - query: Compare how PagedAttention enables memory sharing across sequences versus the standard approach to KV cache management.
+    stratum: multi_hop
+    expected_signature: memory sharing across sequences
+    source_document: eval_corpus/papers/vllm-paged-attention.md
+
+  # ── RAG System Reference (synthetic) ──────────────────────────────────
+  - query: What is hybrid search in retrieval-augmented generation?
+    stratum: concept_lookup
+    expected_signature: Hybrid search combines dense
+    source_document: eval_corpus/synthetic/rag-system-reference.md
+
+  - query: What is parent-child chunking and how does it improve retrieval?
+    stratum: concept_lookup
+    expected_signature: child chunks (~512 tokens) are embedded
+    source_document: eval_corpus/synthetic/rag-system-reference.md
+
+  - query: What does BM25 stand for and what type of retrieval does it represent?
+    stratum: exact_match
+    expected_signature: BM25
+    source_document: eval_corpus/synthetic/rag-system-reference.md
+
+  - query: What evaluation metric measures the proportion of relevant documents retrieved in the top-k results?
+    stratum: exact_match
+    expected_signature: Recall@k
+    source_document: eval_corpus/synthetic/rag-system-reference.md
+
+  - query: Why is a cross-encoder reranker preferred over simply using the top results from hybrid search?
+    stratum: context_dependent
+    expected_signature: cross-encoders process query-passage pairs jointly
+    source_document: eval_corpus/synthetic/rag-system-reference.md
+
+  - query: How do document-type chunkers exploit document structure differently from generic text splitters?
+    stratum: context_dependent
+    expected_signature: exploit document structure
+    source_document: eval_corpus/synthetic/rag-system-reference.md
+
+  - query: How does content-signature labeling make eval queries invariant to chunk boundary changes?
+    stratum: multi_hop
+    expected_signature: distinctive substring of their text
+    source_document: eval_corpus/synthetic/rag-system-reference.md
+
+  - query: How do the different strata in the eval query taxonomy target different failure modes in retrieval?
+    stratum: multi_hop
+    expected_signature: strata for systematic evaluation
+    source_document: eval_corpus/synthetic/rag-system-reference.md
+
+  - query: How do hybrid search and reranking work together to provide both recall and precision in a RAG pipeline?
+    stratum: multi_hop
+    expected_signature: top-K candidates from hybrid search (typically 20-50) are reranked
+    source_document: eval_corpus/synthetic/rag-system-reference.md
+
+  # ── SOLID Principles Reference (synthetic) ────────────────────────────
+  - query: What is the Single Responsibility Principle in object-oriented design?
+    stratum: concept_lookup
+    expected_signature: reason to change
+    source_document: eval_corpus/synthetic/solid-principles-reference.md
+
+  - query: What is the Dependency Inversion Principle and how does it affect module design?
+    stratum: concept_lookup
+    expected_signature: depend on abstractions
+    source_document: eval_corpus/synthetic/solid-principles-reference.md
+
+  - query: What does OCP stand for in the SOLID principles acronym?
+    stratum: exact_match
+    expected_signature: Open/Closed Principle
+    source_document: eval_corpus/synthetic/solid-principles-reference.md
+
+  - query: What does ISP stand for and what problem does it address?
+    stratum: exact_match
+    expected_signature: Interface Segregation Principle
+    source_document: eval_corpus/synthetic/solid-principles-reference.md
+
+  - query: How does the Open/Closed Principle apply when designing a Python monorepo with abstract base classes?
+    stratum: context_dependent
+    expected_signature: Define abstract interfaces in a shared package
+    source_document: eval_corpus/synthetic/solid-principles-reference.md
+
+  - query: What is a god class and why is it considered an anti-pattern under the Single Responsibility Principle?
+    stratum: context_dependent
+    expected_signature: knows too much or does too much
+    source_document: eval_corpus/synthetic/solid-principles-reference.md
+
+  - query: Compare how SRP and ISP both address class complexity, but at different levels of granularity?
+    stratum: multi_hop
+    expected_signature: should not be forced to depend on interfaces they do not use
+    source_document: eval_corpus/synthetic/solid-principles-reference.md
+
+  - query: How do the Open-Closed Principle and Dependency Inversion Principle together enable a pluggable architecture?
+    stratum: multi_hop
+    expected_signature: Dependencies should be injected via constructors
+    source_document: eval_corpus/synthetic/solid-principles-reference.md
