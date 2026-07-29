@@ -218,15 +218,15 @@ def test_real_ingestion_is_grounded(
         top_k=settings.query_top_k,
     )
 
-    passages = retrieve_relevant_chunks(
+    result = retrieve_relevant_chunks(
         query_vector=query_vector,
         session=test_session,
         config=config,
         query_text=query_text,
     )
 
-    assert passages, f"expected at least one retrieved chunk for query: {query_text!r}"
-    passage_texts = [p.text for p in passages]
+    assert result.fused, f"expected at least one retrieved chunk for query: {query_text!r}"
+    passage_texts = [p.text for p in result.fused]
     assert any(expected_substring in text for text in passage_texts), (
         f"expected substring {expected_substring!r} not found in passages. "
         f"Retrieved: {[t[:100] for t in passage_texts]}"

@@ -17,6 +17,7 @@ from fastapi.testclient import TestClient
 from api.dependencies import get_completion_provider, get_embedder, get_reranker
 from api.server import create_app
 from core.clients import InMemoryEmbedder, MockCompletionProvider, NoopReranker
+from core.types.responses import RetrievalResult, ScoredChunk
 
 IngestADocument = Callable[[str], str]
 
@@ -41,14 +42,14 @@ def patched_empty_retrieval(monkeypatch: pytest.MonkeyPatch) -> None:
     """Patch ``retrieve_relevant_chunks`` to return an empty list (not-grounded)."""
     monkeypatch.setattr(
         "api.controllers.qa_controller.retrieve_relevant_chunks",
-        lambda **kwargs: [],
+        lambda **kwargs: RetrievalResult(dense=[], sparse=[], fused=[]),
     )
 
 
 @pytest.fixture
 def patched_retrieve_chunks(
     monkeypatch: pytest.MonkeyPatch,
-) -> Callable[[Sequence[object]], None]:
+) -> Callable[[Sequence[ScoredChunk]], None]:
     """Return a factory that patches retrieval with the given chunks.
 
     Usage in a test::
@@ -57,10 +58,10 @@ def patched_retrieve_chunks(
             patched_retrieve_chunks([CitedPassage(chunk_id=uuid4(), text="...")])
     """
 
-    def _factory(chunks: Sequence[object]) -> None:
+    def _factory(chunks: Sequence[ScoredChunk]) -> None:
         monkeypatch.setattr(
             "api.controllers.qa_controller.retrieve_relevant_chunks",
-            lambda **kwargs: chunks,
+            lambda **kwargs: RetrievalResult(dense=[], sparse=[], fused=list(chunks)),
         )
 
     return _factory

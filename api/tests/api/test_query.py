@@ -26,12 +26,12 @@ from api.tests.conftest import (
 )
 from core.database.schema import Chunk
 from core.exceptions import UpstreamBadResponse, UpstreamUnavailable
-from core.types.responses import CitedPassage
+from core.types.responses import ScoredChunk
 
 
-def _fake_chunk(*, text: str = "chunk text") -> CitedPassage:
-    """Build a CitedPassage chunk for test fixtures."""
-    return CitedPassage(chunk_id=uuid.uuid4(), text=text)
+def _fake_chunk(*, text: str = "chunk text") -> ScoredChunk:
+    """Build a ScoredChunk for test fixtures."""
+    return ScoredChunk(chunk_id=uuid.uuid4(), text=text, score=0.5)
 
 
 # ============================================================
@@ -101,7 +101,7 @@ def test_query_embeddings_unavailable_returns_503(client: TestClient) -> None:
 
 
 def test_query_inference_bad_response_returns_502(
-    client: TestClient, patched_retrieve_chunks: Callable[[Sequence[object]], None]
+    client: TestClient, patched_retrieve_chunks: Callable[[Sequence[ScoredChunk]], None]
 ) -> None:
     """A mocked inference provider returning a bad response maps to 502."""
 
@@ -122,7 +122,7 @@ def test_query_inference_bad_response_returns_502(
 
 
 def test_query_inference_unavailable_returns_503(
-    client: TestClient, patched_retrieve_chunks: Callable[[Sequence[object]], None]
+    client: TestClient, patched_retrieve_chunks: Callable[[Sequence[ScoredChunk]], None]
 ) -> None:
     """A mocked inference provider that's unreachable/timeout maps to 503."""
 
@@ -176,7 +176,7 @@ def test_query_response_has_exactly_three_fields(
 
 
 def test_query_grounds_with_mocked_retrieval(
-    client: TestClient, patched_retrieve_chunks: Callable[[Sequence[object]], None]
+    client: TestClient, patched_retrieve_chunks: Callable[[Sequence[ScoredChunk]], None]
 ) -> None:
     """The route glue produces grounded=True and cited_passages from the retrieved chunks."""
     set_dependency_override(client, get_completion_provider, _default_fake_llm_provider)

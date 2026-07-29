@@ -51,7 +51,7 @@ from sqlalchemy.orm import Session
 
 from core.clients.reranker_client import Reranker
 from core.exceptions import RerankerRateLimitError, UpstreamUnavailable
-from core.types.responses import CitedPassage
+from core.types.responses import RetrievalResult, ScoredChunk
 from core.types.retrieval_config import RetrievalConfig
 
 logger = logging.getLogger(__name__)
@@ -65,8 +65,9 @@ _RERANK_CANDIDATE_COUNT = 20
 _DENSE_SQL = text(
     """
     SELECT
-        chunks.chunk_id AS chunk_id,
-        chunks.content  AS text
+        chunks.chunk_id          AS chunk_id,
+        chunks.content           AS text,
+        chunks.parent_chunk_id   AS parent_chunk_id
     FROM embeddings
     JOIN chunks  ON chunks.chunk_id  = embeddings.chunk_id
     JOIN documents ON documents.document_id = chunks.document_id
@@ -80,8 +81,9 @@ _DENSE_SQL = text(
 _SPARSE_SQL = text(
     """
     SELECT
-        chunks.chunk_id AS chunk_id,
-        chunks.content  AS text,
+        chunks.chunk_id          AS chunk_id,
+        chunks.content           AS text,
+        chunks.parent_chunk_id   AS parent_chunk_id,
         ts_rank(
             to_tsvector('english', chunks.content),
             websearch_to_tsquery('english', :query_text)
@@ -99,7 +101,8 @@ _SPARSE_SQL = text(
 _PARENT_SWAP_SQL = text(
     """
     SELECT
-        children.chunk_id       AS child_chunk_id,
+        children.chunk_id                      AS child_chunk_id,
+        parents.parent_chunk_id                AS parent_parent_chunk_id,
         COALESCE(parents.chunk_id, children.chunk_id) AS chunk_id,
         COALESCE(parents.content, children.content)   AS text
     FROM chunks children
@@ -114,8 +117,8 @@ def _dense_retrieve(
     query_vector: list[float],
     config: RetrievalConfig,
     limit: int | None = None,
-) -> OrderedDict[UUID, float]:
-    """Run dense (pgvector cosine) search and return chunk_id -> RRF score."""
+) -> list[ScoredChunk]:
+    """Run dense (pgvector cosine) search and return ScoredChunk list."""
     top_k = limit if limit is not None else config.top_k
     result = session.execute(
         _DENSE_SQL,
@@ -125,11 +128,17 @@ def _dense_retrieve(
             "top_k": top_k,
         },
     )
-    scored: OrderedDict[UUID, float] = OrderedDict()
+    chunks: list[ScoredChunk] = []
     for rank, row in enumerate(result.fetchall(), 1):
-        chunk_id = row._mapping["chunk_id"]
-        scored[chunk_id] = 1.0 / (_RRF_K + rank)
-    return scored
+        chunks.append(
+            ScoredChunk(
+                chunk_id=row._mapping["chunk_id"],
+                text=row._mapping["text"],
+                score=1.0 / (_RRF_K + rank),
+                parent_chunk_id=row._mapping.get("parent_chunk_id"),
+            )
+        )
+    return chunks
 
 
 def _sparse_retrieve(
@@ -137,8 +146,8 @@ def _sparse_retrieve(
     query_text: str,
     config: RetrievalConfig,
     limit: int | None = None,
-) -> OrderedDict[UUID, float]:
-    """Run sparse (tsvector ts_rank) search and return chunk_id -> RRF score."""
+) -> list[ScoredChunk]:
+    """Run sparse (tsvector ts_rank) search and return ScoredChunk list."""
     top_k = limit if limit is not None else config.top_k
     result = session.execute(
         _SPARSE_SQL,
@@ -147,11 +156,17 @@ def _sparse_retrieve(
             "top_k": top_k,
         },
     )
-    scored: OrderedDict[UUID, float] = OrderedDict()
+    chunks: list[ScoredChunk] = []
     for rank, row in enumerate(result.fetchall(), 1):
-        chunk_id = row._mapping["chunk_id"]
-        scored[chunk_id] = 1.0 / (_RRF_K + rank)
-    return scored
+        chunks.append(
+            ScoredChunk(
+                chunk_id=row._mapping["chunk_id"],
+                text=row._mapping["text"],
+                score=1.0 / (_RRF_K + rank),
+                parent_chunk_id=row._mapping.get("parent_chunk_id"),
+            )
+        )
+    return chunks
 
 
 def _rrf_fuse(
@@ -188,7 +203,7 @@ def _rrf_fuse(
 def _parent_swap(
     session: Session,
     scored_chunks: OrderedDict[UUID, float],
-) -> list[CitedPassage]:
+) -> list[ScoredChunk]:
     """Swap matched child chunks to their parents and deduplicate.
 
     For each chunk in scored_chunks (ordered by descending RRF score),
@@ -204,7 +219,7 @@ def _parent_swap(
         scored_chunks: chunk_id -> RRF score, ordered descending by score.
 
     Returns:
-        A deduplicated list of CitedPassage instances preserving RRF rank order.
+        A deduplicated list of ScoredChunk instances preserving RRF rank order.
     """
     if not scored_chunks:
         return []
@@ -215,29 +230,35 @@ def _parent_swap(
         {"chunk_ids": chunk_ids},
     )
 
-    # Build child -> (parent_chunk_id, parent_text) map
-    child_to_parent: dict[UUID, tuple[UUID, str]] = {}
+    child_to_parent: dict[UUID, tuple[UUID, str, UUID | None]] = {}
     for row in result.fetchall():
         child_id = row._mapping["child_chunk_id"]
         parent_id = row._mapping["chunk_id"]
         parent_text = row._mapping["text"]
-        child_to_parent[child_id] = (parent_id, parent_text)
+        parent_parent_chunk_id = row._mapping["parent_parent_chunk_id"]
+        child_to_parent[child_id] = (parent_id, parent_text, parent_parent_chunk_id)
 
-    # Walk the scored chunks in RRF rank order, deduplicating by parent
     seen_parents: set[UUID] = set()
-    passages: list[CitedPassage] = []
+    passages: list[ScoredChunk] = []
 
     for child_chunk_id in scored_chunks:
         parent_info = child_to_parent.get(child_chunk_id)
         if parent_info is None:
             continue
-        parent_id, parent_text = parent_info
+        parent_id, parent_text, parent_parent_chunk_id = parent_info
 
         if parent_id in seen_parents:
             continue
         seen_parents.add(parent_id)
 
-        passages.append(CitedPassage(chunk_id=parent_id, text=parent_text))
+        passages.append(
+            ScoredChunk(
+                chunk_id=parent_id,
+                text=parent_text,
+                score=scored_chunks[child_chunk_id],
+                parent_chunk_id=parent_parent_chunk_id,
+            )
+        )
 
     return passages
 
@@ -249,7 +270,7 @@ def retrieve_relevant_chunks(
     config: RetrievalConfig,
     query_text: str | None = None,
     reranker: Reranker | None = None,
-) -> list[CitedPassage]:
+) -> RetrievalResult:
     """Retrieve the top-k closest chunks for ``query_vector`` by cosine distance.
 
     Issues ``SET LOCAL hnsw.ef_search`` inside the caller's transaction and
@@ -280,9 +301,10 @@ def retrieve_relevant_chunks(
             directly.
 
     Returns:
-        Chunks in descending relevance order. An empty list signals the
-        not-found case (empty corpus or no relevant chunks), which is a valid
-        response per ADR-0009 — never raised as an exception.
+        A ``RetrievalResult`` with ``.fused`` holding the final ranked
+        chunks. An empty ``.fused`` list signals the not-found case (empty
+        corpus or no relevant chunks), which is a valid response per
+        ADR-0009 — never raised as an exception.
 
     Raises:
         UpstreamUnavailable: The database is unreachable (maps to 503 per
@@ -298,43 +320,33 @@ def retrieve_relevant_chunks(
         retrieval_limit = _RERANK_CANDIDATE_COUNT if should_rerank else config.top_k
 
         if config.hybrid_search and query_text:
-            dense_scored = _dense_retrieve(session, query_vector, config, limit=retrieval_limit)
-            sparse_scored = _sparse_retrieve(session, query_text, config, limit=retrieval_limit)
-            fused = _rrf_fuse(dense_scored, sparse_scored, retrieval_limit)
-            passages = _parent_swap(session, fused)
+            dense_chunks = _dense_retrieve(session, query_vector, config, limit=retrieval_limit)
+            sparse_chunks = _sparse_retrieve(session, query_text, config, limit=retrieval_limit)
+            dense_scored = OrderedDict((c.chunk_id, c.score) for c in dense_chunks)
+            sparse_scored = OrderedDict((c.chunk_id, c.score) for c in sparse_chunks)
+            fused_scores = _rrf_fuse(dense_scored, sparse_scored, retrieval_limit)
+            fused_chunks = _parent_swap(session, fused_scores)
         else:
             # Dense-only path (hybrid_search=False or no query_text provided)
-            rows = session.execute(
-                _DENSE_SQL,
-                {
-                    "model_name": config.model_name,
-                    "query_vector": str(query_vector),
-                    "top_k": retrieval_limit,
-                },
-            )
-            passages = [
-                CitedPassage(
-                    chunk_id=row._mapping["chunk_id"],
-                    text=row._mapping["text"],
-                )
-                for row in rows.fetchall()
-            ]
+            dense_chunks = _dense_retrieve(session, query_vector, config, limit=retrieval_limit)
+            sparse_chunks = []
+            fused_chunks = dense_chunks[:]
 
-        if should_rerank and passages and reranker is not None:
+        if should_rerank and fused_chunks and reranker is not None:
             try:
-                passages = reranker.rerank(
+                fused_chunks = reranker.rerank(
                     query=query_text or "",
-                    passages=passages,
+                    passages=fused_chunks,
                     top_k=config.top_k,
                 )
             except RerankerRateLimitError as exc:
                 logger.warning("Reranker rate-limited, falling back to RRF top-k: %s", exc)
-                passages = passages[: config.top_k]
+                fused_chunks = fused_chunks[: config.top_k]
 
-        return passages
+        return RetrievalResult(dense=dense_chunks, sparse=sparse_chunks, fused=fused_chunks)
 
     except (OperationalError, InterfaceError) as exc:
         raise UpstreamUnavailable(f"Database unreachable: {exc}") from exc
 
 
-__all__ = ["CitedPassage", "retrieve_relevant_chunks"]
+__all__ = ["RetrievalResult", "ScoredChunk", "retrieve_relevant_chunks"]

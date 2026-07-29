@@ -9,7 +9,7 @@ from core.clients.reranker_client import NoopReranker
 from core.database.schema import Chunk, Document, Embedding
 from core.exceptions import RerankerRateLimitError
 from core.types.document import DocumentStatus, DocumentType
-from core.types.responses import CitedPassage
+from core.types.responses import CitedPassage, ScoredChunk
 from core.types.retrieval_config import RetrievalConfig
 from retrieval_qa.retrieval.query import retrieve_relevant_chunks
 
@@ -124,10 +124,10 @@ def test_retrieve_returns_closest_chunks_by_cosine(test_session: Session) -> Non
         config=RetrievalConfig(model_name="text-embedding-3-small", ef_search=40, top_k=2),
     )
 
-    assert len(results) == 2
-    assert results[0].text == "near chunk content"
+    assert len(results.fused) == 2
+    assert results.fused[0].text == "near chunk content"
     # Closer-first ordering by cosine distance.
-    assert results[0].chunk_id != results[1].chunk_id
+    assert results.fused[0].chunk_id != results.fused[1].chunk_id
 
 
 def test_retrieve_returns_full_chunk_text_not_truncated(test_session: Session) -> None:
@@ -147,8 +147,8 @@ def test_retrieve_returns_full_chunk_text_not_truncated(test_session: Session) -
         config=RetrievalConfig(model_name="text-embedding-3-small", ef_search=40, top_k=1),
     )
 
-    assert len(results) == 1
-    assert results[0].text == long_text.strip()
+    assert len(results.fused) == 1
+    assert results.fused[0].text == long_text.strip()
 
 
 def test_retrieve_respects_top_k_limit(test_session: Session) -> None:
@@ -167,7 +167,7 @@ def test_retrieve_respects_top_k_limit(test_session: Session) -> None:
         config=RetrievalConfig(model_name="text-embedding-3-small", ef_search=40, top_k=3),
     )
 
-    assert len(results) == 3
+    assert len(results.fused) == 3
 
 
 def test_retrieve_only_returns_chunks_from_ready_documents(
@@ -195,8 +195,8 @@ def test_retrieve_only_returns_chunks_from_ready_documents(
         config=RetrievalConfig(model_name="text-embedding-3-small", ef_search=40, top_k=5),
     )
 
-    assert len(results) == 1
-    assert results[0].text == "visible chunk"
+    assert len(results.fused) == 1
+    assert results.fused[0].text == "visible chunk"
 
 
 def test_retrieve_scopes_embeddings_to_model_name(test_session: Session) -> None:
@@ -214,7 +214,7 @@ def test_retrieve_scopes_embeddings_to_model_name(test_session: Session) -> None
         config=RetrievalConfig(model_name="some-other-model", ef_search=40, top_k=5),
     )
 
-    assert results == []
+    assert results.fused == []
 
 
 def test_retrieve_empty_corpus_returns_empty_list(test_session: Session) -> None:
@@ -224,7 +224,7 @@ def test_retrieve_empty_corpus_returns_empty_list(test_session: Session) -> None
         session=test_session,
         config=RetrievalConfig(model_name="text-embedding-3-small", ef_search=40, top_k=5),
     )
-    assert results == []
+    assert results.fused == []
 
 
 def test_cited_passage_is_pydantic_model_with_chunk_id_and_text() -> None:
@@ -343,8 +343,8 @@ def test_hybrid_dense_only_when_no_query_text_falls_back_to_dense(
         query_text=None,
     )
 
-    assert len(results) == 1
-    assert results[0].text == "dense match"
+    assert len(results.fused) == 1
+    assert results.fused[0].text == "dense match"
 
 
 def test_hybrid_search_false_falls_back_to_dense_only(
@@ -371,8 +371,8 @@ def test_hybrid_search_false_falls_back_to_dense_only(
         query_text="some query that would match via sparse if enabled",
     )
 
-    assert len(results) == 1
-    assert results[0].text == "dense only"
+    assert len(results.fused) == 1
+    assert results.fused[0].text == "dense only"
 
 
 def test_sparse_only_matches_exact_keyword_not_in_embedding_space(
@@ -403,8 +403,8 @@ def test_sparse_only_matches_exact_keyword_not_in_embedding_space(
         query_text="checkout orphan",
     )
 
-    assert len(results) >= 1
-    texts = [r.text for r in results]
+    assert len(results.fused) >= 1
+    texts = [r.text for r in results.fused]
     assert any("checkout" in t for t in texts)
 
 
@@ -427,8 +427,8 @@ def test_sparse_path_graceful_degradation_when_no_text_matches(
         query_text="xyznonexistentkeyword12345",
     )
 
-    assert len(results) == 1
-    assert results[0].text == "dense result text"
+    assert len(results.fused) == 1
+    assert results.fused[0].text == "dense result text"
 
 
 def test_sparse_only_finds_result_when_dense_returns_empty(
@@ -453,8 +453,8 @@ def test_sparse_only_finds_result_when_dense_returns_empty(
     )
 
     # Sparse should find the keyword even though the dense vector is far
-    assert len(results) >= 1
-    assert any("zxcvbnm" in r.text for r in results)
+    assert len(results.fused) >= 1
+    assert any("zxcvbnm" in r.text for r in results.fused)
 
 
 def test_parent_swap_replaces_child_content_with_parent_content(
@@ -480,9 +480,9 @@ def test_parent_swap_replaces_child_content_with_parent_content(
         query_text="vector databases embeddings",
     )
 
-    assert len(results) == 1
-    assert results[0].text == parent_text
-    assert results[0].chunk_id == parent.chunk_id
+    assert len(results.fused) == 1
+    assert results.fused[0].text == parent_text
+    assert results.fused[0].chunk_id == parent.chunk_id
 
 
 def test_parent_swap_deduplicates_multiple_children_of_same_parent(
@@ -511,9 +511,9 @@ def test_parent_swap_deduplicates_multiple_children_of_same_parent(
         query_text="Kubernetes pods",
     )
 
-    assert len(results) == 1
-    assert results[0].chunk_id == parent.chunk_id
-    assert results[0].text == parent_text
+    assert len(results.fused) == 1
+    assert results.fused[0].chunk_id == parent.chunk_id
+    assert results.fused[0].text == parent_text
 
 
 def test_parent_swap_returns_standalone_chunks_without_parents_as_is(
@@ -538,8 +538,8 @@ def test_parent_swap_returns_standalone_chunks_without_parents_as_is(
         query_text="standalone chunk",
     )
 
-    assert len(results) == 1
-    assert results[0].text == content
+    assert len(results.fused) == 1
+    assert results.fused[0].text == content
 
 
 def test_hybrid_rrf_fusion_combines_dense_and_sparse_without_duplicates(
@@ -564,8 +564,8 @@ def test_hybrid_rrf_fusion_combines_dense_and_sparse_without_duplicates(
         query_text="pgvector",
     )
 
-    assert len(results) == 1
-    assert results[0].text == content
+    assert len(results.fused) == 1
+    assert results.fused[0].text == content
 
 
 def test_hybrid_search_respects_top_k_limit(test_session: Session) -> None:
@@ -586,7 +586,7 @@ def test_hybrid_search_respects_top_k_limit(test_session: Session) -> None:
         query_text="zeta",
     )
 
-    assert len(results) <= 3
+    assert len(results.fused) <= 3
 
 
 def test_hybrid_search_returns_empty_list_when_no_results_from_either_path(
@@ -612,7 +612,7 @@ def test_hybrid_search_returns_empty_list_when_no_results_from_either_path(
         query_text="xyznonexistentkeyword12345",  # sparse: no text match
     )
 
-    assert results == []
+    assert results.fused == []
 
 
 def test_sparse_only_parent_swap_returns_parent_content(
@@ -644,9 +644,9 @@ def test_sparse_only_parent_swap_returns_parent_content(
         query_text="pgvector",
     )
 
-    assert len(results) == 1
-    assert results[0].chunk_id == parent.chunk_id
-    assert results[0].text == parent_text
+    assert len(results.fused) == 1
+    assert results.fused[0].chunk_id == parent.chunk_id
+    assert results.fused[0].text == parent_text
 
 
 # ── Reranker tests ───────────────────────────────────────────────────────────
@@ -675,9 +675,9 @@ def test_reranker_reorders_passages(test_session: Session) -> None:
         reranker=reverse_reranker,
     )
 
-    assert len(results) == 2
-    assert results[0].text == "chunk gamma"
-    assert results[1].text == "chunk beta"
+    assert len(results.fused) == 2
+    assert results.fused[0].text == "chunk gamma"
+    assert results.fused[1].text == "chunk beta"
 
 
 def test_reranker_respects_top_k_when_narrowing(test_session: Session) -> None:
@@ -700,7 +700,7 @@ def test_reranker_respects_top_k_when_narrowing(test_session: Session) -> None:
         reranker=NoopReranker(),
     )
 
-    assert len(results) == 3
+    assert len(results.fused) == 3
 
 
 def test_reranker_disabled_falls_back_to_rrf_top_k_directly(
@@ -736,7 +736,7 @@ def test_reranker_disabled_falls_back_to_rrf_top_k_directly(
     # With reranker=False, we don't enlarge the retrieval limit, so at most
     # top_k=3 results come back from RRF. Even with a reranker instance
     # passed, it is not called.
-    assert len(results) <= 3
+    assert len(results.fused) <= 3
 
 
 def test_rate_limit_fallback_to_rrf_top_k(test_session: Session) -> None:
@@ -761,8 +761,8 @@ def test_rate_limit_fallback_to_rrf_top_k(test_session: Session) -> None:
         reranker=_RateLimitReranker(),
     )
 
-    assert len(results) == 3
-    for result in results:
+    assert len(results.fused) == 3
+    for result in results.fused:
         assert "fallback" in result.text
 
 
@@ -792,7 +792,7 @@ def test_reranker_with_empty_passages_returns_empty(
         reranker=NoopReranker(),
     )
 
-    assert results == []
+    assert results.fused == []
 
 
 # ── Test double rerankers ────────────────────────────────────────────────────
@@ -804,9 +804,9 @@ class _ReverseReranker:
     def rerank(
         self,
         query: str,
-        passages: list[CitedPassage],
+        passages: list[ScoredChunk],
         top_k: int,
-    ) -> list[CitedPassage]:
+    ) -> list[ScoredChunk]:
         return list(reversed(passages))[:top_k]
 
 
@@ -816,7 +816,7 @@ class _RateLimitReranker:
     def rerank(
         self,
         query: str,
-        passages: list[CitedPassage],
+        passages: list[ScoredChunk],
         top_k: int,
-    ) -> list[CitedPassage]:
+    ) -> list[ScoredChunk]:
         raise RerankerRateLimitError("Simulated rate limit.")
