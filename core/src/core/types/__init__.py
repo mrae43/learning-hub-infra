@@ -16,6 +16,8 @@ from core.types.responses import (
     CitedPassage,
     HarnessARequest,
     HarnessAResponse,
+    RetrievalResult,
+    ScoredChunk,
 )
 from core.types.retrieval_config import RetrievalConfig
 
@@ -32,4 +34,6 @@ __all__ = [
     "HarnessAResponse",
     "PaperChunkMetadata",
     "RetrievalConfig",
+    "RetrievalResult",
+    "ScoredChunk",
 ]

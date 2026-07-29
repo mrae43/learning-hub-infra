@@ -24,7 +24,7 @@ from sqlalchemy.orm import Session
 
 from api.prompt import build_messages
 from core.clients import CompletionProvider, Embedder, Reranker
-from core.types.responses import HarnessAResponse
+from core.types.responses import CitedPassage, HarnessAResponse
 from core.types.retrieval_config import RetrievalConfig
 from retrieval_qa.retrieval.query import retrieve_relevant_chunks
 
@@ -67,7 +67,7 @@ def run_query(
     query_vectors = embeddings_client.embed([query])
     query_vector = query_vectors[0]
 
-    chunks = retrieve_relevant_chunks(
+    result = retrieve_relevant_chunks(
         query_vector=query_vector,
         session=session,
         config=config,
@@ -75,13 +75,13 @@ def run_query(
         reranker=reranker,
     )
 
-    messages = build_messages(query, chunks)
+    messages = build_messages(query, result.fused)
     answer = llm_client.chat(messages)
 
     return HarnessAResponse(
         answer=answer,
-        cited_passages=list(chunks),
-        grounded=bool(chunks),
+        cited_passages=[CitedPassage(chunk_id=c.chunk_id, text=c.text) for c in result.fused],
+        grounded=bool(result.fused),
     )
 
 

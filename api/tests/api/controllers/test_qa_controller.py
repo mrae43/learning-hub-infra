@@ -9,7 +9,7 @@ import pytest
 
 from api.controllers.qa_controller import run_query
 from core.exceptions import UpstreamBadResponse, UpstreamUnavailable
-from core.types.responses import CitedPassage, HarnessAResponse
+from core.types.responses import HarnessAResponse, RetrievalResult, ScoredChunk
 from core.types.retrieval_config import RetrievalConfig
 
 
@@ -38,12 +38,12 @@ def _vector(value: float = 0.5) -> list[float]:
 
 
 def test_run_query_grounds_when_retrieval_returns_chunks(
-    patched_retrieve_chunks: Callable[[Sequence[object]], None],
+    patched_retrieve_chunks: Callable[[Sequence[ScoredChunk]], None],
 ) -> None:
     """Relevant chunks yield grounded=True with cited_passages populated."""
     retrieved_chunks = [
-        CitedPassage(chunk_id=uuid4(), text="pgvector supports HNSW indexes."),
-        CitedPassage(chunk_id=uuid4(), text="Cosine distance uses the <=> operator."),
+        ScoredChunk(chunk_id=uuid4(), text="pgvector supports HNSW indexes.", score=0.5),
+        ScoredChunk(chunk_id=uuid4(), text="Cosine distance uses the <=> operator.", score=0.3),
     ]
     patched_retrieve_chunks(retrieved_chunks)
 
@@ -102,9 +102,9 @@ def test_run_query_embeds_query_before_retrieval(monkeypatch: pytest.MonkeyPatch
     captured: dict[str, object] = {}
     embeddings_client = _fake_embeddings_client(_vector(0.7))
 
-    def _capture_retrieve(**kwargs: object) -> list[object]:
+    def _capture_retrieve(**kwargs: object) -> RetrievalResult:
         captured.update(kwargs)
-        return []
+        return RetrievalResult(dense=[], sparse=[], fused=[])
 
     monkeypatch.setattr(
         "api.controllers.qa_controller.retrieve_relevant_chunks",
@@ -164,10 +164,10 @@ def test_run_query_propagates_upstream_bad_response_from_embeddings(
 
 
 def test_run_query_propagates_upstream_unavailable_from_inference(
-    patched_retrieve_chunks: Callable[[Sequence[object]], None],
+    patched_retrieve_chunks: Callable[[Sequence[ScoredChunk]], None],
 ) -> None:
     """Inference client unreachable surfaces UpstreamUnavailable for the route to map to 503."""
-    patched_retrieve_chunks([MagicMock(chunk_id=uuid4(), text="chunk text")])
+    patched_retrieve_chunks([ScoredChunk(chunk_id=uuid4(), text="chunk text", score=0.5)])
 
     with pytest.raises(UpstreamUnavailable):
         run_query(
@@ -183,10 +183,10 @@ def test_run_query_propagates_upstream_unavailable_from_inference(
 
 
 def test_run_query_propagates_upstream_bad_response_from_inference(
-    patched_retrieve_chunks: Callable[[Sequence[object]], None],
+    patched_retrieve_chunks: Callable[[Sequence[ScoredChunk]], None],
 ) -> None:
     """Inference bad response surfaces UpstreamBadResponse for the route to map to 502."""
-    patched_retrieve_chunks([MagicMock(chunk_id=uuid4(), text="chunk text")])
+    patched_retrieve_chunks([ScoredChunk(chunk_id=uuid4(), text="chunk text", score=0.5)])
 
     with pytest.raises(UpstreamBadResponse):
         run_query(
@@ -202,10 +202,10 @@ def test_run_query_propagates_upstream_bad_response_from_inference(
 
 
 def test_run_query_passes_chunks_to_llm_prompt(
-    patched_retrieve_chunks: Callable[[Sequence[object]], None],
+    patched_retrieve_chunks: Callable[[Sequence[ScoredChunk]], None],
 ) -> None:
     """The injected-context prompt embeds referenced chunk text into the user message."""
-    retrieved = [CitedPassage(chunk_id=uuid4(), text="chunk A text")]
+    retrieved = [ScoredChunk(chunk_id=uuid4(), text="chunk A text", score=0.5)]
     patched_retrieve_chunks(retrieved)
 
     llm_client = _fake_llm_client("answer")

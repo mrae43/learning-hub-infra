@@ -2,7 +2,13 @@
 
 from uuid import UUID, uuid4
 
-from core.types.responses import CitedPassage, HarnessARequest, HarnessAResponse
+from core.types.responses import (
+    CitedPassage,
+    HarnessARequest,
+    HarnessAResponse,
+    RetrievalResult,
+    ScoredChunk,
+)
 
 
 def test_harness_a_request_accepts_bare_query_string() -> None:
@@ -83,3 +89,49 @@ def test_harness_a_response_answer_is_required_str_not_nullable() -> None:
     assert answer_field.is_required()
     # The annotation should be plain str, not str | None.
     assert answer_field.annotation is str
+
+
+def test_scored_chunk_has_all_fields() -> None:
+    """ScoredChunk exposes chunk_id, text, score, and parent_chunk_id."""
+    from uuid import UUID
+
+    fields = set(ScoredChunk.model_fields)
+    assert fields == {"chunk_id", "text", "score", "parent_chunk_id"}
+    assert ScoredChunk.model_fields["chunk_id"].annotation is UUID
+    assert ScoredChunk.model_fields["text"].annotation is str
+    assert ScoredChunk.model_fields["score"].annotation is float
+    from typing import get_args, get_origin
+
+    parent = ScoredChunk.model_fields["parent_chunk_id"].annotation
+    origin = get_origin(parent)
+    if origin is not None:
+        args = get_args(parent)
+        assert UUID in args and type(None) in args
+    else:
+        assert parent is UUID
+
+
+def test_scored_chunk_defaults_parent_chunk_id_to_none() -> None:
+    """ScoredChunk.parent_chunk_id defaults to None."""
+    chunk = ScoredChunk(chunk_id=uuid4(), text="text", score=0.5)
+    assert chunk.parent_chunk_id is None
+
+
+def test_retrieval_result_has_dense_sparse_fused() -> None:
+    """RetrievalResult exposes dense, sparse, and fused lists."""
+    fields = set(RetrievalResult.model_fields)
+    assert fields == {"dense", "sparse", "fused"}
+    assert RetrievalResult.model_fields["dense"].annotation == list[ScoredChunk]
+    assert RetrievalResult.model_fields["sparse"].annotation == list[ScoredChunk]
+    assert RetrievalResult.model_fields["fused"].annotation == list[ScoredChunk]
+
+
+def test_retrieval_result_constructs_with_lists() -> None:
+    """RetrievalResult accepts three ScoredChunk lists."""
+    chunk = ScoredChunk(chunk_id=uuid4(), text="test", score=0.5)
+    result = RetrievalResult(dense=[chunk], sparse=[], fused=[chunk])
+    assert len(result.dense) == 1
+    assert len(result.sparse) == 0
+    assert len(result.fused) == 1
+    assert result.fused[0].text == "test"
+    assert result.fused[0].score == 0.5

@@ -115,7 +115,7 @@ def test_recall_at_k_retrieves_expected_passages(
     """
     top_k = Settings().query_top_k
     query_vector = query_vectors[query_data.content_sha256]
-    results = retrieve_relevant_chunks(
+    result = retrieve_relevant_chunks(
         query_vector=query_vector,
         session=eval_session,
         config=RetrievalConfig(
@@ -125,7 +125,7 @@ def test_recall_at_k_retrieves_expected_passages(
         ),
     )
 
-    retrieved_texts = [r.text for r in results]
+    retrieved_texts = [r.text for r in result.fused]
     test_case = LLMTestCase(
         input=query_data.query,
         actual_output="",

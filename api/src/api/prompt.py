@@ -3,7 +3,7 @@
 from collections.abc import Sequence
 
 from core.types.chat import ChatMessage
-from core.types.responses import CitedPassage
+from core.types.responses import ScoredChunk
 
 SYSTEM_PROMPT = (
     "You answer the user's question using only the provided passages. "
@@ -14,7 +14,7 @@ SYSTEM_PROMPT = (
 
 def build_messages(
     query: str,
-    chunks: Sequence[CitedPassage],
+    chunks: Sequence[ScoredChunk],
 ) -> list[ChatMessage]:
     """Assemble the chat-completions message list for the inference call.
 

@@ -10,7 +10,7 @@ import cohere
 
 from core.config.settings import settings
 from core.exceptions import RerankerRateLimitError, UpstreamBadResponse, UpstreamUnavailable
-from core.types.responses import CitedPassage
+from core.types.responses import ScoredChunk
 
 
 @runtime_checkable
@@ -25,9 +25,9 @@ class Reranker(Protocol):
     def rerank(
         self,
         query: str,
-        passages: list[CitedPassage],
+        passages: list[ScoredChunk],
         top_k: int,
-    ) -> list[CitedPassage]:
+    ) -> list[ScoredChunk]:
         """Rerank passages by relevance to the query and return the top-k.
 
         Args:
@@ -76,9 +76,9 @@ class CohereReranker:
     def rerank(
         self,
         query: str,
-        passages: list[CitedPassage],
+        passages: list[ScoredChunk],
         top_k: int,
-    ) -> list[CitedPassage]:
+    ) -> list[ScoredChunk]:
         """Rerank passages via the Cohere Rerank API and return the top-k.
 
         Args:
@@ -122,7 +122,7 @@ class CohereReranker:
                 f"Cohere Rerank API returned unexpected response shape: {exc}"
             ) from exc
 
-        reranked: list[CitedPassage] = []
+        reranked: list[ScoredChunk] = []
         for result in results:
             idx = result.index
             if 0 <= idx < len(passages):
@@ -141,9 +141,9 @@ class NoopReranker:
     def rerank(
         self,
         query: str,
-        passages: list[CitedPassage],
+        passages: list[ScoredChunk],
         top_k: int,
-    ) -> list[CitedPassage]:
+    ) -> list[ScoredChunk]:
         """Return the first top_k passages unchanged.
 
         Args:

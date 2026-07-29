@@ -28,6 +28,39 @@ class CitedPassage(BaseModel):
     text: str
 
 
+class ScoredChunk(BaseModel):
+    """A retrieved chunk with its relevance score.
+
+    ``chunk_id``, ``text`` mirror ``CitedPassage`` so downstream consumers
+    that access ``.chunk_id`` and ``.text`` continue to work. ``score`` is
+    the RRF combined relevance score; ``parent_chunk_id`` is the chunk id
+    of the parent for child chunks, or ``None`` for standalone/parent
+    chunks.
+    """
+
+    chunk_id: UUID
+    text: str
+    score: float
+    parent_chunk_id: UUID | None = None
+
+
+class RetrievalResult(BaseModel):
+    """Result of a retrieval operation preserving pre-fusion candidate depth.
+
+    ``dense``: results from the dense (pgvector) path with their scores.
+    ``sparse``: results from the sparse (tsvector) path with their scores.
+    ``fused``: the final fused/reranked list of ``ScoredChunk`` instances.
+
+    Production callers access ``.fused`` (behaviourally identical to the
+    previous ``list[CitedPassage]``). Test and introspection code can
+    inspect ``.dense`` and ``.sparse`` separately.
+    """
+
+    dense: list[ScoredChunk]
+    sparse: list[ScoredChunk]
+    fused: list[ScoredChunk]
+
+
 class HarnessAResponse(BaseModel):
     """Response body for ``POST /query``.
 

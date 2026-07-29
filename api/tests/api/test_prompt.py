@@ -4,7 +4,7 @@ from uuid import uuid4
 
 from api.prompt import SYSTEM_PROMPT, build_messages
 from core.types.chat import ChatMessage
-from core.types.responses import CitedPassage
+from core.types.responses import ScoredChunk
 
 
 def test_build_messages_includes_system_prompt() -> None:
@@ -17,8 +17,8 @@ def test_build_messages_includes_system_prompt() -> None:
 def test_build_messages_includes_context_when_present() -> None:
     """The user message includes enumerated context when chunks are provided."""
     chunks = [
-        CitedPassage(chunk_id=uuid4(), text="first passage"),
-        CitedPassage(chunk_id=uuid4(), text="second passage"),
+        ScoredChunk(chunk_id=uuid4(), text="first passage", score=0.5),
+        ScoredChunk(chunk_id=uuid4(), text="second passage", score=0.3),
     ]
     messages = build_messages("what is RAG?", chunks)
     user = next(m for m in messages if m.role == "user")
