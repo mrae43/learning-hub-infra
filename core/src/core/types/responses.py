@@ -32,15 +32,21 @@ class ScoredChunk(BaseModel):
     """A retrieved chunk with its relevance score.
 
     ``chunk_id``, ``text`` mirror ``CitedPassage`` so downstream consumers
-    that access ``.chunk_id`` and ``.text`` continue to work. ``score`` is
-    the RRF combined relevance score; ``parent_chunk_id`` is the chunk id
-    of the parent for child chunks, or ``None`` for standalone/parent
-    chunks.
+    that access ``.chunk_id`` and ``.text`` continue to work.
+    ``parent_chunk_id`` is the chunk id of the parent for child chunks, or
+    ``None`` for standalone/parent chunks.
     """
 
     chunk_id: UUID
     text: str
-    score: float
+    score: float = Field(
+        description=(
+            "Relevance score. In ``RetrievalResult.dense`` and "
+            "``RetrievalResult.sparse`` this is the per-path RRF "
+            "contribution (``1 / (_RRF_K + rank)``); in "
+            "``RetrievalResult.fused`` it is the combined RRF score."
+        )
+    )
     parent_chunk_id: UUID | None = None
 
 
