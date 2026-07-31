@@ -43,9 +43,12 @@ When ``RetrievalConfig.reranker`` is True (default, ADR-0016):
 
 import logging
 from collections import OrderedDict
+from collections.abc import Sequence
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import text
+from sqlalchemy.engine import Row
 from sqlalchemy.exc import InterfaceError, OperationalError
 from sqlalchemy.orm import Session
 
@@ -112,6 +115,35 @@ _PARENT_SWAP_SQL = text(
 )
 
 
+def _build_scored_chunks(rows: Sequence[Row[Any]]) -> list[ScoredChunk]:
+    """Convert raw retrieval rows into RRF-scored ScoredChunk instances.
+
+    Each row supplies ``chunk_id``, ``text``, and (optionally)
+    ``parent_chunk_id`` via its mapping. The 1-based reciprocal rank is
+    combined with ``_RRF_K`` to produce the score, matching the weights the
+    RRF fusion step uses so pre-fusion candidate lists align with fused
+    output.
+
+    Args:
+        rows: Rows from a dense or sparse retrieval query, ordered by
+            relevance.
+
+    Returns:
+        ScoredChunk instances preserving row order, scored by rank.
+    """
+    chunks: list[ScoredChunk] = []
+    for rank, row in enumerate(rows, 1):
+        chunks.append(
+            ScoredChunk(
+                chunk_id=row._mapping["chunk_id"],
+                text=row._mapping["text"],
+                score=1.0 / (_RRF_K + rank),
+                parent_chunk_id=row._mapping.get("parent_chunk_id"),
+            )
+        )
+    return chunks
+
+
 def _dense_retrieve(
     session: Session,
     query_vector: list[float],
@@ -128,17 +160,7 @@ def _dense_retrieve(
             "top_k": top_k,
         },
     )
-    chunks: list[ScoredChunk] = []
-    for rank, row in enumerate(result.fetchall(), 1):
-        chunks.append(
-            ScoredChunk(
-                chunk_id=row._mapping["chunk_id"],
-                text=row._mapping["text"],
-                score=1.0 / (_RRF_K + rank),
-                parent_chunk_id=row._mapping.get("parent_chunk_id"),
-            )
-        )
-    return chunks
+    return _build_scored_chunks(result.fetchall())
 
 
 def _sparse_retrieve(
@@ -156,17 +178,7 @@ def _sparse_retrieve(
             "top_k": top_k,
         },
     )
-    chunks: list[ScoredChunk] = []
-    for rank, row in enumerate(result.fetchall(), 1):
-        chunks.append(
-            ScoredChunk(
-                chunk_id=row._mapping["chunk_id"],
-                text=row._mapping["text"],
-                score=1.0 / (_RRF_K + rank),
-                parent_chunk_id=row._mapping.get("parent_chunk_id"),
-            )
-        )
-    return chunks
+    return _build_scored_chunks(result.fetchall())
 
 
 def _rrf_fuse(

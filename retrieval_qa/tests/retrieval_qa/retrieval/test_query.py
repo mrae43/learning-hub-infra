@@ -3,6 +3,7 @@
 from unittest.mock import MagicMock
 
 import pytest
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from core.clients.reranker_client import NoopReranker
@@ -11,7 +12,7 @@ from core.exceptions import RerankerRateLimitError
 from core.types.document import DocumentStatus, DocumentType
 from core.types.responses import CitedPassage, ScoredChunk
 from core.types.retrieval_config import RetrievalConfig
-from retrieval_qa.retrieval.query import retrieve_relevant_chunks
+from retrieval_qa.retrieval.query import _build_scored_chunks, retrieve_relevant_chunks
 
 
 def _seed_paper(
@@ -319,6 +320,45 @@ def test_retrieve_wraps_db_connection_error_as_upstream_unavailable() -> None:
             session=fake_session,
             config=RetrievalConfig(model_name="text-embedding-3-small", ef_search=40, top_k=1),
         )
+
+
+# ── ScoredChunk building (shared helper) ─────────────────────────────────────
+
+
+def test_build_scored_chunks_scores_rows_by_reciprocal_rank(
+    test_session: Session,
+) -> None:
+    """Raw query rows become RRF-scored ScoredChunk instances in rank order."""
+    parent_text = "parent content for scoring"
+    _, parent, _ = _seed_parent_child_paper(
+        test_session,
+        parent_content=parent_text,
+        child_contents=["child one content", "child two content"],
+        vectors=[[0.5] * 1536, [0.5] * 1536],
+    )
+    test_session.commit()
+
+    rows = test_session.execute(
+        text("SELECT chunk_id, content AS text, parent_chunk_id FROM chunks ORDER BY position")
+    ).fetchall()
+
+    chunks = _build_scored_chunks(rows)
+
+    assert len(chunks) == 3
+    # RRF scoring: score = 1 / (k + rank) with k=60, so rank 1 -> 1/61.
+    assert chunks[0].score == 1.0 / 61.0
+    assert chunks[1].score == 1.0 / 62.0
+    assert chunks[2].score == 1.0 / 63.0
+    # The parent chunk carries no parent_chunk_id; children reference it.
+    assert chunks[0].parent_chunk_id is None
+    assert chunks[1].parent_chunk_id == parent.chunk_id
+    assert chunks[2].parent_chunk_id == parent.chunk_id
+    # Full chunk content round-trips untouched, in input row order.
+    assert [c.text for c in chunks] == [
+        parent_text,
+        "child one content",
+        "child two content",
+    ]
 
 
 # ── Hybrid search tests ──────────────────────────────────────────────────────
