@@ -7,7 +7,7 @@ requires-python = ">=3.12"
 package = false
 
 [tool.uv.workspace]
-members = ["core", "retrieval_qa", "depth_dive", "api", "ingestion"]
+members = ["core", "retrieval_qa", "depth_dive", "api", "ingestion", "scripts"]
 
 [dependency-groups]
 dev = [
@@ -32,7 +32,7 @@ target-version = "py312"
 select = ["E", "F", "I", "UP", "B", "SIM", "C4", "RUF"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["core", "retrieval_qa", "depth_dive", "api", "ingestion"]
+known-first-party = ["core", "retrieval_qa", "depth_dive", "api", "ingestion", "scripts"]
 
 [tool.mypy]
 python_version = "3.12"

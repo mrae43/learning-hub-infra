@@ -4,15 +4,7 @@ Covers the three pure-computation evaluation metric components:
 ``is_hit``, ``RecallAtKMetric``, and ``MRRMetric``.
 """
 
-import sys
-from pathlib import Path
-
-# Ensure the repo root is on sys.path so that ``scripts`` is importable.
-_REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-if str(_REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(_REPO_ROOT))
-
-from scripts.eval_metrics import MRRMetric, RecallAtKMetric, is_hit  # noqa: E402
+from scripts.eval_metrics import MRRMetric, RecallAtKMetric, is_hit
 
 
 def test_is_hit_returns_true_when_signature_present() -> None:
