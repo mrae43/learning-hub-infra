@@ -2136,6 +2136,24 @@ wheels = [
 name = "scripts"
 version = "0.1.0"
 source = { editable = "scripts" }
+dependencies = [
+    { name = "core" },
+    { name = "ingestion" },
+    { name = "pyyaml" },
+    { name = "requests" },
+    { name = "retrieval-qa" },
+    { name = "sqlalchemy" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "core", editable = "core" },
+    { name = "ingestion", editable = "ingestion" },
+    { name = "pyyaml", specifier = ">=6.0" },
+    { name = "requests", specifier = ">=2.34" },
+    { name = "retrieval-qa", editable = "retrieval_qa" },
+    { name = "sqlalchemy", specifier = ">=2" },
+]
 
 [[package]]
 name = "sentry-sdk"
