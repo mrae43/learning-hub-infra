@@ -22,6 +22,8 @@ COPY api/pyproject.toml ./api/
 COPY api/src ./api/src
 COPY ingestion/pyproject.toml ./ingestion/
 COPY ingestion/src ./ingestion/src
+COPY scripts/pyproject.toml ./scripts/
+COPY scripts/*.py ./scripts/
 
 # Install production dependencies and workspace packages.
 RUN uv sync --all-packages --no-dev --no-editable --frozen
