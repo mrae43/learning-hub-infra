@@ -3,7 +3,7 @@
 
 ## Current state
 
-This repository is in **early implementation (tracer bullet complete)**. ADRs, stack decisions, coding standards, and the monorepo layout are in place, plus the build/CI scaffolding: root + per-module `pyproject.toml` (uv workspace), `uv.lock`, `.github/workflows/` (`ci.yml`, `cd.yml`, `security.yml`, `dependabot-auto-merge.yml`), `commitlint.config.mjs`, and `Dockerfile`. Four of five packages have real implementation code (~8600 lines total); only `depth_dive/` is still a stub (just `__init__.py` + smoke test). The toolchain is green: `uv sync` installs all deps; `uv run ruff check`, `uv run ruff format --check`, `uv run mypy`, `uv run lint-imports`, and `uv run pytest` all pass.
+This repository is in **early implementation (tracer bullet complete)**. ADRs, stack decisions, coding standards, and the monorepo layout are in place, plus the build/CI scaffolding: root + per-module `pyproject.toml` (uv workspace), `uv.lock`, `.github/workflows/` (`ci.yml`, `cd.yml`, `security.yml`, `dependabot-auto-merge.yml`), `commitlint.config.mjs`, and `Dockerfile`. Six packages make up the workspace (`core/`, `retrieval_qa/`, `api/`, `ingestion/`, `depth_dive/`, `scripts/`); five of six have real implementation code (~5200 source lines, plus `tests/`); only `depth_dive/` is still a stub (just `__init__.py` + smoke test). `scripts/` holds the eval & chunk-size-tuning tooling over the `eval_corpus/` tuning set. The toolchain is green: `uv sync --all-packages` installs all deps; `uv run ruff check`, `uv run mypy`, `uv run lint-imports`, and `uv run pytest` all pass. (`uv run ruff format --check` reports 3 unformatted markdown files in `docs/adr/` and `.out-of-scope/`; cosmetic, outside package dirs, so not caught by per-package CI checks.)
 
 ## Authoritative sources — read before acting
 
@@ -18,9 +18,12 @@ These docs are **not** auto-loaded into session context. Only this `AGENTS.md` i
 - `docs/adr/0005-structured-monorepo.md` — why the structure is what it is.
 - `docs/adr/0011-import-linter-module-boundaries.md` — the enforced boundary rules.
 
+**Before security-adjacent work in `core/`, `api/`, `ingestion/`, or `retrieval_qa/`:**
+- `docs/security-mvp-guide.md` — hygiene rules for secrets, config, request handling, and deps. Read this alongside ADR-0018 so you don't build what MVP deliberately defers.
+
 **Before choosing or adding a library, model, or external service:**
 - `docs/tech-stack.md` — MVP stack and staged post-MVP milestones.
-- `docs/adr/` — read the ADR(s) most relevant to the area (e.g., ADR-0001 inference, ADR-0002 pgvector, ADR-0003 hand-rolled RAG, ADR-0004 embeddings, ADR-0006 background ingestion, ADR-0012 depth-dive-web-search-agentic, ADR-0013 depth-dive-search-failure-retry-fallback, ADR-0014 data-schema-api-contracts-harness-a, ADR-0015 deepeval-for-retrieval-evaluation, ADR-0016 retrieval-qa-critical-gaps-parent-child-hybrid-rerank, ADR-0017 important-but-gatable-retrieval-phase, ADR-0018 no-auth-access-control-for-mvp). Treat ADRs as **constraints, not suggestions**. If a decision contradicts an ADR, stop and propose a new/updated ADR rather than silently deviating.
+- `docs/adr/` — read the ADR(s) most relevant to the area (e.g., ADR-0001 inference, ADR-0002 pgvector, ADR-0003 hand-rolled RAG, ADR-0004 embeddings, ADR-0006 background ingestion, ADR-0007 path-gated retrieval eval, ADR-0009 HarnessAResponse shape, ADR-0012 depth-dive-web-search-agentic, ADR-0013 depth-dive-search-failure-retry-fallback, ADR-0014 data-schema-api-contracts-harness-a, ADR-0015 deepeval-for-retrieval-evaluation, ADR-0016 retrieval-qa-critical-gaps-parent-child-hybrid-rerank, ADR-0017 important-but-gatable-retrieval-phase, ADR-0018 no-auth-access-control-for-mvp). Treat ADRs as **constraints, not suggestions**. If a decision contradicts an ADR, stop and propose a new/updated ADR rather than silently deviating.
 
 **Before writing a commit message:**
 - `docs/commit-instructions.md` — Conventional Commits format and allowed types.
@@ -56,7 +59,7 @@ These docs are **not** auto-loaded into session context. Only this `AGENTS.md` i
 
 - Mirror package structure: `retrieval_qa/retrieval.py` → `tests/retrieval_qa/test_retrieval.py`.
 - Mock hosted API calls (embeddings, LLM, web search) in unit tests.
-- Keep retrieval-relevant tests identifiable (consistent module naming) so they can be path-gated in CI later.
+- Keep retrieval-relevant tests identifiable (consistent module naming). Retrieval evaluation is path-gated per ADR-0007/0015, with the eval tooling in `scripts/` over the `eval_corpus/` tuning set.
 
 ## Where to add things
 
@@ -66,6 +69,8 @@ These docs are **not** auto-loaded into session context. Only this `AGENTS.md` i
 - **Web search improvements** → `depth_dive/src/depth_dive/web_search/`
 - **New shared type** → `core/src/core/types/`
 - **New API endpoint** → `api/src/api/routes/`
+- **New eval or chunk-size-tuning script** → `scripts/`
+- **New eval corpus material** → `eval_corpus/`
 - **New ADR** → `docs/adr/`
 
 ## Mandatory verification before completing any task
@@ -102,4 +107,4 @@ Rules:
 - **Depth Dive implementation** — `depth_dive/src/depth_dive/` is a stub; `generation/` and `web_search/` subdirectories don't exist yet.
 - **`api/routes/__init__.py`** — route modules are imported directly in `server.py`; no package init file exists.
 
-Bootstrap order is complete for the first four packages (`core/` → `retrieval_qa/` (query logic included) → `api/` → `ingestion/`). `depth_dive/` is the remaining package to implement.
+Bootstrap order is complete for the first four packages (`core/` → `retrieval_qa/` (query logic included) → `api/` → `ingestion/`), plus the `scripts/` eval & tuning tooling over the `eval_corpus/` tuning set. `depth_dive/` is the remaining package to implement.

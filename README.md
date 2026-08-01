@@ -21,7 +21,7 @@ A hand-rolled RAG study tool for learning AI/ML from papers, books, and document
 | Post-MVP 1 | **Depth Dive** — richer explanations (text + diagrams + code) with agentic web search | 🔧 Scaffold |
 | Post-MVP 2 | **Synapse** — multi-sensory interactive learning with gamification and neuroplasticity triggers | 📅 Planned |
 
-> **Status:** Early implementation — tracer bullet complete. Four of five packages (`core/`, `retrieval_qa/`, `api/`, `ingestion/`) have implementation code (~8600 lines total). Only `depth_dive/` is still a stub (just `__init__.py` + smoke test). Ingestion pipeline, Harness A query pipeline, and three API endpoints (`POST /ingest`, `GET /documents/{id}`, `POST /query`) are operational. See [docs/](./docs/) for architecture decisions and plans.
+> **Status:** Early implementation — tracer bullet complete. Five of six packages (`core/`, `retrieval_qa/`, `api/`, `ingestion/`, `scripts/`) have implementation code (~5200 source lines, plus `tests/`). Only `depth_dive/` is still a stub (just `__init__.py` + smoke test). Ingestion pipeline, Harness A query pipeline, three API endpoints (`POST /ingest`, `GET /documents/{id}`, `POST /query`), and the `scripts/` eval & chunk-size-tuning tooling are operational. See [docs/](./docs/) for architecture decisions and plans.
 
 ## Architecture
 
@@ -34,6 +34,7 @@ Structured monorepo with extractable module boundaries:
 | `depth_dive/` | Depth Dive generation (post-MVP 1) |
 | `api/` | FastAPI server (thin routes → controllers) |
 | `ingestion/` | Document upload + background ingestion pipeline |
+| `scripts/` | Retrieval eval & chunk-size tuning tooling over `eval_corpus/` |
 
 ## Why this tech stack
 
@@ -47,13 +48,13 @@ Structured monorepo with extractable module boundaries:
 
 **FastAPI BackgroundTasks for ingestion.** No lost jobs yet — a dedicated queue (arq/Redis) gets added when that becomes a real pain point ([ADR-0006](./docs/adr/0006-backgroundtask-for-mvp-ingestion.md)).
 
-**Structured monorepo.** Five packages with independent `pyproject.toml` files, test suites, and CI jobs — extractable later via `git subtree split` ([ADR-0005](./docs/adr/0005-structured-monorepo.md)). Module boundaries enforced by `import-linter` in CI ([ADR-0011](./docs/adr/0011-import-linter-module-boundaries.md)).
+**Structured monorepo.** Six packages with independent `pyproject.toml` files, test suites, and CI jobs — extractable later via `git subtree split` ([ADR-0005](./docs/adr/0005-structured-monorepo.md)). Module boundaries enforced by `import-linter` in CI ([ADR-0011](./docs/adr/0011-import-linter-module-boundaries.md)).
 
 ## Challenges solved
 
 **Multi-format document chunking.** Papers, books, and documentation have different structures. Each gets a structure-aware chunker (section boundaries for papers, chapter boundaries for books, page/API-entry boundaries for documentation) that produces typed metadata via a JSONB registry — keeping each doc type's schema explicit and extensible.
 
-**Module boundary enforcement.** A five-package monorepo needs real boundaries or they become fictional. `import-linter` in CI (`uv run lint-imports`) catches cross-package leaks before merge — e.g., `retrieval_qa` and `depth_dive` must never import each other.
+**Module boundary enforcement.** A six-package monorepo needs real boundaries or they become fictional. `import-linter` in CI (`uv run lint-imports`) catches cross-package leaks before merge — e.g., `retrieval_qa` and `depth_dive` must never import each other.
 
 **Document state machine.** Ingestion is async: validating → chunking → embedding → ready (or failed). The state is tracked in the database and pollable via `GET /documents/{id}`, so the user always knows where their upload stands.
 
@@ -64,6 +65,7 @@ Structured monorepo with extractable module boundaries:
 - [CONTEXT.md](./CONTEXT.md) — domain glossary
 - [docs/tech-stack.md](./docs/tech-stack.md) — MVP stack and post-MVP milestones
 - [docs/ai-system-tree.md](./docs/ai-system-tree.md) — full directory layout
+- [docs/security-mvp-guide.md](./docs/security-mvp-guide.md) — security hygiene rules for the MVP
 - [docs/adr/](./docs/adr/) — architecture decision records (project constraints)
 - [docs/coding-standards.md](./docs/coding-standards.md) — typing, docstrings, testing, error handling
 - [docs/commit-instructions.md](./docs/commit-instructions.md) — Conventional Commits format
