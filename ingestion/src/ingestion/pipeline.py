@@ -94,13 +94,25 @@ def _embed_chunks(
 ) -> tuple[list[tuple[ChunkRow, list[float]]], int]:
     """Embed chunk contents and return (chunk, vector) pairs and API call count.
 
-    Batches chunks by cumulative token count to stay within the
-    embedding API's per-request token limit (OpenAI enforces 300k).
+    Batches chunks by cumulative token count so every request stays within the
+    embedding API's per-request token limit (OpenAI enforces 300k). A chunk
+    whose ``token_count`` alone exceeds the cap would make any batch containing
+    it over the limit, so it is rejected before the provider is called.
+
+    Args:
+        session: Unused; kept for API symmetry with the rest of the pipeline.
+        client: Provider that produces one vector per chunk text.
+        chunks: Child chunk rows to embed, in document order.
+        model_name: Unused; kept for API symmetry with the rest of the pipeline.
 
     Returns:
         A tuple of (results, api_calls) where ``results`` is a list of
         (chunk, vector) pairs and ``api_calls`` is the number of API
         calls made.
+
+    Raises:
+        IngestionError: If a chunk exceeds the per-request batch cap, an
+            embedding call fails, or a response's length mismatches the batch.
     """
     if not chunks:
         return [], 0
@@ -109,6 +121,12 @@ def _embed_chunks(
     batch_tokens: list[int] = [0]
 
     for chunk in chunks:
+        if chunk.token_count > _MAX_TOKENS_PER_EMBEDDING_BATCH:
+            raise IngestionError(
+                f"Chunk at position {chunk.position} has {chunk.token_count} tokens, "
+                f"exceeding the {_MAX_TOKENS_PER_EMBEDDING_BATCH}-token "
+                f"per-request embedding batch cap"
+            )
         if batch_tokens[-1] + chunk.token_count > _MAX_TOKENS_PER_EMBEDDING_BATCH:
             batches.append([])
             batch_tokens.append(0)
