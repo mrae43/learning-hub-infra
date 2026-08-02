@@ -740,6 +740,46 @@ def test_sparse_only_parent_swap_returns_parent_content(
     assert results.fused[0].text == parent_text
 
 
+def test_sparse_path_never_returns_unembedded_parent(test_session: Session) -> None:
+    """A parent row is never a sparse candidate, even if it would match.
+
+    Parents are never embedded or sparse-indexed (ADR-0016). If a parent's
+    ``content_search`` were populated (e.g. a legacy/inconsistent row), the
+    sparse path must still exclude it: otherwise the ``COALESCE`` parent swap
+    would surface the parent as its own "parent", bypassing the swap contract.
+    """
+    parent_text = "rareparentkeyword governs the retrieval contract"
+    child_text = "ordinary child content about embeddings"
+    child_vector = [0.5] * 1536
+
+    _, parent, _ = _seed_parent_child_paper(
+        test_session,
+        parent_content=parent_text,
+        child_contents=[child_text],
+        vectors=[child_vector],
+    )
+    # Simulate a parent row whose tsvector is populated: even then it must
+    # never be a sparse candidate.
+    parent.content_search = func.to_tsvector("english", parent_text)
+    test_session.commit()
+
+    # Dense path finds nothing: no embeddings exist under this model_name.
+    results = retrieve_relevant_chunks(
+        query_vector=[0.5] * 1536,
+        session=test_session,
+        config=RetrievalConfig(
+            model_name="some-other-model",
+            ef_search=40,
+            top_k=5,
+        ),
+        query_text="rareparentkeyword",
+    )
+
+    # The keyword lives only in the (non-child) parent row, so the sparse
+    # path yields nothing and the parent is never returned as its own parent.
+    assert results.fused == []
+
+
 # ── Reranker tests ───────────────────────────────────────────────────────────
 
 
