@@ -187,6 +187,14 @@ class TestSeedAndTeardown:
                 parent = parents[0]
                 for child in children:
                     assert child.parent_chunk_id == parent.chunk_id
+
+                # content_search mirrors the ingestion pipeline: children get
+                # a non-null tsvector, parents stay NULL (ADR-0016).
+                for parent in parents:
+                    assert parent.content_search is None
+                for child in children:
+                    assert child.content_search is not None
+                    assert str(child.content_search) != ""
             finally:
                 session.close()
         finally:
@@ -299,6 +307,28 @@ class TestSeedAndTeardown:
                     {"schema": "chunks_256_10", "pat": "ix_embeddings_hnsw_%"},
                 ).fetchone()
                 assert row is not None, "HNSW index was not created"
+        finally:
+            teardown_schema("256_10", engine=test_engine)
+
+    def test_content_search_gin_index_exists_after_seed(
+        self, test_engine: Engine, tmp_path: Path
+    ) -> None:
+        sidecar = _make_test_sidecar()
+        sidecar_path = tmp_path / "eval_vectors_256_10.json"
+        sidecar_path.write_text(json.dumps(sidecar))
+
+        try:
+            seed_schema("256_10", engine=test_engine, sidecar_override=sidecar_path)
+
+            with test_engine.connect() as conn:
+                row = conn.execute(
+                    text(
+                        "SELECT indexname FROM pg_indexes "
+                        "WHERE schemaname = :schema AND indexname = :name"
+                    ),
+                    {"schema": "chunks_256_10", "name": "ix_chunks_content_search_gin"},
+                ).fetchone()
+                assert row is not None, "GIN index on content_search was not created"
         finally:
             teardown_schema("256_10", engine=test_engine)
 

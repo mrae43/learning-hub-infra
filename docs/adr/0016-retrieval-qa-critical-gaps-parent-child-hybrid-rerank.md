@@ -24,6 +24,8 @@ Rationale for fixed-size (not semantic) splitting: the reference notes that some
 ### 2. Hybrid search (dense + sparse)
 Add a PostgreSQL `tsvector` column and GIN index on child chunk content. At query time, run both a pgvector cosine search (unchanged) and a `ts_rank` full-text search against the same child chunk rows. Fuse results via Reciprocal Rank Fusion (RRF). Retrieve top-20 from each path, fuse into a single ranked set, then swap to parents.
 
+`content_search` is populated **application-side** during ingestion (the child-write phase of `ingestion/pipeline.py` and the eval seed in `scripts/seed_schema.py`) — not via a Postgres trigger. This keeps the population path explicit and adjacent to the child-row writes it mirrors (ADR-0003's transparency principle), and it only ever fires for children, matching "only child chunks are indexed." The sparse query reads the `content_search` column so the GIN index (`ix_chunks_content_search_gin`) is exercised. A trigger is rejected as a future option to reconsider only if application-layer writes prove unreliable in practice.
+
 Rationale for tsvector over pg_bm25/pg_textsearch: zero new infrastructure. The existing `pgvector/pgvector:pg16` Docker image works unchanged. No custom Docker image, no C extension build, no CI pipeline changes. Postgres FTS (`ts_rank`) is sufficient for MVP-level exact-match recovery; BM25-level scoring is a quantitative improvement that can be swapped in later if the eval set shows it matters.
 
 ### 3. Cross-encoder reranking
