@@ -2,6 +2,7 @@
 
 import logging
 from collections.abc import Sequence
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from pydantic import ValidationError
@@ -86,6 +87,18 @@ def _chunk_document(
 _MAX_TOKENS_PER_EMBEDDING_BATCH = 300_000
 
 
+@dataclass
+class _Batch:
+    """Chunks destined for a single embedding request plus their token count.
+
+    Bundles the two pieces of per-batch state so a batch's chunk list and
+    running token count can never drift apart.
+    """
+
+    chunks: list[ChunkRow] = field(default_factory=list)
+    token_count: int = 0
+
+
 def _embed_chunks(
     session: Session,
     client: Embedder,
@@ -117,8 +130,7 @@ def _embed_chunks(
     if not chunks:
         return [], 0
 
-    batches: list[list[ChunkRow]] = [[]]
-    batch_tokens: list[int] = [0]
+    batches: list[_Batch] = [_Batch()]
 
     for chunk in chunks:
         if chunk.token_count > _MAX_TOKENS_PER_EMBEDDING_BATCH:
@@ -127,27 +139,26 @@ def _embed_chunks(
                 f"exceeding the {_MAX_TOKENS_PER_EMBEDDING_BATCH}-token "
                 f"per-request embedding batch cap"
             )
-        if batch_tokens[-1] + chunk.token_count > _MAX_TOKENS_PER_EMBEDDING_BATCH:
-            batches.append([])
-            batch_tokens.append(0)
-        batches[-1].append(chunk)
-        batch_tokens[-1] += chunk.token_count
+        if batches[-1].token_count + chunk.token_count > _MAX_TOKENS_PER_EMBEDDING_BATCH:
+            batches.append(_Batch())
+        batches[-1].chunks.append(chunk)
+        batches[-1].token_count += chunk.token_count
 
     result: list[tuple[ChunkRow, list[float]]] = []
-    for batch_chunks in batches:
-        texts = [c.content for c in batch_chunks]
+    for batch in batches:
+        texts = [c.content for c in batch.chunks]
         try:
             vectors = client.embed(texts)
         except Exception as exc:
             raise IngestionError(f"Embedding call failed: {exc}") from exc
 
-        if len(vectors) != len(batch_chunks):
+        if len(vectors) != len(batch.chunks):
             raise IngestionError(
                 f"Embedding response length mismatch: "
-                f"expected {len(batch_chunks)}, got {len(vectors)}"
+                f"expected {len(batch.chunks)}, got {len(vectors)}"
             )
 
-        result.extend(zip(batch_chunks, vectors, strict=True))
+        result.extend(zip(batch.chunks, vectors, strict=True))
 
     return result, len(batches)
 
