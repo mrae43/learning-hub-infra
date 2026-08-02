@@ -64,3 +64,9 @@ def downgrade() -> None:
     op.drop_column("chunks", "content_search")
     op.execute("ALTER TABLE chunks DROP CONSTRAINT IF EXISTS fk_chunks_parent_chunk_id")
     op.drop_column("chunks", "parent_chunk_id")
+
+    op.create_unique_constraint(
+        "uq_chunk_document_position",
+        "chunks",
+        ["document_id", "position"],
+    )

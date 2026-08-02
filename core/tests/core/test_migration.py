@@ -19,9 +19,26 @@ def _run_alembic_command(url: str, *args: str) -> None:
     )
 
 
+def _reset_test_schema(url: str) -> None:
+    """Drop and recreate the public schema so migrations run from a clean state.
+
+    Other fixtures create and populate tables from the SQLAlchemy models, which
+    no longer carry the ``uq_chunk_document_position`` constraint. Leaving that
+    data behind makes the downgrade's constraint recreation fail on duplicates.
+    """
+    engine = create_engine(url, isolation_level="AUTOCOMMIT", future=True)
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("DROP SCHEMA public CASCADE"))
+            conn.execute(text("CREATE SCHEMA public"))
+    finally:
+        engine.dispose()
+
+
 @pytest.fixture
 def migrated_engine(test_database_url: str) -> Generator[Engine, None, None]:
-    """Upgrade the test database to head and yield an engine."""
+    """Reset the schema, then upgrade the test database to head."""
+    _reset_test_schema(test_database_url)
     _run_alembic_command(test_database_url, "downgrade", "base")
     _run_alembic_command(test_database_url, "upgrade", "head")
     engine = create_engine(test_database_url, future=True)
@@ -189,6 +206,30 @@ def test_migration_downgrade_reverses_cleanly(migrated_engine: Engine) -> None:
     remaining_tables = _table_names(inspector)
     assert {"documents", "chunks", "embeddings"}.isdisjoint(remaining_tables)
     assert _enum_names(migrated_engine) == set()
+
+
+def test_migration_downgrade_restores_document_position_constraint(
+    migrated_engine: Engine,
+) -> None:
+    """Downgrading to the prior revision restores uq_chunk_document_position.
+
+    The parent-chunk migration drops the unique constraint on (document_id,
+    position); downgrading must recreate it so a downgraded database matches
+    the pre-upgrade definition.
+    """
+    assert "uq_chunk_document_position" not in _unique_constraints(migrated_engine, "chunks")
+
+    url = migrated_engine.url.render_as_string(hide_password=False)
+    _run_alembic_command(url, "downgrade", "2fff441e94ab")
+
+    inspector = inspect(migrated_engine)
+    matching = [
+        uc
+        for uc in inspector.get_unique_constraints("chunks")
+        if uc["name"] == "uq_chunk_document_position"
+    ]
+    assert len(matching) == 1
+    assert matching[0]["column_names"] == ["document_id", "position"]
 
 
 def test_vector_extension_exists(migrated_engine: Engine) -> None:
