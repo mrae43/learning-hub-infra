@@ -97,6 +97,7 @@ _SPARSE_SQL = text(
     FROM chunks
     JOIN documents ON documents.document_id = chunks.document_id
     WHERE documents.status = 'ready'
+      AND chunks.parent_chunk_id IS NOT NULL
       AND chunks.content_search
           @@ websearch_to_tsquery('english', :query_text)
     ORDER BY rank DESC
