@@ -3,7 +3,8 @@
 from unittest.mock import MagicMock
 
 import pytest
-from sqlalchemy import text
+from sqlalchemy import func, text
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
 from core.clients.reranker_client import NoopReranker
@@ -38,6 +39,7 @@ def _seed_paper(
             position=position,
             content=content,
             token_count=max(1, len(content.split())),
+            content_search=func.to_tsvector("english", content),
         )
         session.add(chunk)
         session.flush()
@@ -90,6 +92,9 @@ def _seed_parent_child_paper(
             content=content,
             token_count=max(1, len(content.split())),
             parent_chunk_id=parent.chunk_id,
+            # Only children are sparse-indexed (ADR-0016); the parent stays
+            # content_search=NULL.
+            content_search=func.to_tsvector("english", content),
         )
         session.add(child)
         session.flush()
@@ -653,6 +658,52 @@ def test_hybrid_search_returns_empty_list_when_no_results_from_either_path(
     )
 
     assert results.fused == []
+
+
+def test_sparse_query_exercises_gin_index(
+    test_session: Session,
+    test_engine: Engine,
+) -> None:
+    """EXPLAIN shows the sparse query reading content_search via the GIN index.
+
+    The migration creates ``ix_chunks_content_search_gin`` on the
+    ``content_search`` column; the sparse query must read that column (not an
+    inline ``to_tsvector``) or the plan falls back to a per-row scan.
+    """
+    from retrieval_qa.retrieval.query import _SPARSE_SQL
+
+    content = "postgresql full text search with tsvector and gin indexes"
+    vector = [0.5] * 1536
+    _seed_paper(
+        test_session,
+        title="GIN",
+        chunks=[(content, vector, "gin")],
+    )
+    test_session.commit()
+
+    # The test_session fixture creates tables via metadata.create_all, which
+    # does not carry the migration-only GIN index. Recreate it here so the
+    # plan can use it.
+    with test_engine.connect() as conn:
+        conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_chunks_content_search_gin "
+                "ON chunks USING gin (content_search)"
+            )
+        )
+        conn.commit()
+
+    with test_engine.connect() as conn:
+        trans = conn.begin()
+        conn.execute(text("SET LOCAL enable_seqscan = off"))
+        plan = conn.execute(
+            text(f"EXPLAIN {_SPARSE_SQL!s}"),
+            {"query_text": "postgresql", "top_k": 5},
+        ).fetchall()
+        trans.rollback()
+
+    plan_text = "\n".join(row[0] for row in plan)
+    assert "ix_chunks_content_search_gin" in plan_text
 
 
 def test_sparse_only_parent_swap_returns_parent_content(

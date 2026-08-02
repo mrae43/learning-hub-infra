@@ -5,6 +5,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from pydantic import ValidationError
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from core.clients import Embedder
@@ -158,7 +159,10 @@ def run_ingestion(
        overlap) via ``recursive_fixed_size_split``.
     4. Child chunks inherit ``type_metadata`` from the parent with an
        additional ``"child_of"`` lineage key.
-    5. Only child chunks are embedded and indexed for retrieval.
+    5. Only child chunks are embedded and indexed for retrieval: each child
+       row's ``content_search`` tsvector is populated application-side, and
+       only children receive embeddings. Parent rows keep ``content_search``
+       NULL (ADR-0016).
 
     Args:
         pending: Document-identity fields for the ingestion.
@@ -201,13 +205,18 @@ def run_ingestion(
             for child_split in child_splits:
                 child_metadata = dict(parent.type_metadata)
                 child_metadata["child_of"] = str(parent.chunk_id)
+                child_content = _sanitize_text(child_split.content)
                 child = ChunkRow(
                     document_id=pending.document_id,
                     position=child_split.position,
-                    content=_sanitize_text(child_split.content),
+                    content=child_content,
                     token_count=child_split.token_count,
                     type_metadata=child_metadata,
                     parent_chunk_id=parent.chunk_id,
+                    # Only children are sparse-indexed (ADR-0016); the
+                    # tsvector feeds the GIN index that the sparse query
+                    # reads (parents stay NULL/unindexed).
+                    content_search=func.to_tsvector("english", child_content),
                 )
                 session.add(child)
                 child_rows.append(child)

@@ -484,6 +484,59 @@ class TestPipelineValidation:
 class TestParentChildIngestion:
     """Tests for parent-child chunking in the ingestion pipeline."""
 
+    def test_children_have_content_search_parents_do_not(
+        self,
+        test_session: Session,
+        fake_embeddings_client: MagicMock,
+        sample_paper_pdf: bytes,
+        temp_file: Callable[..., Path],
+    ) -> None:
+        """Child rows get a populated content_search tsvector; parents stay NULL.
+
+        Per ADR-0016 only children are indexed (sparse tsvector), so the
+        ``content_search`` column carries a non-null tsvector on every child
+        row and stays NULL on parent rows.
+        """
+        pdf_path = temp_file(sample_paper_pdf, "sample.pdf")
+        document = Document(
+            title="Searchable Paper",
+            document_type=DocumentType.PAPER,
+            source_filename="sample.pdf",
+        )
+        test_session.add(document)
+        test_session.flush()
+
+        run_ingestion(
+            pending=PendingIngestion(
+                document_id=document.document_id,
+                title="Searchable Paper",
+                document_type=DocumentType.PAPER,
+                source_filename="sample.pdf",
+                file_path=pdf_path,
+            ),
+            session=test_session,
+            embeddings_client=fake_embeddings_client,
+            model_name="text-embedding-3-small",
+        )
+
+        test_session.commit()
+        chunks = (
+            test_session.query(Chunk)
+            .filter(Chunk.document_id == document.document_id)
+            .order_by(Chunk.position)
+            .all()
+        )
+        parents = [c for c in chunks if c.parent_chunk_id is None]
+        children = [c for c in chunks if c.parent_chunk_id is not None]
+        assert len(parents) >= 1
+        assert len(children) >= 1
+
+        for parent in parents:
+            assert parent.content_search is None
+        for child in children:
+            assert child.content_search is not None
+            assert str(child.content_search) != ""
+
     def test_parents_not_embedded_children_are(
         self,
         test_session: Session,

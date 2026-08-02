@@ -13,7 +13,8 @@ The ``seed`` subcommand:
 2. Creates a dedicated PostgreSQL schema ``chunks_{config}``.
 3. Creates enum types and tables inside that schema.
 4. Inserts document, chunk (parent + child), and embedding rows.
-5. Builds a pgvector HNSW index on the embedding column.
+5. Builds a pgvector HNSW index on the embedding column and a GIN index on
+   child ``content_search`` (mirroring the Alembic migration).
 
 The ``teardown`` subcommand drops the schema with ``CASCADE``.
 """
@@ -26,7 +27,7 @@ import sys
 from pathlib import Path
 from typing import Any, cast
 
-from sqlalchemy import Engine, text
+from sqlalchemy import Engine, func, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from core.database.connection import get_engine
@@ -156,6 +157,10 @@ def _insert_sidecar(
                     token_count=child_data["token_count"],
                     type_metadata={},
                     parent_chunk_id=parent.chunk_id,
+                    # Mirror the ingestion pipeline (ADR-0016): only children
+                    # are sparse-indexed, so they get a populated tsvector
+                    # while parents stay NULL.
+                    content_search=func.to_tsvector("english", child_data["content"]),
                 )
                 session.add(child)
                 session.flush()
@@ -183,6 +188,24 @@ def _build_hnsw_index(engine: Engine, schema_name: str) -> None:
                 f'ON "{clean_schema}".embeddings '
                 "USING hnsw (embedding vector_cosine_ops) "
                 "WITH (m = 16, ef_construction = 64)"
+            )
+        )
+        conn.commit()
+
+
+def _build_content_search_gin_index(engine: Engine, schema_name: str) -> None:
+    """Create the GIN index on child ``content_search``, mirroring the Alembic migration.
+
+    The migration creates ``ix_chunks_content_search_gin`` on the production
+    schema; the eval seed recreates it here so sparse queries use the index
+    during chunk-size tuning.
+    """
+    clean_schema = schema_name.replace('"', '""')
+    with engine.connect() as conn:
+        conn.execute(
+            text(
+                f"CREATE INDEX IF NOT EXISTS ix_chunks_content_search_gin "
+                f'ON "{clean_schema}".chunks USING gin (content_search)'
             )
         )
         conn.commit()
@@ -237,6 +260,7 @@ def seed_schema(
         session.close()
 
     _build_hnsw_index(engine, schema_name)
+    _build_content_search_gin_index(engine, schema_name)
     print(f"Seeded schema {schema_name!r} from {sidecar_path.name}")
     return 0
 
