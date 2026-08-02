@@ -1,6 +1,6 @@
-"""Integration tests for the ingestion pipeline."""
+"""Tests for the ingestion pipeline."""
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
@@ -357,6 +357,97 @@ class TestValidateTypeMetadata:
             _validate_type_metadata(
                 DocumentType.DOCUMENTATION,
                 {"page": "42"},
+            )
+
+
+# ── _embed_chunks unit tests ──────────────────────────────────────────────
+
+
+class _RecordingEmbedder:
+    """Test double that records each batch of texts sent to ``embed``.
+
+    Returns one fixed vector per input text unless configured to fail.
+    """
+
+    def __init__(
+        self,
+        *,
+        fail: Exception | None = None,
+    ) -> None:
+        self.calls: list[list[str]] = []
+        self._fail = fail
+
+    def embed(self, texts: Sequence[str]) -> list[list[float]]:
+        self.calls.append(list(texts))
+        if self._fail is not None:
+            raise self._fail
+        return [[0.5] * 3 for _ in range(len(texts))]
+
+
+def _make_chunk(content: str, token_count: int) -> Chunk:
+    """Construct a detached Chunk row with only batching-relevant fields set."""
+    return Chunk(
+        document_id=uuid4(),
+        position=0,
+        content=content,
+        token_count=token_count,
+    )
+
+
+def _unused_session() -> Session:
+    """Return an unbound Session; ``_embed_chunks`` never touches it."""
+    return Session()
+
+
+class TestEmbedChunks:
+    """Unit tests for ``_embed_chunks()`` batching behaviour."""
+
+    def test_empty_chunks_returns_no_results_and_no_calls(self) -> None:
+        """An empty chunk sequence makes no API calls and reports zero batches."""
+        client = _RecordingEmbedder()
+        results, api_calls = _embed_chunks(
+            session=_unused_session(),
+            client=client,
+            chunks=[],
+            model_name="text-embedding-3-small",
+        )
+        assert results == []
+        assert api_calls == 0
+        assert client.calls == []
+
+    def test_splits_batches_at_token_cap_and_preserves_order(self) -> None:
+        """Cumulative token count drives batch boundaries; results keep input order."""
+        chunks = [
+            _make_chunk("c1", 6),
+            _make_chunk("c2", 6),
+            _make_chunk("c3", 2),
+            _make_chunk("c4", 6),
+        ]
+        client = _RecordingEmbedder()
+
+        with patch("ingestion.pipeline._MAX_TOKENS_PER_EMBEDDING_BATCH", 10):
+            results, api_calls = _embed_chunks(
+                session=_unused_session(),
+                client=client,
+                chunks=chunks,
+                model_name="text-embedding-3-small",
+            )
+
+        assert api_calls == 3
+        assert client.calls == [["c1"], ["c2", "c3"], ["c4"]]
+        assert [chunk for chunk, _ in results] == chunks
+
+    def test_embed_failure_raises_ingestion_error(self) -> None:
+        """An upstream embed failure surfaces as IngestionError."""
+        chunks = [_make_chunk("c1", 5)]
+        client = _RecordingEmbedder(fail=RuntimeError("upstream down"))
+
+        with pytest.raises(IngestionError, match="Embedding call failed"):
+            _embed_chunks(
+                session=_unused_session(),
+                client=client,
+                chunks=chunks,
+                model_name="text-embedding-3-small",
             )
 
 
