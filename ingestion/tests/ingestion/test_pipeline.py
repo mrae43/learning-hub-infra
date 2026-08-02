@@ -3,6 +3,7 @@
 from collections.abc import Callable
 from pathlib import Path
 from unittest.mock import MagicMock, patch
+from uuid import uuid4
 
 import pytest
 from sqlalchemy.orm import Session
@@ -11,7 +12,12 @@ from core.database.schema import Chunk, Document, Embedding
 from core.exceptions import IngestionError
 from core.types.document import DocumentStatus, DocumentType
 from ingestion.models import PendingIngestion
-from ingestion.pipeline import _validate_type_metadata, run_ingestion
+from ingestion.pipeline import (
+    _MAX_TOKENS_PER_EMBEDDING_BATCH,
+    _embed_chunks,
+    _validate_type_metadata,
+    run_ingestion,
+)
 
 
 @pytest.fixture
@@ -791,3 +797,99 @@ class TestParentChildIngestion:
                 assert child.position == i, (
                     f"Child at index {i} of parent {parent.chunk_id} has position {child.position}"
                 )
+
+
+# ── _embed_chunks batching unit tests ─────────────────────────────────────
+
+
+def _chunk_row(token_count: int, position: int = 0) -> Chunk:
+    """Build a Chunk row for batching tests without touching the database."""
+    return Chunk(
+        document_id=uuid4(),
+        position=position,
+        content=f"chunk content {position}",
+        token_count=token_count,
+    )
+
+
+class TestEmbedChunksBatching:
+    """Unit tests for ``_embed_chunks`` batching (bug #173)."""
+
+    def test_cumulative_tokens_over_cap_produce_multiple_api_calls(self) -> None:
+        """A corpus whose cumulative tokens exceed the 300k cap is split."""
+        chunks = [_chunk_row(_MAX_TOKENS_PER_EMBEDDING_BATCH // 2, i) for i in range(3)]
+        client = MagicMock()
+        client.embed.side_effect = lambda texts: [[0.1] for _ in texts]
+
+        _, api_calls = _embed_chunks(
+            session=MagicMock(),
+            client=client,
+            chunks=chunks,
+            model_name="text-embedding-3-small",
+        )
+
+        assert api_calls == 2
+        assert [len(call.args[0]) for call in client.embed.call_args_list] == [2, 1]
+
+    def test_batch_results_concatenated_in_chunk_order(self) -> None:
+        """Per-batch vectors come back in original chunk order."""
+        chunks = [_chunk_row(_MAX_TOKENS_PER_EMBEDDING_BATCH // 2, i) for i in range(3)]
+        client = MagicMock()
+        client.embed.side_effect = lambda texts: [[int(text.split()[-1]) + 1.0] for text in texts]
+
+        results, _ = _embed_chunks(
+            session=MagicMock(),
+            client=client,
+            chunks=chunks,
+            model_name="text-embedding-3-small",
+        )
+
+        assert [vector for _, vector in results] == [[1.0], [2.0], [3.0]]
+
+    def test_over_cap_chunk_raises_ingestion_error_before_provider_call(self) -> None:
+        """A single chunk over the cap is rejected before hitting the provider."""
+        chunks = [_chunk_row(_MAX_TOKENS_PER_EMBEDDING_BATCH + 1)]
+        client = MagicMock()
+
+        with pytest.raises(
+            IngestionError,
+            match=f"exceeding the {_MAX_TOKENS_PER_EMBEDDING_BATCH}-token",
+        ):
+            _embed_chunks(
+                session=MagicMock(),
+                client=client,
+                chunks=chunks,
+                model_name="text-embedding-3-small",
+            )
+
+        client.embed.assert_not_called()
+
+    def test_at_cap_chunk_is_allowed(self) -> None:
+        """A single chunk exactly at the cap occupies one request but is allowed."""
+        chunks = [_chunk_row(_MAX_TOKENS_PER_EMBEDDING_BATCH)]
+        client = MagicMock()
+        client.embed.side_effect = lambda texts: [[0.1] for _ in texts]
+
+        results, api_calls = _embed_chunks(
+            session=MagicMock(),
+            client=client,
+            chunks=chunks,
+            model_name="text-embedding-3-small",
+        )
+
+        assert api_calls == 1
+        assert len(results) == 1
+
+    def test_batch_length_mismatch_raises_ingestion_error(self) -> None:
+        """A batch returning fewer vectors than chunks raises IngestionError."""
+        chunks = [_chunk_row(10, i) for i in range(2)]
+        client = MagicMock()
+        client.embed.side_effect = lambda texts: [[0.1]]
+
+        with pytest.raises(IngestionError):
+            _embed_chunks(
+                session=MagicMock(),
+                client=client,
+                chunks=chunks,
+                model_name="text-embedding-3-small",
+            )
