@@ -17,7 +17,7 @@ Implements the retrieval half of Harness A's RAG pipeline (ADR-0014):
 
 When ``RetrievalConfig.hybrid_search`` is True (default, ADR-0016):
 
-- A parallel sparse search via ``ts_rank`` / ``websearch_to_tsquery`` over
+- A parallel sparse search via ``ts_rank`` / ``plainto_tsquery`` over
   the precomputed ``chunks.content_search`` tsvector column (populated by the
   ingestion pipeline for child chunks; ADR-0016) recovers exact-match queries
   (function names, API endpoints, error codes) that pure dense retrieval
@@ -92,14 +92,14 @@ _SPARSE_SQL = text(
         chunks.parent_chunk_id   AS parent_chunk_id,
         ts_rank(
             chunks.content_search,
-            websearch_to_tsquery('english', :query_text)
+            plainto_tsquery('english', :query_text)
         ) AS rank
     FROM chunks
     JOIN documents ON documents.document_id = chunks.document_id
     WHERE documents.status = 'ready'
       AND chunks.parent_chunk_id IS NOT NULL
       AND chunks.content_search
-          @@ websearch_to_tsquery('english', :query_text)
+          @@ plainto_tsquery('english', :query_text)
     ORDER BY rank DESC
     LIMIT :top_k
     """
