@@ -18,8 +18,8 @@ dev = [
     "pip-licenses>=5",
     "httpx2>=2.9.1",
     "reportlab>=4.0",
-    "types-reportlab>=4.5.1.20260724",
-    "deepeval>=4.1.3",
+    "types-reportlab>=4.5.1.20260728",
+    "deepeval>=4.1.4",
     "pyyaml>=6.0",
     "types-pyyaml>=6.0.12.20260724",
 ]

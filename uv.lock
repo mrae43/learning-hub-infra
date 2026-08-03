@@ -202,7 +202,7 @@ dependencies = [
 requires-dist = [
     { name = "core", editable = "core" },
     { name = "depth-dive", editable = "depth_dive" },
-    { name = "fastapi", specifier = ">=0.140.0" },
+    { name = "fastapi", specifier = ">=0.141.1" },
     { name = "ingestion", editable = "ingestion" },
     { name = "python-multipart", specifier = ">=0.0.9" },
     { name = "retrieval-qa", editable = "retrieval_qa" },
@@ -398,7 +398,7 @@ dependencies = [
 requires-dist = [
     { name = "alembic", specifier = ">=1.13" },
     { name = "cohere", specifier = ">=5.0" },
-    { name = "openai", specifier = ">=2.48.0" },
+    { name = "openai", specifier = ">=2.51.0" },
     { name = "pgvector", specifier = ">=0.3" },
     { name = "psycopg2-binary", specifier = ">=2.9" },
     { name = "pydantic", specifier = ">=2" },
@@ -409,7 +409,7 @@ requires-dist = [
 
 [[package]]
 name = "deepeval"
-version = "4.1.3"
+version = "4.1.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohttp" },
@@ -442,9 +442,9 @@ dependencies = [
     { name = "typer" },
     { name = "wheel" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/b1/35/3946780749fbb733d7682f11ced226fe81b1376b22d528c7fadd25f0bb1e/deepeval-4.1.3.tar.gz", hash = "sha256:a91475cdb6a64ad466dcb3661cd1879e79aa5f441c0911dd29e9ea0947437c16", size = 769491, upload-time = "2026-07-22T01:08:54.206Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/45/9e/5c9c403f25656dbffdfcd11a093ce13dabaea493e8b2568fd34781d86bf9/deepeval-4.1.4.tar.gz", hash = "sha256:cd8a393cb11cb6254b0e1da57be78bc5f927117f5edb9da938a63375dbc85967", size = 770881, upload-time = "2026-07-27T11:33:12.838Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/49/04/777dd4c8dcef67c1aff79991167c44bf8f0b8c959d7514bececea2fb63bb/deepeval-4.1.3-py3-none-any.whl", hash = "sha256:2f75df59dc9bfb97aa081e7b0fa38edef5a5598944773bca78bf85bcadde1272", size = 1103065, upload-time = "2026-07-22T01:08:56.341Z" },
+    { url = "https://files.pythonhosted.org/packages/b8/06/817d4d1f826ae478d79e6b188f75c2ba2499c476dc3a41a459d085029188/deepeval-4.1.4-py3-none-any.whl", hash = "sha256:86afbcd811e5a99eed370d14783dad5e990a8976c9e3e3b1690b22003f909a78", size = 1102921, upload-time = "2026-07-27T11:33:14.944Z" },
 ]
 
 [[package]]
@@ -478,7 +478,7 @@ wheels = [
 
 [[package]]
 name = "fastapi"
-version = "0.140.0"
+version = "0.141.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "annotated-doc" },
@@ -487,9 +487,9 @@ dependencies = [
     { name = "typing-extensions" },
     { name = "typing-inspection" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/0d/fb/fd7671137d9fa3df1d93a2f5111eb982709201724b29f211e4beb2d58688/fastapi-0.140.0.tar.gz", hash = "sha256:f338951b82fd74ca8f843163aec43ea1a1ce84d515415a50fa98fa25572a5544", size = 420968, upload-time = "2026-07-24T21:16:41.187Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/8a/02/91e3416a8fdd715abb903a952a6bec7cdd8d14eed55d415fc8595524c319/fastapi-0.141.1.tar.gz", hash = "sha256:e8822fc40db1e1858054d7a949a888695bc9bdce70139178e33bd2871a453ca1", size = 425799, upload-time = "2026-07-29T17:18:05.568Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/eb/76/6d9e25ad88da9d3ff744bcdbec4736e38c2288611d43f673a5d9bfa27c07/fastapi-0.140.0-py3-none-any.whl", hash = "sha256:e951c0a0d9540bf5d9a2a9e078fd415da2ab7e312d435139e7d9e2e7fe9f0b23", size = 130863, upload-time = "2026-07-24T21:16:42.89Z" },
+    { url = "https://files.pythonhosted.org/packages/cb/03/10388a42375ee7e4ac9b94eb2c5c569c8b5795e377e701c9ac3ad63de890/fastapi-0.141.1-py3-none-any.whl", hash = "sha256:bfb91aa2d334c61cb35ba9a116fc123b3d3df31640b801cf57a7a78ec3f603b3", size = 131954, upload-time = "2026-07-29T17:18:04.364Z" },
 ]
 
 [[package]]
@@ -945,7 +945,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "core", editable = "core" },
-    { name = "fastapi", specifier = ">=0.140.0" },
+    { name = "fastapi", specifier = ">=0.141.1" },
     { name = "retrieval-qa", editable = "retrieval_qa" },
 ]
 
@@ -1062,7 +1062,7 @@ dev = [
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "deepeval", specifier = ">=4.1.3" },
+    { name = "deepeval", specifier = ">=4.1.4" },
     { name = "httpx2", specifier = ">=2.9.1" },
     { name = "import-linter", specifier = ">=2.1" },
     { name = "mypy", specifier = ">=1.11" },
@@ -1072,7 +1072,7 @@ dev = [
     { name = "reportlab", specifier = ">=4.0" },
     { name = "ruff", specifier = ">=0.16.1" },
     { name = "types-pyyaml", specifier = ">=6.0.12.20260724" },
-    { name = "types-reportlab", specifier = ">=4.5.1.20260724" },
+    { name = "types-reportlab", specifier = ">=4.5.1.20260728" },
 ]
 
 [[package]]
@@ -1397,7 +1397,7 @@ wheels = [
 
 [[package]]
 name = "openai"
-version = "2.48.0"
+version = "2.51.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "anyio" },
@@ -1409,9 +1409,9 @@ dependencies = [
     { name = "tqdm" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/2a/ae/d4d1835488c0350424009dac5095b9a3e173bee12fd2e421ee27e2142c42/openai-2.48.0.tar.gz", hash = "sha256:231b1e7661dda14574986c2f71451e9d584b7fe69e0ee6480e12ed090b48fc16", size = 1093427, upload-time = "2026-07-23T20:15:50.402Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/75/d8/06fda9685e47d9a8fc177ef57f8af75207938fad49a45ce23bfa7b6a2a5c/openai-2.51.0.tar.gz", hash = "sha256:4d61287c42eba54086d09346e709cbf7f8cec51822efce9cc399450b9385fba5", size = 1083410, upload-time = "2026-07-30T17:43:26.507Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/b5/2a/dcb891114e303c4379d4a498f10222e33eee540bcef4e1e493bd0af2b242/openai-2.48.0-py3-none-any.whl", hash = "sha256:c98df30aaaf93c51979f64d3e7c5b76464f8be0173368266229eb8fe6bd30f2c", size = 1648520, upload-time = "2026-07-23T20:15:48.052Z" },
+    { url = "https://files.pythonhosted.org/packages/57/6f/c49e21245ad4865e886f6885e95e998bc024335b392c202bd571639e9d50/openai-2.51.0-py3-none-any.whl", hash = "sha256:91db13ce59a670fddc820a6983989650095e43e3acac09288bceb69356a8904e", size = 1652344, upload-time = "2026-07-30T17:43:24.225Z" },
 ]
 
 [[package]]
@@ -2341,11 +2341,11 @@ wheels = [
 
 [[package]]
 name = "types-reportlab"
-version = "4.5.1.20260724"
+version = "4.5.1.20260728"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/e7/7e/fd2ea75db98ce094ebcf5f6763346e77eedc9db4855eb8e999d53e51aaa6/types_reportlab-4.5.1.20260724.tar.gz", hash = "sha256:71d3c85fa2055e34803c3a21410db39d4f039b3a6e0db39f9c3a43b202d5997c", size = 72495, upload-time = "2026-07-24T04:58:02.807Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/f4/b8/3115698bcebda28ef903c5a2c3f8673dc31f9023774246f25ffc09dd19b6/types_reportlab-4.5.1.20260728.tar.gz", hash = "sha256:5c8d0a2f12a533e400b9cbff82c5d11798b1a405a8ec5a2a5d84fb0ebee58c1e", size = 72669, upload-time = "2026-07-28T04:51:24.453Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/34/47/0f73d182edf92630aa933c9b14a4d6b0c7a00d1fc5b8d478aeb4b6157c0b/types_reportlab-4.5.1.20260724-py3-none-any.whl", hash = "sha256:182b52f41e346587c97e0d8cd677c5c64a821342497cb1ab4478e2bb19d7d8e4", size = 113004, upload-time = "2026-07-24T04:58:01.49Z" },
+    { url = "https://files.pythonhosted.org/packages/a2/07/c8127a9e56083bbac9e5285ce1c27a659e11c660fb1af71c2b2707770c34/types_reportlab-4.5.1.20260728-py3-none-any.whl", hash = "sha256:a4841e6668cc4b86d1acde75ee804307c49774c43c772f0d8addb2ed24b503ad", size = 113079, upload-time = "2026-07-28T04:51:23.261Z" },
 ]
 
 [[package]]
