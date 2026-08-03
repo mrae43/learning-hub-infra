@@ -186,8 +186,7 @@ def run_ingestion(
     2. Each parent is stored as a row (not embedded).
     3. Each parent is split into fixed-size child chunks (512 tokens, 15%
        overlap) via ``recursive_fixed_size_split``.
-    4. Child chunks inherit ``type_metadata`` from the parent with an
-       additional ``"child_of"`` lineage key.
+    4. Child chunks inherit ``type_metadata`` from the parent unchanged.
     5. Only child chunks are embedded and indexed for retrieval: each child
        row's ``content_search`` tsvector is populated application-side, and
        only children receive embeddings. Parent rows keep ``content_search``
@@ -233,7 +232,6 @@ def run_ingestion(
             child_splits = recursive_fixed_size_split(parent.content, parent.token_count)
             for child_split in child_splits:
                 child_metadata = dict(parent.type_metadata)
-                child_metadata["child_of"] = str(parent.chunk_id)
                 child_content = _sanitize_text(child_split.content)
                 child = ChunkRow(
                     document_id=pending.document_id,
