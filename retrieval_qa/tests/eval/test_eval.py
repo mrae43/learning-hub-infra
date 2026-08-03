@@ -93,7 +93,9 @@ class RecallAtKMetric(BaseMetric):  # type: ignore[no-untyped-call]
         return self.measure(test_case, *args, **kwargs)
 
     def is_successful(self) -> bool:
-        return self.score is not None and self.score >= self.threshold
+        score = self.score
+        threshold = self.threshold
+        return score is not None and threshold is not None and score >= threshold
 
     @property
     def __name__(self) -> str:
