@@ -16,7 +16,7 @@ from core.exceptions import IngestionError
 from core.types.chunk import Chunk
 from core.types.document import DocumentStatus, DocumentType
 from ingestion.models import PendingIngestion
-from ingestion.splitting import recursive_fixed_size_split
+from ingestion.splitting import fixed_size_split
 from retrieval_qa.chunking import chunker_registry, get_chunker_class
 
 logger = logging.getLogger(__name__)
@@ -185,7 +185,7 @@ def run_ingestion(
     1. Structure-aware chunking produces parent chunks.
     2. Each parent is stored as a row (not embedded).
     3. Each parent is split into fixed-size child chunks (512 tokens, 15%
-       overlap) via ``recursive_fixed_size_split``.
+       overlap) via ``fixed_size_split``.
     4. Child chunks inherit ``type_metadata`` from the parent unchanged.
     5. Only child chunks are embedded and indexed for retrieval: each child
        row's ``content_search`` tsvector is populated application-side, and
@@ -229,7 +229,7 @@ def run_ingestion(
         # ── Phase 2: Split parents into children ──
         child_rows: list[ChunkRow] = []
         for parent in parent_rows:
-            child_splits = recursive_fixed_size_split(parent.content, parent.token_count)
+            child_splits = fixed_size_split(parent.content, parent.token_count)
             for child_split in child_splits:
                 child_metadata = dict(parent.type_metadata)
                 child_content = _sanitize_text(child_split.content)
