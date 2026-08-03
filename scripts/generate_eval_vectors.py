@@ -11,7 +11,7 @@ unique source document:
     1. Runs structure-aware parent chunking once (parent chunks are invariant
        across child split sizes).
     2. For each of the three chunk-size configs (256/10%, 512/15%, 1024/20%):
-       recursively splits each parent chunk, embeds the resulting children,
+       splits each parent chunk, embeds the resulting children,
        and writes a variant sidecar JSON file.
 
 Sidecar files are written to ``eval_corpus/eval_vectors_{size}_{overlap}.json``.
@@ -33,7 +33,7 @@ import yaml
 from core.clients.embeddings_client import Embedder, EmbeddingsClient, InMemoryEmbedder
 from core.config.settings import Settings
 from core.types.document import DocumentType
-from ingestion.splitting import recursive_fixed_size_split
+from ingestion.splitting import fixed_size_split
 from retrieval_qa.chunking import get_chunker
 
 # ── Constants ───────────────────────────────────────────────────────────────
@@ -124,12 +124,12 @@ def _build_parent_entries(
     """Build parent entries with children for a single chunk-size config.
 
     Each parent chunk is split into child chunks via
-    ``recursive_fixed_size_split``.  The result is a list of dicts ready to
+    ``fixed_size_split``.  The result is a list of dicts ready to
     be serialised into the sidecar tree.
     """
     parent_entries: list[dict[str, Any]] = []
     for parent in parents:
-        children = recursive_fixed_size_split(
+        children = fixed_size_split(
             parent.content,
             parent.token_count,
             chunk_size=chunk_size,
@@ -285,7 +285,7 @@ def build_all_sidecars(
     Algorithm per document:
       1. Run structure-aware parent chunking once (parent chunks are invariant
          across child split sizes).
-      2. For each config (256/10%, 512/15%, 1024/20%): recursively split each
+      2. For each config (256/10%, 512/15%, 1024/20%): split each
          parent chunk, embed the children, write the sidecar.
 
     Args:

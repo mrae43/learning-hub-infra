@@ -1,8 +1,9 @@
-"""Recursive fixed-size text splitter for parent-child chunking.
+"""Fixed-size text splitter for parent-child chunking.
 
 Per ADR-0016, structure-aware chunks (parents) are split into fixed-size
-child chunks of 512 tokens with 15% contextual overlap. Only child chunks
-are embedded and indexed for retrieval.
+child chunks of 512 tokens with 15% contextual overlap. The split is an
+iterative sliding window that never calls itself. Only child chunks are
+embedded and indexed for retrieval.
 """
 
 from dataclasses import dataclass
@@ -12,7 +13,7 @@ from core.utils import count_tokens
 
 @dataclass(frozen=True)
 class ChildSplit:
-    """A single child chunk produced by the recursive splitter.
+    """A single child chunk produced by the fixed-size splitter.
 
     Attributes:
         content: The text content of the child chunk.
@@ -29,7 +30,7 @@ _DEFAULT_CHUNK_SIZE = 512
 _DEFAULT_OVERLAP_RATIO = 0.15
 
 
-def recursive_fixed_size_split(
+def fixed_size_split(
     text: str,
     text_token_count: int | None = None,
     *,
@@ -41,7 +42,7 @@ def recursive_fixed_size_split(
     If the text is at or below ``chunk_size`` tokens, a single child is
     returned (identity split). Otherwise, the text is split into sliding
     windows of ``chunk_size`` tokens with ``overlap_ratio`` fractional
-    overlap between adjacent windows.
+    overlap between adjacent windows, using an iterative loop.
 
     Args:
         text: The parent chunk content to split.
@@ -89,4 +90,4 @@ def recursive_fixed_size_split(
     return children
 
 
-__all__ = ["ChildSplit", "recursive_fixed_size_split"]
+__all__ = ["ChildSplit", "fixed_size_split"]
