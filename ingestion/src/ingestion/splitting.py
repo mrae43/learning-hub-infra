@@ -7,6 +7,8 @@ are embedded and indexed for retrieval.
 
 from dataclasses import dataclass
 
+from core.utils import count_tokens
+
 
 @dataclass(frozen=True)
 class ChildSplit:
@@ -25,11 +27,6 @@ class ChildSplit:
 
 _DEFAULT_CHUNK_SIZE = 512
 _DEFAULT_OVERLAP_RATIO = 0.15
-
-
-def _count_tokens(text: str) -> int:
-    """Approximate token count matching the convention in retrieval_qa._utils."""
-    return max(1, len(text.split()))
 
 
 def recursive_fixed_size_split(
@@ -63,7 +60,7 @@ def recursive_fixed_size_split(
     if not text:
         raise ValueError("text cannot be empty")
 
-    token_count = text_token_count if text_token_count is not None else _count_tokens(text)
+    token_count = text_token_count if text_token_count is not None else count_tokens(text)
 
     if token_count <= chunk_size:
         return [ChildSplit(content=text, token_count=token_count, position=0)]

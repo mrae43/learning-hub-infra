@@ -45,6 +45,7 @@ learning-hub/
 │   │   │   ├── schema.py
 │   │   │   └── migrations/
 │   │   ├── exceptions.py             # Named exception types
+│   │   ├── utils.py                  # Shared text utilities (e.g. count_tokens)
 │   │   └── __init__.py
 │   ├── tests/core/                   # types, clients, migration tests
 │   ├── pyproject.toml

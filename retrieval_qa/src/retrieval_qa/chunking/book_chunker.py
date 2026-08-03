@@ -19,7 +19,7 @@ from pypdf import PdfReader
 from core.exceptions import IngestionError
 from core.types.chunk import BookChunkMetadata, Chunk
 from core.types.document import DocumentType
-from retrieval_qa._utils import count_tokens
+from core.utils import count_tokens
 from retrieval_qa.chunking._html_utils import _BaseHTMLTextExtractor
 from retrieval_qa.chunking.base import DocumentChunker, register_chunker
 
