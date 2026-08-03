@@ -85,7 +85,7 @@ def test_pipeline_happy_path_reaches_ready(
         assert p.position < len(parents)
     for child in children:
         assert child.parent_chunk_id is not None
-        assert "child_of" in child.type_metadata
+        assert "child_of" not in child.type_metadata
 
     embeddings = test_session.query(Embedding).all()
     assert len(embeddings) == len(children)
@@ -174,7 +174,7 @@ def test_pipeline_book_happy_path_reaches_ready(
         .all()
     )
     assert len(chunks) >= 1
-    # Parents have original metadata; children inherit with "child_of" key.
+    # Parents have original metadata; children inherit it unchanged.
     for chunk in chunks:
         assert "chapter" in chunk.type_metadata
         assert isinstance(chunk.type_metadata["chapter"], int)
@@ -182,7 +182,7 @@ def test_pipeline_book_happy_path_reaches_ready(
     children = [c for c in chunks if c.parent_chunk_id is not None]
     assert len(children) >= 1
     for child in children:
-        assert "child_of" in child.type_metadata
+        assert "child_of" not in child.type_metadata
 
     embeddings = test_session.query(Embedding).all()
     assert len(embeddings) == len(children)
@@ -237,7 +237,7 @@ def test_pipeline_documentation_happy_path_reaches_ready(
     children = [c for c in chunks if c.parent_chunk_id is not None]
     assert len(children) >= 1
     for child in children:
-        assert "child_of" in child.type_metadata
+        assert "child_of" not in child.type_metadata
 
 
 def test_reingestion_creates_new_document_id(
@@ -738,7 +738,6 @@ class TestParentChildIngestion:
         assert len(children) >= 2
         for child in children:
             assert child.parent_chunk_id == parents[0].chunk_id
-            assert child.type_metadata.get("child_of") == str(parents[0].chunk_id)
 
     def test_small_parent_produces_one_child(
         self,
@@ -786,12 +785,12 @@ class TestParentChildIngestion:
         assert len(children) == 1
         assert children[0].content == small_content
 
-    def test_child_inherits_type_metadata_with_child_of(
+    def test_child_inherits_parent_type_metadata_unchanged(
         self,
         test_session: Session,
         fake_embeddings_client: MagicMock,
     ) -> None:
-        """Children inherit type_metadata from parent and add 'child_of' key."""
+        """Children inherit parent type_metadata unchanged (no child_of key)."""
         content = "inherit_metadata_test_word " * 400
         document = Document(
             title="Inherit Test",
@@ -830,10 +829,7 @@ class TestParentChildIngestion:
         for child in children:
             assert child.type_metadata.get("chapter") == 5
             assert child.type_metadata.get("heading") == "Deep Dive"
-            assert "child_of" in child.type_metadata
-            child_of_val = child.type_metadata["child_of"]
-            assert isinstance(child_of_val, str)
-            assert len(child_of_val) > 0
+            assert "child_of" not in child.type_metadata
 
     def test_positions_enumerate_within_parent(
         self,
