@@ -14,7 +14,7 @@ from pypdf import PdfReader
 from core.exceptions import IngestionError
 from core.types.chunk import Chunk, PaperChunkMetadata
 from core.types.document import DocumentType
-from retrieval_qa._utils import count_tokens
+from core.utils import count_tokens
 from retrieval_qa.chunking.base import DocumentChunker, register_chunker
 
 # Matches lines that look like paper section headers, e.g.:
