@@ -14,7 +14,7 @@ dependencies = [
     "alembic>=1.13",
     "pgvector>=0.3",
     "psycopg2-binary>=2.9",
-    "openai>=2.48.0",
+    "openai>=2.51.0",
     "uuid-utils>=0.10",
     "cohere>=5.0",
 ]
