@@ -40,10 +40,7 @@ def get_reranker() -> Reranker:
     allowing the system to run without a Cohere API key during development.
     """
     if settings.cohere_api_key:
-        return CohereReranker(
-            api_key=settings.cohere_api_key,
-            model=settings.reranker_model,
-        )
+        return CohereReranker()
     return NoopReranker()
 
 
