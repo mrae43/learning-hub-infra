@@ -437,12 +437,13 @@ class TestEmbedChunks:
         assert client.calls == [["c1"], ["c2", "c3"], ["c4"]]
         assert [chunk for chunk, _ in results] == chunks
 
-    def test_embed_failure_raises_ingestion_error(self) -> None:
-        """An upstream embed failure surfaces as IngestionError."""
+    def test_embed_failure_propagates_unchanged(self) -> None:
+        """An upstream embed failure propagates as-is; ``run_ingestion`` owns
+        the ``IngestionError`` conversion (issue #178)."""
         chunks = [_make_chunk("c1", 5)]
         client = _RecordingEmbedder(fail=RuntimeError("upstream down"))
 
-        with pytest.raises(IngestionError, match="Embedding call failed"):
+        with pytest.raises(RuntimeError, match="upstream down"):
             _embed_chunks(
                 session=_unused_session(),
                 client=client,

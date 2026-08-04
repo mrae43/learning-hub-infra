@@ -7,6 +7,7 @@ the Cohere Rerank API, and a ``NoopReranker`` that returns passages unchanged.
 from typing import Protocol, runtime_checkable
 
 import cohere
+import httpx
 
 from core.config.settings import settings
 from core.exceptions import RerankerRateLimitError, UpstreamBadResponse, UpstreamUnavailable
@@ -94,7 +95,8 @@ class CohereReranker:
                 Caller should fall back to RRF top-k.
             UpstreamBadResponse: Cohere returned an unexpected response shape
                 or a 4xx/5xx other than 429.
-            UpstreamUnavailable: Cohere could not be reached or timed out.
+            UpstreamUnavailable: Cohere could not be reached (transport
+                failure or timeout).
         """
         if not passages:
             return []
@@ -112,7 +114,7 @@ class CohereReranker:
             raise RerankerRateLimitError(f"Cohere Rerank rate-limited (429): {exc}") from exc
         except cohere.core.api_error.ApiError as exc:
             raise UpstreamBadResponse(f"Cohere Rerank API returned bad status: {exc}") from exc
-        except Exception as exc:
+        except httpx.TransportError as exc:
             raise UpstreamUnavailable(f"Cohere Rerank API unreachable: {exc}") from exc
 
         try:

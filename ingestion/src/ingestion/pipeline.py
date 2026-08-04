@@ -124,8 +124,10 @@ def _embed_chunks(
         calls made.
 
     Raises:
-        IngestionError: If a chunk exceeds the per-request batch cap, an
-            embedding call fails, or a response's length mismatches the batch.
+        IngestionError: If a chunk exceeds the per-request batch cap or a
+            response's length mismatches the batch. Embedding provider errors
+            are intentionally NOT re-wrapped here; ``run_ingestion`` owns the
+            ``IngestionError`` conversion for the whole pipeline.
     """
     if not chunks:
         return [], 0
@@ -147,10 +149,7 @@ def _embed_chunks(
     result: list[tuple[ChunkRow, list[float]]] = []
     for batch in batches:
         texts = [c.content for c in batch.chunks]
-        try:
-            vectors = client.embed(texts)
-        except Exception as exc:
-            raise IngestionError(f"Embedding call failed: {exc}") from exc
+        vectors = client.embed(texts)
 
         if len(vectors) != len(batch.chunks):
             raise IngestionError(
