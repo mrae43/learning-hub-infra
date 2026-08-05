@@ -23,6 +23,10 @@ A hand-rolled RAG study tool for learning AI/ML from papers, books, and document
 
 > **Status:** Early implementation — tracer bullet complete. Five of six packages (`core/`, `retrieval_qa/`, `api/`, `ingestion/`, `scripts/`) have implementation code (~5200 source lines, plus `tests/`). Only `depth_dive/` is still a stub (just `__init__.py` + smoke test). Ingestion pipeline, Harness A query pipeline, three API endpoints (`POST /ingest`, `GET /documents/{id}`, `POST /query`), and the `scripts/` eval & chunk-size-tuning tooling are operational. See [docs/](./docs/) for architecture decisions and plans.
 
+## Local development
+
+The root `Makefile` wraps the local dev container lifecycle defined in `docker-compose.yml` (Postgres + pgvector): `make up` to start the stack in the background, `make logs` to tail service logs (`make logs SERVICE=postgres` scopes to one service), and `make down` to stop and remove containers/network — `down` never deletes the pgvector data volume. Run `make help` to list every target. Docker's daemon must be running; `up`/`logs`/`down` fail fast with a clear message if it isn't. Per-package checks (`ruff`, `mypy`, `pytest`) stay explicit `uv run` invocations.
+
 ## Architecture
 
 Structured monorepo with extractable module boundaries:
