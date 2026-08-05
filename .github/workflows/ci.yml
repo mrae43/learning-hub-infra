@@ -146,11 +146,28 @@ jobs:
         with:
           configFile: commitlint.config.mjs
 
-  # 5. AGGREGATE GATE (single predictable check name for ruleset)
+  # 5. WORKFLOW-VALIDATION GATE (actionlint)
+  # Lints every workflow definition in .github/workflows/ so malformed YAML
+  # fails the merge gate here instead of breaking a run at trigger time.
+  actionlint:
+    name: actionlint workflow validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Download actionlint
+        run: |
+          bash <(curl -Ls https://raw.githubusercontent.com/rhysd/actionlint/v1.7.12/scripts/download-actionlint.bash) 1.7.12
+          install -m 0755 ./actionlint /usr/local/bin/actionlint
+
+      - name: Lint workflow files
+        run: actionlint -color
+
+  # 6. AGGREGATE GATE (single predictable check name for ruleset)
   ci-passed:
     name: CI passed
     if: always()
-    needs: [detect-changes, quality, boundaries, commitlint]
+    needs: [detect-changes, quality, boundaries, commitlint, actionlint]
     runs-on: ubuntu-latest
     steps:
       - name: Check all prerequisites passed
@@ -159,8 +176,9 @@ jobs:
           QUALITY: ${{ needs.quality.result }}
           BOUNDARIES: ${{ needs.boundaries.result }}
           COMMITLINT: ${{ needs.commitlint.result }}
+          ACTIONLINT: ${{ needs.actionlint.result }}
         run: |
-          for result in "$DETECT" "$QUALITY" "$BOUNDARIES" "$COMMITLINT"; do
+          for result in "$DETECT" "$QUALITY" "$BOUNDARIES" "$COMMITLINT" "$ACTIONLINT"; do
             if [ "$result" = "failure" ] || [ "$result" = "cancelled" ]; then
               exit 1
             fi
