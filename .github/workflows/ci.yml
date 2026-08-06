@@ -166,10 +166,14 @@ jobs:
   # 6. DOCKER BUILD GATE (build-only, never pushes)
   # Catches Dockerfile breakage pre-merge instead of on `main` or at release
   # time. Runs unconditionally, like the workflow-validation gate. Uses the same
-  # bare GHA cache backend (default repo-wide scope) as the release workflow so
-  # PR builds and release builds read and write one shared cache, and PR builds
-  # warm the exact cache the release pipeline later consumes. No registry
-  # login, no push capability, no secrets.
+  # bare GHA cache backend (default repo-wide scope) as the release workflow.
+  # Note: GitHub's cache access rules still isolate caches by branch/ref. A PR
+  # run reads cache from its own merge-ref plus the base and default branches,
+  # but only writes to its own merge-ref (`refs/pull/<N>/merge`); a `main`/tag
+  # release run reads and writes only its own branch cache. So PR builds can
+  # reuse (read) the release pipeline's cache but can never write back to it —
+  # this gate validates the build, it does not warm the release cache. No
+  # registry login, no push capability, no secrets.
   docker-build:
     name: Docker image build
     runs-on: ubuntu-latest
