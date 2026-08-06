@@ -15,6 +15,7 @@ learning-hub/
 │   │   ├── _utils.py                 # Internal utility functions
 │   │   └── __init__.py
 │   ├── tests/retrieval_qa/           # chunker + retrieval tests
+│   ├── tests/eval/                   # retrieval eval (path-gated, eval_set.yaml + eval_vectors.json)
 │   ├── pyproject.toml
 │   └── README.md
 ├── depth_dive/                        # Depth Dive generation (stub — TODO)
@@ -22,8 +23,7 @@ learning-hub/
 │   │   └── __init__.py               # Package marker only
 │   ├── tests/depth_dive/
 │   │   └── test_smoke.py
-│   ├── pyproject.toml
-│   └── (README.md)
+│   └── pyproject.toml
 ├── core/                             # Shared (may stay here or move to common/ later)
 │   ├── src/core/
 │   │   ├── types/                    # Shared schemas
@@ -43,7 +43,7 @@ learning-hub/
 │   │   ├── database/                 # pgvector wrapper, Alembic migrations
 │   │   │   ├── connection.py
 │   │   │   ├── schema.py
-│   │   │   └── migrations/
+│   │   │   └── migrations/           # env.py + script.py.mako + versions/
 │   │   ├── exceptions.py             # Named exception types
 │   │   ├── utils.py                  # Shared text utilities (e.g. count_tokens)
 │   │   └── __init__.py
@@ -75,32 +75,52 @@ learning-hub/
 │   │   ├── pipeline.py               # Ingest → chunk → embed → store
 │   │   ├── splitting.py              # Document splitting logic
 │   │   └── __init__.py
-│   ├── tests/ingestion/
+│   ├── tests/ingestion/              # pipeline/splitting/tasks unit tests
+│   ├── tests/integration/            # real-API ingestion tests (integration-marked)
 │   ├── pyproject.toml
 │   └── README.md
-├── scripts/
-│   └── generate_eval_vectors.py      # Eval vector generation utility
+├── scripts/                          # Eval & chunk-size tuning tooling
+│   ├── __init__.py
+│   ├── eval_metrics.py               # Recall@k, MRR, is_hit metrics
+│   ├── generate_eval_vectors.py      # Eval vector generation utility
+│   ├── manual_ingest_smoke.py        # Manual ingestion smoke script
+│   ├── run_chunk_tuning.py           # Chunk-size tuning orchestrator
+│   ├── seed_schema.py                # Schema seeding for tuning
+│   ├── pyproject.toml
+│   └── (tests live in root tests/scripts/)
+├── eval_corpus/                      # Retrieval eval & tuning corpus
+│   ├── books/                        # DDIA excerpts, deep learning concepts
+│   ├── papers/                       # FlashAttention, vLLM paged attention
+│   ├── synthetic/                    # RAG reference, SOLID principles
+│   └── eval_set_tuning.yaml          # Tuning query set
+├── tests/                            # Root-level tests (scripts/ eval tooling)
+│   └── scripts/
 ├── docs/
 │   ├── adr/                          # 0001–0018 (skip 0008; 0015 supersedes 0007 scorer)
+│   ├── agent/issue-tracker.md        # Code review tracker
 │   ├── ai-system-tree.md
-│   ├── tech-stack.md
 │   ├── coding-standards.md
-│   └── commit-instructions.md
+│   ├── commit-instructions.md
+│   ├── security-mvp-guide.md
+│   ├── tech-stack.md
+│   └── .out-of-scope/                # Deliberately deferred/decided-against notes
+│       ├── custom-deepeval-metric-async.md
+│       ├── docker-compose.md
+│       ├── gha-cache-config-dedup.md
+│       └── pytest-module-level-test-data.md
 ├── .github/workflows/
-│   ├── ci.yml                        # ruff, mypy, pytest, import-linter, commitlint
-│   ├── cd.yml                        # Docker build + changelog
-│   ├── security.yml                  # Dependency scanning (pip-audit, etc.)
+│   ├── ci.yml                        # ruff, mypy, pytest, import-linter, commitlint, actionlint, docker build gate
+│   ├── cd.yml                        # Docker build + push to GHCR, changelog
+│   ├── security.yml                  # CodeQL, secret scanning (gitleaks), Trivy, license audit
 │   └── dependabot-auto-merge.yml     # Auto-merge for low-risk Dependabot bumps
-├── .out-of-scope/
-│   ├── custom-deepeval-metric-async.md   # Deepeval a_measure pattern rationale
-│   ├── docker-compose.md                 # Notes on docker-compose scoping decision
-│   └── pytest-module-level-test-data.md  # Module-level test data I/O rationale
 ├── pyproject.toml                    # Root: uv workspace, ruff config, import-linter contracts
-├── conftest.py                       # Root test fixtures (271 lines, shared by all packages)
+├── conftest.py                       # Root test fixtures (276 lines, shared by all packages)
 ├── alembic.ini                       # Alembic configuration for DB migrations
+├── Makefile                          # Thin docker-compose wrapper for local dev (up/logs/down)
+├── docker-entrypoint.sh              # Container entrypoint: alembic upgrade + uvicorn
 ├── commitlint.config.mjs             # Conventional Commits enforcement
 ├── docker-compose.yml                # Local dev: PostgreSQL + pgvector
-├── Dockerfile                        # Multi-stage build (all 5 packages)
+├── Dockerfile                        # Multi-stage build (all 6 packages)
 ├── .env.example
 ├── AGENTS.md                         # Session notes for AI coding tools
 ├── CONTEXT.md                        # Domain glossary
@@ -115,5 +135,6 @@ learning-hub/
 4. **Tool-specificity** — web search lives *inside* Harness B, not a generic tool, making it clear it's a Harness-B-specific capability.
 5. **Clean import boundaries** — matches ADR-0011's import-linter rules exactly (retrieval_qa ↔ core, depth_dive ↔ core, never retrieval_qa ↔ depth_dive).
 6. **Extractable ingestion** — ingestion logic is modular enough that when you graduate to `arq` + Redis (ADR-0006), you can slot it in without restructuring.
+7. **Eval/tuning kept outside packages** — `scripts/` tooling plus `eval_corpus/` material stay out of runtime package dirs, and the eval tests live at root `tests/scripts/`, so per-package CI stays clean.
 
 **Where to add things** — the `AGENTS.md` file at the root now documents exactly where things go (the "Where to add things" section). Use that as the canonical reference for future contributors.

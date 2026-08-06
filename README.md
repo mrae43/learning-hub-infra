@@ -21,7 +21,7 @@ A hand-rolled RAG study tool for learning AI/ML from papers, books, and document
 | Post-MVP 1 | **Depth Dive** — richer explanations (text + diagrams + code) with agentic web search | 🔧 Scaffold |
 | Post-MVP 2 | **Synapse** — multi-sensory interactive learning with gamification and neuroplasticity triggers | 📅 Planned |
 
-> **Status:** Early implementation — tracer bullet complete. Five of six packages (`core/`, `retrieval_qa/`, `api/`, `ingestion/`, `scripts/`) have implementation code (~5200 source lines, plus `tests/`). Only `depth_dive/` is still a stub (just `__init__.py` + smoke test). Ingestion pipeline, Harness A query pipeline, three API endpoints (`POST /ingest`, `GET /documents/{id}`, `POST /query`), and the `scripts/` eval & chunk-size-tuning tooling are operational. See [docs/](./docs/) for architecture decisions and plans.
+> **Status:** Early implementation — tracer bullet complete. Five of six packages (`core/`, `retrieval_qa/`, `api/`, `ingestion/`, `scripts/`) have implementation code (~5300 source lines, plus `tests/`). Only `depth_dive/` is still a stub (just `__init__.py` + smoke test). Ingestion pipeline, Harness A query pipeline, three API endpoints (`POST /ingest`, `GET /documents/{id}`, `POST /query`), and the `scripts/` eval & chunk-size-tuning tooling are operational. See [docs/](./docs/) for architecture decisions and plans.
 
 ## Local development
 
@@ -39,6 +39,7 @@ Structured monorepo with extractable module boundaries:
 | `api/` | FastAPI server (thin routes → controllers) |
 | `ingestion/` | Document upload + background ingestion pipeline |
 | `scripts/` | Retrieval eval & chunk-size tuning tooling over `eval_corpus/` |
+| `eval_corpus/` | Retrieval eval & tuning corpus (books, papers, synthetic) |
 
 ## Why this tech stack
 
