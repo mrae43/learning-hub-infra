@@ -7,26 +7,34 @@ WORKDIR /app
 COPY --from=ghcr.io/astral-sh/uv:0.11.24 /uv /uvx /bin/
 ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy
 
-# Copy workspace metadata.
+# Phase 1: dependency metadata only (root project, lockfile, and every
+# workspace member's pyproject.toml), so this layer survives source edits.
 COPY pyproject.toml uv.lock ./
-COPY alembic.ini ./
-
-# Copy package metadata and source code (tests excluded from production image).
 COPY core/pyproject.toml ./core/
-COPY core/src ./core/src
 COPY retrieval_qa/pyproject.toml ./retrieval_qa/
-COPY retrieval_qa/src ./retrieval_qa/src
 COPY depth_dive/pyproject.toml ./depth_dive/
-COPY depth_dive/src ./depth_dive/src
 COPY api/pyproject.toml ./api/
-COPY api/src ./api/src
 COPY ingestion/pyproject.toml ./ingestion/
-COPY ingestion/src ./ingestion/src
 COPY scripts/pyproject.toml ./scripts/
+
+# Install third-party dependencies without the workspace members. The cache
+# mount keeps wheels in the local uv cache even when a lockfile change
+# invalidates this layer.
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --all-packages --no-dev --no-editable --frozen --no-install-workspace
+
+# Phase 2: source trees, migration configuration, and scripts.
+COPY core/src ./core/src
+COPY retrieval_qa/src ./retrieval_qa/src
+COPY depth_dive/src ./depth_dive/src
+COPY api/src ./api/src
+COPY ingestion/src ./ingestion/src
+COPY alembic.ini ./
 COPY scripts/*.py ./scripts/
 
-# Install production dependencies and workspace packages.
-RUN uv sync --all-packages --no-dev --no-editable --frozen
+# Install the workspace members on top of the third-party dependencies.
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --all-packages --no-dev --no-editable --frozen
 
 FROM python:3.12-slim
 WORKDIR /app
