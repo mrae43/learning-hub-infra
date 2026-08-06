@@ -2,48 +2,26 @@
 
 ## Abstract
 
-FlashAttention is an algorithm that computes exact attention with significantly reduced memory reads and writes. It makes attention faster and more memory-efficient by being aware of the GPU memory hierarchy. The key idea is to tile the attention computation, loading blocks of data from slow HBM to fast SRAM, computing attention over those blocks, and then writing the result back.
+FlashAttention is an algorithm that computes exact attention with significantly reduced memory reads and writes. It makes attention faster and more memory-efficient by being aware of the GPU memory hierarchy. The key idea is to tile the attention computation, loading blocks of data from slow HBM to fast SRAM, computing attention over those blocks, and then writing the result back. Because the algorithm produces exactly the same output as standard attention, it can be used as a drop-in replacement in existing Transformer implementations.
 
 ## 1. Introduction
 
-The attention mechanism is a fundamental building block of Transformer models. However, the standard attention implementation materializes the N x N attention matrix in HBM (high-bandwidth memory), which has O(N^2) memory complexity. For long sequences, this becomes prohibitive. FlashAttention avoids materializing the full attention matrix by using tiling and recomputation.
+The attention mechanism is a fundamental building block of Transformer models. However, the standard attention implementation materializes the N x N attention matrix in HBM (high-bandwidth memory), which has O(N^2) memory complexity. For long sequences, this becomes prohibitive. FlashAttention avoids materializing the full attention matrix by using tiling and recomputation. The result is an exact attention implementation whose runtime is dominated by HBM access rather than the arithmetic itself, which is the right target on modern GPUs where SRAM bandwidth vastly exceeds HBM bandwidth. Modern GPUs have multiple levels of memory. The largest is HBM (high-bandwidth memory, typically 16-80 GB) which has relatively low bandwidth compared to on-chip SRAM. On-chip SRAM (shared memory, typically 192 KB per block on A100) has high bandwidth but very limited capacity. The key to performance is minimizing HBM accesses by maximizing the use of SRAM. The gap between HBM and SRAM bandwidth is large and growing: SRAM can deliver an order of magnitude more bandwidth per unit of computation, so any algorithm that reduces HBM traffic, even at the cost of extra arithmetic, can come out ahead, because arithmetic is cheap relative to memory movement.
 
-## 2. Background: GPU Memory Hierarchy
+The A100 GPU has the following memory hierarchy: HBM at 40-80 GB with roughly 1.5-2.0 TB/s bandwidth, an L2 cache of 40 MB, and SRAM or shared memory of 192 KB per streaming multiprocessor with roughly 19 TB/s aggregate bandwidth. The SRAM capacity per SM is the hard constraint that shapes the tiling: a block of the Q, K, and V matrices must fit in the 192 KB shared memory together with the partial softmax statistics, and the block size is chosen so that the arithmetic per block is enough to amortize the HBM transfers for that block.
 
-Modern GPUs have multiple levels of memory. The largest is HBM (high-bandwidth memory, typically 16-80 GB) which has relatively low bandwidth compared to on-chip SRAM. On-chip SRAM (shared memory, typically 192 KB per block on A100) has high bandwidth but very limited capacity. The key to performance is minimizing HBM accesses by maximizing the use of SRAM.
+## 2. FlashAttention Algorithm
 
-### Memory Hierarchy Details
+FlashAttention tiles the Q, K, and V matrices into blocks that fit in on-chip SRAM. For each block, the algorithm loads blocks of Q and K from HBM to SRAM, computes the partial attention scores S = Q * K^T, applies the softmax operation, computes the weighted sum with V, and writes the result back to HBM. The tiling is done separately along the query dimension and the key dimension, which ensures that the intermediate N x N attention matrix is never fully materialized in HBM. Because softmax normalization is computed incrementally, the running maximum and running sum must be tracked across tiles, and the output must be rescaled when a new maximum is found. This online softmax is the key algorithmic ingredient that makes exact attention possible with tiling.
 
-The A100 GPU has the following memory hierarchy:
-- HBM: 40-80 GB, ~1.5-2.0 TB/s bandwidth
-- L2 cache: 40 MB
-- SRAM/shared memory: 192 KB per streaming multiprocessor (SM), ~19 TB/s aggregate bandwidth
+To avoid storing the large attention matrix for the backward pass, FlashAttention recomputes the attention scores during the backward pass using the blocks of Q, K, and V stored in HBM. This recomputation trades off additional FLOPs for reduced memory reads/writes, which is beneficial because SRAM-based computation is much faster than HBM bandwidth. In the backward pass, the forward pass is effectively replayed block by block, and the gradients of Q, K, and V are accumulated incrementally. The recomputation increases total FLOPs by roughly a third, but because the bottleneck is memory bandwidth rather than arithmetic, the overall wall-clock time still drops significantly.
 
-## 3. FlashAttention Algorithm
+## 3. Results
 
-### Tiling Strategy
+FlashAttention achieves up to 2x speedup over the standard PyTorch implementation for BERT-base training. For long sequences, the speedup can be even more dramatic. Memory savings scale linearly with sequence length compared to the quadratic memory of standard attention. The practical consequence is that Transformer training can use much longer contexts on the same hardware, or the same context on smaller, cheaper GPUs. The speedups are consistent across model sizes and hold on both training and inference workloads.
 
-FlashAttention tiles the Q, K, and V matrices into blocks that fit in on-chip SRAM. For each block, the algorithm:
-1. Loads blocks of Q, K from HBM to SRAM
-2. Computes the partial attention scores S = Q * K^T
-3. Applies the softmax operation
-4. Computes the weighted sum with V
-5. Writes the result back to HBM
+## 4. Block-Sparse FlashAttention
 
-The tiling is done separately along the query dimension and the key dimension. This ensures that the intermediate N x N attention matrix is never fully materialized in HBM.
+For very long sequences, even FlashAttention's tiled approach can be improved by exploiting sparsity. Block-Sparse FlashAttention extends FlashAttention to handle attention matrices where many blocks are known to be zero (for example, due to local or dilated attention patterns). It uses a block-sparse mask to skip computation and memory access for zero blocks. The sparsity is expressed at the block granularity, so the tile-level kernel structure is preserved: only blocks that the mask marks as non-zero are loaded and computed.
 
-### Recomputation
-
-To avoid storing the large attention matrix for the backward pass, FlashAttention recomputes the attention scores during the backward pass using the blocks of Q, K, and V stored in HBM. This recomputation trades off additional FLOPs for reduced memory reads/writes, which is beneficial because SRAM-based computation is much faster than HBM bandwidth.
-
-## 4. Results
-
-FlashAttention achieves up to 2x speedup over the standard PyTorch implementation for BERT-base training. For long sequences, the speedup can be even more dramatic. Memory savings scale linearly with sequence length compared to the quadratic memory of standard attention.
-
-## 5. Block-Sparse FlashAttention
-
-For very long sequences, even FlashAttention's tiled approach can be improved by exploiting sparsity. Block-Sparse FlashAttention extends FlashAttention to handle attention matrices where many blocks are known to be zero (for example, due to local or dilated attention patterns). It uses a block-sparse mask to skip computation and memory access for zero blocks.
-
-### Block-Sparsity Mask
-
-The block-sparsity mask is a binary matrix where each entry indicates whether the corresponding block of the attention matrix should be computed. This mask is typically derived from the attention pattern (e.g., local windows, dilated patterns, or learned sparsity). The mask operates on the block level, not on individual elements, to maintain the efficiency of the tiled approach.
+The block-sparsity mask is a binary matrix where each entry indicates whether the corresponding block of the attention matrix should be computed. This mask is typically derived from the attention pattern (e.g., local windows, dilated patterns, or learned sparsity). The mask operates on the block level, not on individual elements, to maintain the efficiency of the tiled approach. Choosing the mask involves a trade-off: coarser masks are simpler and faster to manage but waste compute on partially populated blocks, while finer masks preserve more of the true sparsity at the cost of more bookkeeping.

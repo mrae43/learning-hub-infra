@@ -2,68 +2,26 @@
 
 ## Chapter 1: Neural Network Fundamentals
 
-A neural network is composed of layers of interconnected neurons. Each neuron receives input from the previous layer, applies a weighted sum followed by a non-linear activation function, and passes the result to the next layer. The simplest form is the feedforward neural network, where information flows in one direction without cycles.
+A neural network is composed of layers of interconnected neurons. Each neuron receives input from the previous layer, applies a weighted sum followed by a non-linear activation function, and passes the result to the next layer. The simplest form is the feedforward neural network, where information flows in one direction without cycles. The weights of the network are learned from data by iteratively adjusting them to reduce the gap between predictions and ground truth. The ReLU (Rectified Linear Unit) activation function is defined as f(x) = max(0, x). It has become the default activation function for many neural network architectures because it helps mitigate the vanishing gradient problem. Other activation functions include the sigmoid function, which squashes values to the range (0, 1), and the tanh function, which squashes values to the range (-1, 1). Each activation function introduces the non-linearity that lets a network represent complex functions; without it, a stack of linear layers would collapse into a single linear transformation.
 
-### Activation Functions
+The choice of loss function depends on the task. For regression tasks, mean squared error is commonly used. For classification tasks, cross-entropy loss is the standard choice. The loss function measures how far the network's predictions are from the ground truth. The training procedure is an optimization problem over the loss: find the weights that minimize it over the training set. Because the loss is differentiable with respect to the weights, gradient-based methods can be used. Backpropagation is the algorithm for computing gradients of the loss function with respect to the network parameters. It works by applying the chain rule from calculus to propagate error signals backward through the network. Once the gradients are computed, an optimization algorithm such as stochastic gradient descent (SGD) uses them to update the parameters. The backward pass is efficient because it reuses intermediate values computed in the forward pass; each layer's gradient depends only on its local inputs and the gradient flowing back from the layers after it.
 
-The ReLU (Rectified Linear Unit) activation function is defined as f(x) = max(0, x). It has become the default activation function for many neural network architectures because it helps mitigate the vanishing gradient problem. Other activation functions include the sigmoid function, which squashes values to the range (0, 1), and the tanh function, which squashes values to the range (-1, 1).
+SGD updates parameters in the direction opposite to the gradient of the loss function, and the learning rate controls the step size of each update. Mini-batch SGD is a variant that computes gradients on small random subsets of the training data rather than the full dataset. Using a mini-batch instead of the whole dataset makes each update cheaper and adds stochasticity, which can help the optimizer escape poor local minima. The learning rate schedule — how the step size changes over training — is often as important as the optimizer choice itself. Regularization techniques prevent overfitting. L1 regularization adds the absolute value of weights to the loss function, encouraging sparse weight matrices. L2 regularization (also known as weight decay) adds the squared magnitude of weights to the loss. Dropout is a regularization technique where randomly selected neurons are omitted during training, forcing the network to learn redundant representations. Each method trades a small increase in training loss for better generalization to unseen data, and early stopping — stopping training once performance on a validation set stops improving — is a related but simpler technique.
 
-### Loss Functions
+## Chapter 2: Convolutional Neural Networks
 
-The choice of loss function depends on the task. For regression tasks, mean squared error is commonly used. For classification tasks, cross-entropy loss is the standard choice. The loss function measures how far the network's predictions are from the ground truth.
+Convolutional neural networks are designed to process grid-like data such as images. A convolution operation applies a filter (also called a kernel) across the input, producing a feature map. Key properties of convolutions include local connectivity, parameter sharing, and translational equivariance. Because the same filter is applied everywhere, a CNN uses far fewer parameters than a fully connected network of the same size, and it can recognize a pattern regardless of where it appears in the input. Pooling layers reduce the spatial dimensions of feature maps: max pooling selects the maximum value in each pooling window, while average pooling computes the mean. Pooling provides a form of translational invariance and reduces the computational cost of subsequent layers. Downsampling is what gives a convolutional stack its hierarchical receptive fields: early layers see small local patterns, and later layers combine them into larger structures.
 
-## Chapter 2: Training Neural Networks
+LeNet-5 was one of the earliest CNN architectures for handwritten digit recognition. AlexNet demonstrated the effectiveness of deep CNNs on large-scale image classification. ResNet introduced skip connections (residual connections) that allow gradients to flow directly through the network, enabling training of very deep architectures. The insight behind ResNet is that a residual block learns the change from its input rather than the full mapping, which keeps gradients well-behaved even at hundreds of layers. The same idea of additive identity paths — letting information bypass transformations — recurs throughout deep learning, from residual networks in vision to the residual connections inside Transformer sub-layers, and it is the common mechanism that makes very deep networks trainable.
 
-### Backpropagation
+## Chapter 3: Recurrent Neural Networks
 
-Backpropagation is the algorithm for computing gradients of the loss function with respect to the network parameters. It works by applying the chain rule from calculus to propagate error signals backward through the network. Once the gradients are computed, an optimization algorithm such as stochastic gradient descent (SGD) uses them to update the parameters.
+Recurrent neural networks are designed for sequential data such as text or time series. An RNN maintains a hidden state that is updated at each time step based on the current input and the previous hidden state. This allows the network to capture temporal dependencies. The hidden state acts as a memory of everything the network has seen so far in the sequence, but that memory is finite and its capacity is easily exhausted on long sequences. Standard RNNs struggle to capture long-range dependencies because gradients tend to either vanish or explode as they are backpropagated through many time steps. This is known as the vanishing gradient problem. The hidden state of an RNN at early time steps has diminishing influence on the gradients at later time steps. Because the same weights are applied at every time step, the gradient is multiplied by a matrix at each step, so it shrinks (or grows) exponentially with sequence length. Vanishing gradients make it impossible for a standard RNN to learn that an output near the end of a long sequence depends on an input near the beginning.
 
-### Stochastic Gradient Descent
+Long Short-Term Memory networks introduce a gating mechanism with input, forget, and output gates that control the flow of information. The cell state in an LSTM acts as a memory that can be preserved across many time steps. Gated Recurrent Units are a simplified variant with only two gates: reset and update. The gates are learned, so the network decides how much of the past to remember and how much of the new input to incorporate. This gives LSTMs and GRUs a much longer effective memory than a plain RNN, but they still process sequences one step at a time, which is why they were ultimately overtaken by attention-based architectures that process all positions in parallel.
 
-SGD updates parameters in the direction opposite to the gradient of the loss function. The learning rate controls the step size of each update. Mini-batch SGD is a variant that computes gradients on small random subsets of the training data rather than the full dataset.
+## Chapter 4: Transformers and Attention
 
-### Regularization
+The attention mechanism allows a model to focus on relevant parts of the input when producing each element of the output. In the context of sequence-to-sequence models, attention computes a weighted sum of encoder hidden states, where the weights are determined by a compatibility function between the decoder state and each encoder state. This lets the decoder pull information from whichever encoder positions are most relevant to the current output step, rather than relying on a fixed-size bottleneck representation. Self-attention, also known as intra-attention, computes attention within a single sequence: each position in the sequence attends to all other positions. The Transformer architecture is built entirely on self-attention, without recurrence or convolution. Each token's representation is updated to a weighted combination of all other tokens, with the weights depending on learned query-key similarities. This gives every pair of positions a direct connection of depth one, which is how Transformers avoid the vanishing-gradient problem of RNNs on long sequences.
 
-Regularization techniques prevent overfitting. L1 regularization adds the absolute value of weights to the loss function, encouraging sparse weight matrices. L2 regularization (also known as weight decay) adds the squared magnitude of weights to the loss. Dropout is a regularization technique where randomly selected neurons are omitted during training, forcing the network to learn redundant representations.
-
-## Chapter 3: Convolutional Neural Networks
-
-Convolutional neural networks are designed to process grid-like data such as images. A convolution operation applies a filter (also called a kernel) across the input, producing a feature map. Key properties of convolutions include local connectivity, parameter sharing, and translational equivariance.
-
-### Pooling Layers
-
-Pooling layers reduce the spatial dimensions of feature maps. Max pooling selects the maximum value in each pooling window, while average pooling computes the mean. Pooling provides a form of translational invariance and reduces the computational cost of subsequent layers.
-
-### Common Architectures
-
-LeNet-5 was one of the earliest CNN architectures for handwritten digit recognition. AlexNet demonstrated the effectiveness of deep CNNs on large-scale image classification. ResNet introduced skip connections (residual connections) that allow gradients to flow directly through the network, enabling training of very deep architectures.
-
-## Chapter 4: Recurrent Neural Networks
-
-Recurrent neural networks are designed for sequential data such as text or time series. An RNN maintains a hidden state that is updated at each time step based on the current input and the previous hidden state. This allows the network to capture temporal dependencies.
-
-### The Vanishing Gradient Problem
-
-Standard RNNs struggle to capture long-range dependencies because gradients tend to either vanish or explode as they are backpropagated through many time steps. This is known as the vanishing gradient problem. The hidden state of an RNN at early time steps has diminishing influence on the gradients at later time steps.
-
-### LSTM and GRU
-
-Long Short-Term Memory networks introduce a gating mechanism with input, forget, and output gates that control the flow of information. The cell state in an LSTM acts as a memory that can be preserved across many time steps. Gated Recurrent Units are a simplified variant with only two gates: reset and update.
-
-## Chapter 5: Transformers and Attention
-
-### The Attention Mechanism
-
-The attention mechanism allows a model to focus on relevant parts of the input when producing each element of the output. In the context of sequence-to-sequence models, attention computes a weighted sum of encoder hidden states, where the weights are determined by a compatibility function between the decoder state and each encoder state.
-
-### Self-Attention
-
-Self-attention, also known as intra-attention, computes attention within a single sequence. Each position in the sequence attends to all other positions. The Transformer architecture is built entirely on self-attention, without recurrence or convolution.
-
-### Multi-Head Attention
-
-Multi-head attention runs multiple attention operations in parallel, each with different learned projections. The outputs are concatenated and linearly transformed. This allows the model to attend to information from different representation subspaces at different positions.
-
-### Transformer Architecture
-
-The Transformer consists of an encoder and a decoder, each composed of a stack of identical layers. Each layer has two sub-layers: a multi-head self-attention mechanism and a position-wise feedforward network. Residual connections and layer normalization are applied around each sub-layer. Positional encodings are added to the input embeddings to provide information about the position of each token in the sequence.
+Multi-head attention runs multiple attention operations in parallel, each with different learned projections. The outputs are concatenated and linearly transformed. This allows the model to attend to information from different representation subspaces at different positions. In practice, different heads learn different kinds of relationships — some focus on syntactic dependencies, others on positional relations, still others on long-range semantic links. The number of heads is a hyperparameter, and the total cost scales linearly with it. The Transformer consists of an encoder and a decoder, each composed of a stack of identical layers. Each layer has two sub-layers: a multi-head self-attention mechanism and a position-wise feedforward network. Residual connections and layer normalization are applied around each sub-layer. Positional encodings are added to the input embeddings to provide information about the position of each token in the sequence, since self-attention itself is permutation invariant. The decoder additionally uses masked self-attention to prevent a position from attending to future positions during training, and cross-attention to the encoder output during generation.

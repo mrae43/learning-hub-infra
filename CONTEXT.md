@@ -35,7 +35,7 @@ Testing-effect and scheduling-based learning mechanisms (quizzes on captured pas
 The enclosing structural unit (section, chapter, API page) produced by a Document-Type Chunker. Not embedded directly. Contains one or more Child Chunks. At retrieval time, the parent replaces matched child chunks before being handed to the LLM for generation.
 
 ## Child Chunk
-A fixed-size (~512 tokens, 15% overlap) sliding-window split of a Parent Chunk. Embedded and indexed for retrieval (both dense pgvector and sparse tsvector). A child points to its parent via `parent_chunk_id`. Only children are matched by the query; the parent is what reaches generation.
+A fixed-size (~256 tokens, 10% overlap) sliding-window split of a Parent Chunk, the chunk-size/overlap combination chosen by the ADR-0017 tuning harness. Embedded and indexed for retrieval (both dense pgvector and sparse tsvector). A child points to its parent via `parent_chunk_id`. Only children are matched by the query; the parent is what reaches generation.
 
 ## Hybrid Search
 A retrieval strategy combining dense (embedding-based pgvector cosine search) and sparse (PostgreSQL `tsvector` full-text search) passes, fused via Reciprocal Rank Fusion. Recovers exact-match queries (function names, API endpoints, error codes, symbols) that pure dense retrieval misses.

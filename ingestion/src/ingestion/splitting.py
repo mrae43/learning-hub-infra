@@ -1,9 +1,10 @@
 """Fixed-size text splitter for parent-child chunking.
 
 Per ADR-0016, structure-aware chunks (parents) are split into fixed-size
-child chunks of 512 tokens with 15% contextual overlap. The split is an
+child chunks of 256 tokens with 10% contextual overlap. The split is an
 iterative sliding window that never calls itself. Only child chunks are
-embedded and indexed for retrieval.
+embedded and indexed for retrieval. The chunk size and overlap were tuned
+against the ADR-0017 eval set (winner: 256/10%).
 """
 
 from dataclasses import dataclass
@@ -26,8 +27,8 @@ class ChildSplit:
     position: int
 
 
-_DEFAULT_CHUNK_SIZE = 512
-_DEFAULT_OVERLAP_RATIO = 0.15
+_DEFAULT_CHUNK_SIZE = 256
+_DEFAULT_OVERLAP_RATIO = 0.10
 
 
 def fixed_size_split(
@@ -50,7 +51,7 @@ def fixed_size_split(
             via whitespace split.
         chunk_size: Maximum tokens per child chunk.
         overlap_ratio: Fractional overlap between adjacent children
-            (e.g. 0.15 = 15%).
+            (e.g. 0.10 = 10%).
 
     Returns:
         A list of ``ChildSplit`` instances ordered by position.

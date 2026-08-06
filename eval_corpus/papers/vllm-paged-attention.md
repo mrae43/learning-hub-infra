@@ -2,54 +2,34 @@
 
 ## Abstract
 
-vLLM is a high-throughput LLM serving system that introduces PagedAttention, a novel attention algorithm inspired by virtual memory and paging in operating systems. PagedAttention manages the KV cache in fixed-size blocks (pages), enabling efficient memory sharing and reducing memory waste from fragmentation.
+vLLM is a high-throughput LLM serving system that introduces PagedAttention, a novel attention algorithm inspired by virtual memory and paging in operating systems. PagedAttention manages the KV cache in fixed-size blocks (pages), enabling efficient memory sharing and reducing memory waste from fragmentation. Because the KV cache is the dominant memory consumer during serving, managing it at block granularity lets the system pack far more sequences into the same GPU memory than a contiguous allocation scheme.
 
 ## 1. Introduction
 
-Serving large language models is memory-bound because the KV cache grows with both batch size and sequence length. The standard approach to KV cache management suffers from memory fragmentation and can only accommodate limited memory sharing across sequences. PagedAttention addresses both problems by managing the KV cache as a paged system.
+Serving large language models is memory-bound because the KV cache grows with both batch size and sequence length. The standard approach to KV cache management suffers from memory fragmentation and can only accommodate limited memory sharing across sequences. PagedAttention addresses both problems by managing the KV cache as a paged system. The key observation is that the KV cache behaves like virtual memory: it is allocated dynamically, its lifetime is unknown ahead of time, and different sequences share overlapping prefixes. Treating it as a paged address space lets the system allocate only what is needed and share what is common.
 
-## 2. PagedAttention
+In PagedAttention, the KV cache for each sequence is divided into blocks of fixed size (e.g., 16 tokens per block). Each block maps to a physical block in the global block table. This is analogous to how virtual memory pages map to physical memory frames. The block table maintains the mapping from logical blocks to physical blocks. The logical-to-physical indirection is what makes both memory sharing and copy-on-write possible, because a logical block can point at a physical block that is shared with another sequence.
 
-### Block-Based KV Cache
+PagedAttention operates on blocks rather than individual tokens. When computing attention, the system looks up the physical blocks for the required KV cache entries using the block table. This block-level operation allows efficient memory management because the system allocates memory at block granularity. The attention kernel iterates over the physical blocks of the sequence, so the cost of the block-table lookup is amortized over the tokens in each block. The block table itself must be kept small enough to fit in fast memory, which is why block sizes are typically in the tens of tokens.
 
-In PagedAttention, the KV cache for each sequence is divided into blocks of fixed size (e.g., 16 tokens per block). Each block maps to a physical block in the global block table. This is analogous to how virtual memory pages map to physical memory frames. The block table maintains the mapping from logical blocks to physical blocks.
+## 2. Memory Management
 
-### Key Operations
+Standard KV cache pre-allocates contiguous memory for the maximum sequence length, leading to internal fragmentation when sequences are shorter than the maximum. PagedAttention eliminates this by allocating blocks on demand, only when tokens are generated. External fragmentation is handled by the block-level allocation. Because physical blocks can be scattered across the address space, a sequence does not need a contiguous span of memory; this is exactly the same benefit that paging gives an operating system over a contiguous-allocation scheme.
 
-PagedAttention operates on blocks rather than individual tokens. When computing attention, the system looks up the physical blocks for the required KV cache entries using the block table. This block-level operation allows efficient memory management because the system allocates memory at block granularity.
+PagedAttention enables efficient memory sharing across sequences. When multiple sequences share the same prefix (as in beam search or parallel sampling), their initial KV cache blocks can be shared rather than duplicated. The block table supports copy-on-write, where shared blocks are marked as read-only until a sequence writes new KV entries, at which point a new physical block is allocated. This dramatically reduces the memory footprint of decoding multiple sequences from the same prompt, which is the common case in both interactive and batch serving workloads.
 
-## 3. Memory Management
+The copy-on-write mechanism works as follows: when a block is shared across multiple sequences, it is designated as read-only. When a sequence needs to write to a shared block, the system allocates a new physical block, copies the old data, and updates the sequence's block table entry. The old block remains available for other sequences. The copy is cheap because it happens only once per diverging block, and the shared prefix is usually the longest part of a sequence in practice. The block table's reference counts decide when a physical block can be reclaimed.
 
-### Fragmentation Elimination
+## 3. Scheduling
 
-Standard KV cache pre-allocates contiguous memory for the maximum sequence length, leading to internal fragmentation when sequences are shorter than the maximum. PagedAttention eliminates this by allocating blocks on demand, only when tokens are generated. External fragmentation is handled by the block-level allocation.
+vLLM uses iteration-level scheduling, where the scheduler decides which sequences to process at each iteration. This is different from request-level scheduling used in traditional systems. Iteration-level scheduling allows the system to dynamically adjust the batch composition based on current memory availability. A sequence joins the batch when memory is available and can be paused or evicted when it is not, rather than being committed to run to completion as a single request. This finer-grained control is what lets the system keep the GPU fully utilized.
 
-### Memory Sharing
+The scheduler tracks available physical blocks and only admits sequences when sufficient physical blocks are available. This prevents out-of-memory errors and allows the system to maximize throughput by filling available memory. Admission control is greedy: sequences are ordered by arrival time, and the scheduler admits as many as fit into the current free-block budget, reserving blocks for ongoing sequences. The scheduler also handles eviction: a sequence that runs out of budget can be preempted, and its blocks can be swapped out and reloaded later.
 
-PagedAttention enables efficient memory sharing across sequences. When multiple sequences share the same prefix (as in beam search or parallel sampling), their initial KV cache blocks can be shared rather than duplicated. The block table supports copy-on-write, where shared blocks are marked as read-only until a sequence writes new KV entries, at which point a new physical block is allocated.
+The vLLM system consists of a scheduler, a model executor, and a memory manager. The scheduler manages the iteration-level scheduling decisions. The model executor runs the actual model inference. The memory manager handles block allocation, deallocation, and copy-on-write operations. The three components communicate through the block table: the scheduler decides which sequences to run, the memory manager allocates the physical blocks those sequences need, and the model executor consumes the blocks during attention. Keeping the memory manager as a separate component isolates the block-allocation policy from the inference loop.
 
-### Copy-on-Write Mechanism
+## 4. Evaluation and Future Directions
 
-The copy-on-write mechanism works as follows: when a block is shared across multiple sequences, it is designated as read-only. When a sequence needs to write to a shared block, the system allocates a new physical block, copies the old data, and updates the sequence's block table entry. The old block remains available for other sequences.
+vLLM achieves up to 2-4x higher throughput compared to FasterTransformer and Orca. The throughput gain comes primarily from the PagedAttention memory management, which reduces memory waste and enables larger batch sizes. The system also achieves near-linear scaling with the number of GPUs. On benchmark suites such as ShareGPT and Alpaca, the throughput improvement is consistent across models of different sizes and across both greedy and sampling decoding.
 
-## 4. Scheduling
-
-### Iteration-Level Scheduling
-
-vLLM uses iteration-level scheduling, where the scheduler decides which sequences to process at each iteration. This is different from request-level scheduling used in traditional systems. Iteration-level scheduling allows the system to dynamically adjust the batch composition based on current memory availability.
-
-### Memory-Aware Scheduling
-
-The scheduler tracks available physical blocks and only admits sequences when sufficient physical blocks are available. This prevents out-of-memory errors and allows the system to maximize throughput by filling available memory.
-
-## 5. System Architecture
-
-The vLLM system consists of a scheduler, a model executor, and a memory manager. The scheduler manages the iteration-level scheduling decisions. The model executor runs the actual model inference. The memory manager handles block allocation, deallocation, and copy-on-write operations.
-
-## 6. Evaluation
-
-vLLM achieves up to 2-4x higher throughput compared to FasterTransformer and Orca. The throughput gain comes primarily from the PagedAttention memory management, which reduces memory waste and enables larger batch sizes. The system also achieves near-linear scaling with the number of GPUs.
-
-## 7. Future Directions
-
-Future work includes extending PagedAttention to multi-GPU settings with distributed block tables, supporting more sophisticated eviction policies, and integrating with prefix caching systems.
+Future work includes extending PagedAttention to multi-GPU settings with distributed block tables, supporting more sophisticated eviction policies, and integrating with prefix caching systems. Multi-GPU serving requires a global block table that maps logical blocks to physical blocks on remote GPUs, which introduces a network round-trip into the attention path. Prefix caching overlaps with memory sharing: caching the KV blocks of popular prompt prefixes lets repeated requests skip recomputation entirely. These directions share the core principle that the KV cache is a paged, shareable resource rather than a per-request contiguous allocation.
