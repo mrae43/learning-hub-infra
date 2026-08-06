@@ -25,12 +25,14 @@ from scripts.generate_eval_vectors import (
 @pytest.mark.parametrize(
     ("path_str", "expected"),
     [
-        ("eval_corpus/books/ddia-excerpts.md", DocumentType.BOOK),
-        ("eval_corpus/books/deep-learning-concepts.md", DocumentType.BOOK),
-        ("eval_corpus/papers/flash-attention.md", DocumentType.PAPER),
-        ("eval_corpus/papers/vllm-paged-attention.md", DocumentType.PAPER),
+        ("eval_corpus/books/ddia-excerpts.md", DocumentType.DOCUMENTATION),
+        ("eval_corpus/books/deep-learning-concepts.md", DocumentType.DOCUMENTATION),
+        ("eval_corpus/papers/flash-attention.md", DocumentType.DOCUMENTATION),
+        ("eval_corpus/papers/vllm-paged-attention.md", DocumentType.DOCUMENTATION),
         ("eval_corpus/synthetic/rag-system-reference.md", DocumentType.DOCUMENTATION),
         ("eval_corpus/synthetic/solid-principles-reference.md", DocumentType.DOCUMENTATION),
+        ("eval_corpus/books/ddia-excerpts.pdf", DocumentType.BOOK),
+        ("eval_corpus/papers/flash-attention.pdf", DocumentType.PAPER),
     ],
 )
 def test_resolve_document_type_from_path(path_str: str, expected: DocumentType) -> None:
@@ -39,7 +41,7 @@ def test_resolve_document_type_from_path(path_str: str, expected: DocumentType) 
 
 def test_resolve_document_type_unknown_path_raises() -> None:
     with pytest.raises(ValueError, match="Unknown document type for path"):
-        _resolve_document_type("eval_corpus/unknown/foo.md")
+        _resolve_document_type("eval_corpus/unknown/foo.pdf")
 
 
 # ── Seam 2: _collect_source_documents ─────────────────────────────────────
@@ -58,7 +60,7 @@ def test_collect_source_documents_deduplicates() -> None:
     paths = {d["source_path"] for d in docs}
     types = {d["document_type"] for d in docs}
     assert paths == {"eval_corpus/books/ddia-excerpts.md", "eval_corpus/papers/flash-attention.md"}
-    assert types == {DocumentType.BOOK, DocumentType.PAPER}
+    assert types == {DocumentType.DOCUMENTATION}
 
 
 def test_collect_source_documents_empty_queries() -> None:

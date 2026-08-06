@@ -15,7 +15,7 @@ All three are independent of each other in design but sequential in implementati
 ## Decision
 
 ### 1. Parent-child hierarchical chunking
-Each existing structure-aware chunk (section, chapter, API page) becomes a **parent**. Children are produced by a recursive fixed-size text splitter at **512 tokens with 15% contextual overlap**, applied uniformly across all document types. Only child chunks are embedded (pgvector) and indexed (tsvector). At retrieval time, child matches are swapped to their parent via `parent_chunk_id` before generation.
+Each existing structure-aware chunk (section, chapter, API page) becomes a **parent**. Children are produced by a recursive fixed-size text splitter at **256 tokens with 10% contextual overlap**, applied uniformly across all document types. Only child chunks are embedded (pgvector) and indexed (tsvector). At retrieval time, child matches are swapped to their parent via `parent_chunk_id` before generation. The chunk size and overlap were tuned against the ADR-0017 eval set; 256/10% is the winning configuration.
 
 Schema: self-referential `parent_chunk_id` nullable foreign key on the existing `chunks` table. Parent rows have `parent_chunk_id = NULL`.
 
@@ -36,7 +36,7 @@ The implementation follows dependency order: parent-child schema and ingestion c
 
 ## Consequences
 - The `chunks` table gains a `parent_chunk_id` column; the ingestion pipeline gains a recursive splitting step before embedding.
-- New chunk content may be smaller on average (~512 tokens for children vs variable for current structure-aware chunks), which changes the embedding distribution and retrieval characteristics — the eval set will show whether this improves recall.
+- New chunk content may be smaller on average (~256 tokens for children vs variable for current structure-aware chunks), which changes the embedding distribution and retrieval characteristics — the eval set will show whether this improves recall.
 - Retrieval latency increases: hybrid search adds a tsquery + RRF step; reranking adds an external API call. For a personal learning tool this is acceptable, but it should be measured.
 - The Cohere Rerank API dependency is temporary-friendly (free trial, no credit card) but adds a key rotation and availability dependency that the local BGE alternative would eliminate.
 - The eval set (4 queries) is too small to confidently measure improvement from these changes. Expanding it is deferred to a follow-up phase ("important but gatable" items) but should be prioritized early to avoid silent regressions.

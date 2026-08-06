@@ -61,10 +61,19 @@ def _sha256(text: str) -> str:
 def _resolve_document_type(path_str: str) -> DocumentType:
     """Map a source-document path to its ``DocumentType``.
 
+    Markdown and HTML sources are always chunked as ``DOCUMENTATION`` (the
+    eval corpus is authored as markdown excerpts regardless of the corpus
+    subdirectory). PDF sources fall back to the corpus subdirectory mapping
+    so real book/paper PDFs still get the book/paper chunkers.
+
     Raises:
-        ValueError: The path does not match a known subdirectory.
+        ValueError: The path is neither a documentation format nor inside a
+            known subdirectory.
     """
     rel = Path(path_str)
+    if rel.suffix.lower() in {".md", ".markdown", ".html", ".htm"}:
+        return DocumentType.DOCUMENTATION
+
     try:
         prefix = rel.parts[1]  # eval_corpus/<prefix>/...
     except IndexError:

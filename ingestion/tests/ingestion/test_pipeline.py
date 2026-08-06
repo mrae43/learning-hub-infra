@@ -698,7 +698,7 @@ class TestParentChildIngestion:
         test_session: Session,
         fake_embeddings_client: MagicMock,
     ) -> None:
-        """A parent >512 tokens produces multiple child chunks."""
+        """A parent >256 tokens produces multiple child chunks."""
         big_content = "large_parent_child_test_word " * 600
         document = Document(
             title="Big Parent",
@@ -745,7 +745,7 @@ class TestParentChildIngestion:
         test_session: Session,
         fake_embeddings_client: MagicMock,
     ) -> None:
-        """A parent ≤512 tokens produces exactly one child (identity split)."""
+        """A parent ≤256 tokens produces exactly one child (identity split)."""
         small_content = "small chunk content"
         document = Document(
             title="Small Parent",

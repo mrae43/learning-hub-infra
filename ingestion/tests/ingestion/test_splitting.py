@@ -4,7 +4,7 @@ from ingestion.splitting import fixed_size_split
 
 
 def test_identity_split_when_under_limit() -> None:
-    """A parent ≤512 tokens produces exactly one child (identity split)."""
+    """A parent ≤256 tokens produces exactly one child (identity split)."""
     content = "small chunk"
     parent_token_count = 2
     result = fixed_size_split(content, parent_token_count)
@@ -15,16 +15,16 @@ def test_identity_split_when_under_limit() -> None:
 
 
 def test_identity_split_at_exact_limit() -> None:
-    """A parent at exactly 512 tokens produces exactly one child."""
-    tokens = ["token"] * 512
+    """A parent at exactly 256 tokens produces exactly one child."""
+    tokens = ["token"] * 256
     content = " ".join(tokens)
-    result = fixed_size_split(content, 512)
+    result = fixed_size_split(content, 256)
     assert len(result) == 1
     assert result[0].position == 0
 
 
 def test_splits_into_multiple_children() -> None:
-    """A parent >512 tokens produces multiple child chunks."""
+    """A parent >256 tokens produces multiple child chunks."""
     tokens = ["token"] * 1200
     content = " ".join(tokens)
     result = fixed_size_split(content, 1200)
@@ -32,12 +32,12 @@ def test_splits_into_multiple_children() -> None:
 
 
 def test_each_child_within_token_limit() -> None:
-    """Each child chunk is ≤512 tokens."""
+    """Each child chunk is ≤256 tokens."""
     tokens = ["token"] * 2000
     content = " ".join(tokens)
     result = fixed_size_split(content, 2000)
     for child in result:
-        assert child.token_count <= 512, f"Child has {child.token_count} tokens, exceeds 512"
+        assert child.token_count <= 256, f"Child has {child.token_count} tokens, exceeds 256"
 
 
 def test_overlapping_boundary_content() -> None:

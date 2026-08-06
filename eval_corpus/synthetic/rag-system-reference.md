@@ -2,78 +2,38 @@
 
 ## Overview
 
-Retrieval-Augmented Generation (RAG) combines a retriever and a generator to produce grounded answers. The retriever fetches relevant passages from a knowledge corpus, and the generator produces an answer conditioned on those passages.
+Retrieval-Augmented Generation (RAG) combines a retriever and a generator to produce grounded answers. The retriever fetches relevant passages from a knowledge corpus, and the generator produces an answer conditioned on those passages. Grounded generation requires that the answer cite the passages it was conditioned on. When retrieval returns nothing relevant, a well-designed RAG system returns a grounded response that acknowledges it could not find the answer, rather than hallucinating one. The quality of the overall system depends on three independent stages that should be evaluated separately: ingestion and chunking, retrieval, and generation.
+
+Each stage has its own failure modes and its own metrics. Ingestion failures are silent: a document that was never chunked, or chunked badly, simply never appears in retrieval results. Retrieval failures are visible in the ranking: the relevant passage is present in the index but ranked too low, or the wrong passages rank too high. Generation failures are visible in the answer: the model produces text that is not supported by the retrieved passages, or it omits evidence that is actually present. Because the stages compose, an evaluation that only looks at the final answer cannot tell you which stage regressed. That is why RAG systems need per-stage golden eval sets.
 
 ## 1. Ingestion Pipeline
 
-### Chunking Strategies
+The ingestion pipeline converts source documents into retrievable chunks. Different document types require different chunking strategies. There is no universal best chunker — fixed-size, semantic, and hierarchical chunking all trade off accuracy against compute cost, and the right choice is domain-dependent. Some benchmarks find that plain recursive or fixed-size splitting beats semantic chunking once cost is factored in. The structure of the source document is the strongest signal: books have chapters and headings, papers have an IMRaD structure (Introduction, Methods, Results, Discussion), and documentation has a heading hierarchy with code blocks. A chunker that matches the chunking strategy to the structural signal the format provides will outperform a generic splitter.
 
-The ingestion pipeline converts source documents into retrievable chunks. Different document types require different chunking strategies.
+The simplest strategy is the recursive character splitter, which splits text on separators in order of priority: paragraph breaks, sentence boundaries, word boundaries. It works as a fallback for any text but ignores all document structure. Semantic chunking uses embedding similarity to detect natural topic boundaries: when the embedding distance between consecutive sentences exceeds a threshold, a new chunk is started. This preserves semantic coherence but is more expensive than recursive splitting and introduces a source of nondeterminism, since the embeddings come from an external model. Structure-aware chunkers exploit document structure: the paper chunker splits along IMRaD section boundaries, the book chunker splits along chapter and heading boundaries, and the documentation chunker splits along heading hierarchy while preserving code blocks intact. Code blocks must never be split mid-block, because config keys and API names need exact-match retrieval later.
 
-#### Recursive Character Splitter
-Splits text on separators in order of priority: paragraph breaks, sentence boundaries, word boundaries. This is the simplest strategy and works as a fallback for any text.
-
-#### Semantic Chunking
-Uses embedding similarity to detect natural topic boundaries. When the embedding distance between consecutive sentences exceeds a threshold, a new chunk is started. This preserves semantic coherence but is more expensive than recursive splitting.
-
-#### Document-Type Chunkers
-Structure-aware chunkers that exploit document structure:
-- Paper chunker: splits along IMRaD section boundaries (Introduction, Methods, Results, Discussion)
-- Book chunker: splits along chapter and heading boundaries
-- Documentation chunker: splits along heading hierarchy (h1-h3), preserves code blocks intact
-
-### Metadata
-
-Every chunk should carry metadata: source document ID, title, section heading, position, document type, and timestamp. Metadata enables filtering at retrieval time and helps the LLM cite sources correctly.
+Every chunk should carry metadata: source document ID, title, section heading, position, document type, and timestamp. Metadata enables filtering at retrieval time and helps the LLM cite sources correctly. Metadata-enriched retrieval has been shown to meaningfully outperform content-only chunking, and a large fraction of bad retrieval failures trace back to stale or ungoverned source data and missing metadata rather than a sub-optimal chunk size. Tables, equations, and code blocks need a dedicated extraction path rather than being blindly split as text, because text splitters mangle structured or symbolic content, and embedding models do poorly on raw LaTeX and symbolic content. In papers, tables and equations should be treated as separate objects with their own extracted representation, typically a caption plus cleaned text.
 
 ## 2. Retrieval
 
-### Embedding-Based Retrieval
+Documents are encoded into dense vector embeddings using models like text-embedding-3-small or text-embedding-004, and queries are embedded using the same model. Retrieval finds the nearest neighbors in embedding space using cosine similarity. The vector index structure (HNSW, IVF, flat) is mostly a scale and latency decision and is largely agnostic to whether the source was a book or a doc page. What varies by content is whether a query needs semantic matching, exact matching, or both. Sparse retrieval via BM25 scores documents based on term frequency and inverse document frequency and excels at exact-match queries where the query contains rare or distinctive terms, such as function names, error codes, or equation symbols that pure vector search misses.
 
-Documents are encoded into dense vector embeddings using models like text-embedding-3-small or text-embedding-004. Queries are embedded using the same model. Retrieval finds the nearest neighbors in embedding space using cosine similarity.
+Hybrid search combines dense (embedding) and sparse (BM25) retrieval via Reciprocal Rank Fusion (RRF). RRF combines the rank positions from each method: RRF_score(d) = 1/(k + rank_dense(d)) + 1/(k + rank_sparse(d)), where k is a constant (typically 60). Hybrid search recovers exact-match queries that pure dense retrieval misses, and when one path returns zero results, the other path's results alone still produce output, keeping the system available during partial index failures. After initial retrieval, a cross-encoder reranker scores the candidate passages. Unlike bi-encoders, which produce independent embeddings, cross-encoders process query-passage pairs jointly, producing more accurate relevance scores. The top-K candidates from hybrid search (typically 20-50) are reranked, and the top 3-10 are kept for generation. Reranking has shown large gains on reasoning-heavy queries and is the single highest-leverage addition after basic hybrid search.
 
-### Sparse Retrieval (BM25)
-
-BM25 is a bag-of-words retrieval method that scores documents based on term frequency and inverse document frequency. It excels at exact-match queries where the query contains rare or distinctive terms.
-
-### Hybrid Search
-
-Hybrid search combines dense (embedding) and sparse (BM25) retrieval via Reciprocal Rank Fusion (RRF). RRF combines the rank positions from each method:
-RRF_score(d) = 1/(k + rank_dense(d)) + 1/(k + rank_sparse(d))
-where k is a constant (typically 60). Hybrid search recovers exact-match queries that pure dense retrieval misses.
-
-### Reranking
-
-After initial retrieval, a cross-encoder reranker scores the candidate passages. Unlike bi-encoders (which produce independent embeddings), cross-encoders process query-passage pairs jointly, producing more accurate relevance scores. The top-K candidates from hybrid search (typically 20-50) are reranked, and the top 3-10 are kept for generation.
-
-### Parent-Child Retrieval
-
-In parent-child chunking, small child chunks (~512 tokens) are embedded and matched by the query. The parent chunk (the enclosing section) replaces the matched children before being handed to the LLM. This resolves the precision-vs-context tradeoff.
+In parent-child chunking, small child chunks (~512 tokens) are embedded and matched by the query, and the parent chunk (the enclosing section) replaces the matched children before being handed to the LLM. This resolves the precision-vs-context tradeoff: small chunks are precise to match, while large parent sections give the generator the surrounding context it needs. Hierarchical parent-child chunking is the most widely adopted production pattern for this reason. The size of the child chunk is a tunable hyperparameter: too small loses context, too large dilutes embedding relevance, and the right size is domain-specific and should be benchmarked rather than assumed. Chunk size and overlap must be explicitly tuned and tested against a golden eval set rather than left at library defaults.
 
 ## 3. Query Processing
 
-### Query Rewriting
+Query rewriting reformulates ambiguous or conversational queries into standalone, retrieval-friendly forms. It is particularly useful in multi-turn settings, where a follow-up question needs the previous context folded back in before retrieval runs. Rewriting is cheap and can be applied to every query. Query decomposition splits complex multi-hop questions into simpler sub-queries, retrieves each one independently, and merges the results before generation. Decomposition should be gated, triggered only when the query is detected as multi-part, because it adds latency and extra model calls and would otherwise make simple lookups needlessly slower. Sub-query results must be de-duplicated and merged before generation rather than concatenated, and there must be a fallback when decomposition produces empty or irrelevant sub-results to avoid silent failure.
 
-Ambiguous or conversational queries are rewritten into standalone, retrieval-friendly forms. This is particularly useful in multi-turn settings.
-
-### Query Decomposition
-
-Complex multi-hop questions are split into simpler sub-queries. Each sub-query is retrieved independently, and results are merged before generation. Decomposition should be gated — only triggered when the query is detected as multi-part.
+HyDE (Hypothetical Document Embeddings) generates a hypothetical answer first, embeds that answer instead of the raw query, and then searches. This is useful when the question is phrased very differently from how the answer is written in the source, which is common with casual questions asked against formal paper or documentation text. The practical note for query decomposition in a personal learning tool is that it is usually fine to pay the latency, but gating matters: a router or heuristic should detect when a query needs decomposition versus a simple single-hop lookup. Without gating, every question pays the decomposition cost, and without a fallback, a decomposition that produces no useful sub-results silently degrades the answer.
 
 ## 4. Evaluation
 
-### Retrieval Metrics
+Recall@k measures the proportion of relevant documents retrieved in the top-k results, and Mean Reciprocal Rank (MRR) measures the average rank position of the first relevant document. These metrics are computed against a small hand-labeled golden query set with known correct chunks. Without this eval set, it is impossible to tell whether a change to chunking, indexing, or query handling improved retrieval or quietly regressed it. Answer quality should additionally be checked with an LLM-as-judge rubric or periodic manual spot-checks, and citation faithfulness — whether the generated answer actually cites chunks that were retrieved — catches hallucinated citations.
 
-Recall@k measures the proportion of relevant documents retrieved in the top-k results. Mean Reciprocal Rank (MRR) measures the average rank position of the first relevant document.
+Queries are categorized into four strata for systematic evaluation: concept lookup (dense-friendly single-fact lookup), exact match or keyword (sparse-friendly, covering API names, error codes, and CLI flags), context-dependent (where parent-child matters because the enclosing section is required), and multi-hop or reasoning (decomposition prep, relating two or more concepts across the corpus). Expected passages are identified by a distinctive substring of their text. This content-signature labeling is invariant to chunk boundaries, so the same labeled queries work across any chunk-size configuration without re-labeling. A chunk is counted as a hit when it contains that substring, which avoids depending on position ranges or page numbers that re-chunking would invalidate.
 
-### Eval Query Taxonomy
+## 5. Grounded Generation
 
-Queries are categorized into four strata for systematic evaluation:
-- Concept lookup (dense-friendly): single-fact lookup
-- Exact match / keyword (sparse-friendly): API names, error codes, CLI flags
-- Context-dependent (parent-child matters): requires the enclosing section
-- Multi-hop / reasoning (decomposition prep): relates two or more concepts
-
-### Content-Signature Labeling
-
-Expected passages are identified by a distinctive substring of their text. This labeling is invariant to chunk boundaries, so the same labeled queries work across any chunk-size configuration without re-labeling.
+The generator produces an answer conditioned only on the retrieved, reranked parent chunks. The prompt instructs the model to cite the specific passages it used and to answer only from the provided context. When no passage supports the answer, the response must say so rather than inventing content. Citation faithfulness — whether the generated answer actually cites chunks that were retrieved — catches hallucinated citations and should be checked periodically as part of the eval loop. The context handed to the generator should include only as much as the task needs, because retrieval-in-long-context performance degrades even in frontier models, so more context does not mean better answers.

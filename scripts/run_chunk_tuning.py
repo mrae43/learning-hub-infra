@@ -359,6 +359,7 @@ def run_tuning(args: argparse.Namespace) -> int:
         reranker=False,
     )
 
+    from sqlalchemy import text
     from sqlalchemy.orm import Session, sessionmaker
 
     engine = get_engine()
@@ -389,6 +390,12 @@ def run_tuning(args: argparse.Namespace) -> int:
 
             session: Session = SessionClass()
             try:
+                # The retrieval queries (retrieval_qa.retrieval.query) use raw
+                # text() SQL with unqualified table names. schema_translate_map
+                # only rewrites ORM/Core Table SQL, so point search_path at the
+                # seeded schema to route the raw queries to the right tables.
+                # public must stay on the path for the pgvector `vector` type.
+                session.execute(text(f'SET LOCAL search_path TO "{schema_name}", public'))
                 result = retrieve_relevant_chunks(
                     query_vector=query_vector,
                     session=session,

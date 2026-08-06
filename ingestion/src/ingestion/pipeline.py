@@ -183,7 +183,7 @@ def run_ingestion(
     The pipeline follows ADR-0016 parent-child chunking:
     1. Structure-aware chunking produces parent chunks.
     2. Each parent is stored as a row (not embedded).
-    3. Each parent is split into fixed-size child chunks (512 tokens, 15%
+    3. Each parent is split into fixed-size child chunks (256 tokens, 10%
        overlap) via ``fixed_size_split``.
     4. Child chunks inherit ``type_metadata`` from the parent unchanged.
     5. Only child chunks are embedded and indexed for retrieval: each child
