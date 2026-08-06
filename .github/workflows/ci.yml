@@ -157,7 +157,7 @@ jobs:
 
       - name: Download actionlint
         run: |
-          bash <(curl -Ls https://raw.githubusercontent.com/rhysd/actionlint/v1.7.12/scripts/download-actionlint.bash) 1.7.12
+          bash <(curl -Ls https://raw.githubusercontent.com/rhysd/actionlint/914e7df21a07ef503a81201c76d2b11c789d3fca/scripts/download-actionlint.bash) 1.7.12
           install -m 0755 ./actionlint /usr/local/bin/actionlint
 
       - name: Lint workflow files
