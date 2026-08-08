@@ -37,6 +37,8 @@ Thumbs.db
 
 # Coding Agents
 .opencode
+.agents/
+skills-lock.json
 
 # DeepEval auto-generated data
 .deepeval/
