@@ -1,4 +1,5 @@
 # AGENTS.md
+
 > Compact operating notes for OpenCode sessions in this repo.
 
 ## Current state
@@ -10,25 +11,31 @@ This repository is in **early implementation (tracer bullet complete)**. ADRs, s
 These docs are **not** auto-loaded into session context. Only this `AGENTS.md` is. You must explicitly Read the relevant file(s) with the Read tool before acting on a task. The digests below are a quick reference, not a substitute for the source.
 
 **Before any implementation task** (writing, editing, or reviewing code):
-- `CONTEXT.md` — domain glossary (Harness A/B, Depth Dive, Captured Passage, Injected Context, etc.). Use the exact domain terms in code, docstrings, and tests.
+
+- `CONTEXT.md` — domain glossary (Retrieval QA, Depth Dive, Captured Passage, Injected Context, etc.). Use the exact domain terms in code, docstrings, and tests.
 - `docs/coding-standards.md` — typing, docstrings, testing, and error-handling rules. Apply every rule; do not rely on the summary in this file.
 
 **Before touching package structure or inter-package dependencies:**
+
 - `docs/ai-system-tree.md` — intended monorepo layout and "where to add things" map.
 - `docs/adr/0005-structured-monorepo.md` — why the structure is what it is.
 - `docs/adr/0011-import-linter-module-boundaries.md` — the enforced boundary rules.
 
 **Before security-adjacent work in `core/`, `api/`, `ingestion/`, or `retrieval_qa/`:**
+
 - `docs/security-mvp-guide.md` — hygiene rules for secrets, config, request handling, and deps. Read this alongside ADR-0018 so you don't build what MVP deliberately defers.
 
 **Before choosing or adding a library, model, or external service:**
+
 - `docs/tech-stack.md` — MVP stack and staged post-MVP milestones.
-- `docs/adr/` — read the ADR(s) most relevant to the area (e.g., ADR-0001 inference, ADR-0002 pgvector, ADR-0003 hand-rolled RAG, ADR-0004 embeddings, ADR-0006 background ingestion, ADR-0007 path-gated retrieval eval, ADR-0009 HarnessAResponse shape, ADR-0012 depth-dive-web-search-agentic, ADR-0013 depth-dive-search-failure-retry-fallback, ADR-0014 data-schema-api-contracts-harness-a, ADR-0015 deepeval-for-retrieval-evaluation, ADR-0016 retrieval-qa-critical-gaps-parent-child-hybrid-rerank, ADR-0017 important-but-gatable-retrieval-phase, ADR-0018 no-auth-access-control-for-mvp). Treat ADRs as **constraints, not suggestions**. If a decision contradicts an ADR, stop and propose a new/updated ADR rather than silently deviating.
+- `docs/adr/` — read the ADR(s) most relevant to the area (e.g., ADR-0001 inference, ADR-0002 pgvector, ADR-0003 hand-rolled RAG, ADR-0004 embeddings, ADR-0006 background ingestion, ADR-0007 path-gated retrieval eval (superseded by ADR-0015), ADR-0009 HarnessAResponse shape, ADR-0012 depth-dive-web-search-agentic, ADR-0013 depth-dive-search-failure-retry-fallback, ADR-0014 data-schema-api-contracts-harness-a, ADR-0015 deepeval-for-retrieval-evaluation, ADR-0016 retrieval-qa-critical-gaps-parent-child-hybrid-rerank, ADR-0017 important-but-gatable-retrieval-phase, ADR-0018 no-auth-access-control-for-mvp). Note: ADR-0008 is intentionally skipped in numbering. Treat ADRs as **constraints, not suggestions**. If a decision contradicts an ADR, stop and propose a new/updated ADR rather than silently deviating.
 
 **Before writing a commit message:**
+
 - `docs/commit-instructions.md` — Conventional Commits format and allowed types.
 
 **Before adding a new ADR:**
+
 - Read all existing `docs/adr/*.md` first to avoid contradicting a prior decision. Number the new ADR sequentially.
 
 ## Architecture overview
@@ -59,7 +66,9 @@ These docs are **not** auto-loaded into session context. Only this `AGENTS.md` i
 
 - Mirror package structure: `retrieval_qa/retrieval.py` → `tests/retrieval_qa/test_retrieval.py`.
 - Mock hosted API calls (embeddings, LLM, web search) in unit tests.
-- Keep retrieval-relevant tests identifiable (consistent module naming). Retrieval evaluation is path-gated per ADR-0007/0015, with the eval tooling in `scripts/` over the `eval_corpus/` tuning set.
+- Keep retrieval-relevant tests identifiable (consistent module naming).
+- Retrieval evaluation at the package level is path-gated per ADR-0007 (superseded by ADR-0015) and lives under `retrieval_qa/tests/eval/` with `eval_set.yaml` / `eval_vectors.json`.
+- Chunk-size tuning and related eval tooling live in `scripts/` and operate over `eval_corpus/eval_set_tuning.yaml`, with tests in `tests/scripts/`.
 
 ## Where to add things
 
@@ -87,15 +96,16 @@ Editable installs (`.pth` files) only discover modules that exist at sync time. 
 
 Then run the relevant checks from the repo root with `uv run`:
 
-| Check | When to run | Command |
-|-------|-------------|---------|
-| Ruff lint | **Always** — after any code change | `uv run ruff check .` |
-| Ruff format | **Always** — after any code change | `uv run ruff format --check .` |
-| Mypy | **Always** — after any code change | `uv run mypy .` |
-| Pytest | When tests are added/modified, or when production code with existing tests changes | `uv run pytest` |
-| Import-linter | When inter-package imports change (new modules, new cross-package deps) | `uv run lint-imports` |
+| Check         | When to run                                                                        | Command                        |
+| ------------- | ---------------------------------------------------------------------------------- | ------------------------------ |
+| Ruff lint     | **Always** — after any code change                                                 | `uv run ruff check .`          |
+| Ruff format   | **Always** — after any code change                                                 | `uv run ruff format --check .` |
+| Mypy          | **Always** — after any code change                                                 | `uv run mypy .`                |
+| Pytest        | When tests are added/modified, or when production code with existing tests changes | `uv run pytest`                |
+| Import-linter | When inter-package imports change (new modules, new cross-package deps)            | `uv run lint-imports`          |
 
 Rules:
+
 - All required checks must **pass** before reporting a task complete. If a check fails, fix it — do not hand off a broken state.
 - If you add a new source file or module, run `uv sync --all-packages` before attempting to import or test it.
 - If you add a new runtime dependency to a member `pyproject.toml`, run `uv sync --all-packages` first to update the lockfile, then run all checks.

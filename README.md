@@ -12,16 +12,16 @@ A hand-rolled RAG study tool for learning AI/ML from papers, books, and document
 
 **Upload & ingest.** Submit a PDF or EPUB via `POST /ingest`. The server validates the file, chunks it by document type (paper, book, documentation), embeds each chunk via Google `text-embedding-004` or OpenAI `text-embedding-3-small`, and stores it in a pgvector HNSW index. You get a document ID immediately; ingestion continues in the background. Poll progress with `GET /documents/{id}`.
 
-**Query (MVP).** Send `{query: str}` to `POST /query`. The system retrieves the top-k relevant chunks from your entire corpus, assembles a prompt with those chunks as context, and calls a hosted LLM. The response is a structured `HarnessAResponse` — answer text, cited passages, and a `grounded: bool` flag so you know whether the answer actually came from your documents.
+**Query (MVP).** Send `{query: str}` to `POST /query`. The system retrieves candidate chunks from your entire corpus using a hybrid dense + sparse retrieval pipeline, reranks the top candidates with a cross-encoder, and assembles the most relevant grounded context for model generation. The response is a structured `HarnessAResponse` — answer text, cited passages, and a `grounded: bool` flag so you know whether the answer actually came from your documents.
 
 **Roadmap.**
 | Phase | What | Status |
 |---|---|---|
 | MVP | Grounded Q&A against your personal corpus | ✅ Operational |
 | Post-MVP 1 | **Depth Dive** — richer explanations (text + diagrams + code) with agentic web search | 🔧 Scaffold |
-| Post-MVP 2 | **Synapse** — multi-sensory interactive learning with gamification and neuroplasticity triggers | 📅 Planned |
+| Post-MVP 2 | **Concept Linking + Retrieval Practice / Spaced Repetition** — query-independent relationship surfacing and review-style learning triggers | 📅 Planned |
 
-> **Status:** Early implementation — tracer bullet complete. Five of six packages (`core/`, `retrieval_qa/`, `api/`, `ingestion/`, `scripts/`) have implementation code (~5300 source lines, plus `tests/`). Only `depth_dive/` is still a stub (just `__init__.py` + smoke test). Ingestion pipeline, Harness A query pipeline, three API endpoints (`POST /ingest`, `GET /documents/{id}`, `POST /query`), and the `scripts/` eval & chunk-size-tuning tooling are operational. See [docs/](./docs/) for architecture decisions and plans.
+> **Status:** Early implementation — tracer bullet complete. Five of six packages (`core/`, `retrieval_qa/`, `api/`, `ingestion/`, `scripts/`) have implementation code (~5300 source lines, plus `tests/`). Only `depth_dive/` is still a stub (just `__init__.py` + smoke test). Ingestion pipeline, Harness A query pipeline, four API endpoints (`POST /ingest`, `GET /documents/{id}`, `POST /query`, `GET /health`), and the `scripts/` eval & chunk-size-tuning tooling are operational. See [docs/](./docs/) for architecture decisions and plans.
 
 ## Local development
 
@@ -31,15 +31,15 @@ The root `Makefile` wraps the local dev container lifecycle defined in `docker-c
 
 Structured monorepo with extractable module boundaries:
 
-| Package | Role |
-|---|---|
-| `core/` | Shared types, config, API clients, database (`pgvector`) |
-| `retrieval_qa/` | Closed-corpus retrieval QA (MVP) |
-| `depth_dive/` | Depth Dive generation (post-MVP 1) |
-| `api/` | FastAPI server (thin routes → controllers) |
-| `ingestion/` | Document upload + background ingestion pipeline |
-| `scripts/` | Retrieval eval & chunk-size tuning tooling over `eval_corpus/` |
-| `eval_corpus/` | Retrieval eval & tuning corpus (books, papers, synthetic) |
+| Package         | Role                                                           |
+| --------------- | -------------------------------------------------------------- |
+| `core/`         | Shared types, config, API clients, database (`pgvector`)       |
+| `retrieval_qa/` | Closed-corpus retrieval QA (MVP)                               |
+| `depth_dive/`   | Depth Dive generation (post-MVP 1)                             |
+| `api/`          | FastAPI server (thin routes → controllers)                     |
+| `ingestion/`    | Document upload + background ingestion pipeline                |
+| `scripts/`      | Retrieval eval & chunk-size tuning tooling over `eval_corpus/` |
+| `eval_corpus/`  | Retrieval eval & tuning corpus (books, papers, synthetic)      |
 
 ## Why this tech stack
 
@@ -47,7 +47,7 @@ Structured monorepo with extractable module boundaries:
 
 **PostgreSQL + pgvector.** One production-proven database for app data and vectors — one fewer service to operate in MVP. Migration to Qdrant is deferred until pgvector's limits are concretely felt ([ADR-0002](./docs/adr/0002-pgvector-for-mvp.md)).
 
-**Hand-rolled RAG (no LangChain/LlamaIndex).** Retrieval mechanics are what I'm here to build and understand. A framework would hide chunking strategy, similarity scoring, and prompt assembly behind abstractions. This is the core pedagogical choice ([ADR-0003](./docs/adr/0003-handroll-rag-pipeline.md)).
+**Hand-rolled RAG (no LangChain/LlamaIndex).** Retrieval mechanics are what I'm here to build and understand. A framework would hide chunking strategy, similarity scoring, and prompt assembly behind abstractions. Retrieval is tuned for the project’s document structure with parent-child chunking, hybrid dense+sparse search, and reranking as described in [ADR-0017](./docs/adr/0017-important-but-gatable-retrieval-phase.md). This is the core pedagogical choice ([ADR-0003](./docs/adr/0003-handroll-rag-pipeline.md)).
 
 **Hosted APIs for embeddings and inference.** My GPU (4GB VRAM) makes local embedding slow and conflates retrieval quality with GPU tuning. Hosted APIs let me judge retrieval in isolation. Self-hosted vLLM is deferred ([ADR-0001](./docs/adr/0001-hosted-inference-api-for-mvp.md), [ADR-0004](./docs/adr/0004-hosted-embedding-api.md)).
 
@@ -75,3 +75,4 @@ Structured monorepo with extractable module boundaries:
 - [docs/coding-standards.md](./docs/coding-standards.md) — typing, docstrings, testing, error handling
 - [docs/commit-instructions.md](./docs/commit-instructions.md) — Conventional Commits format
 - [AGENTS.md](./AGENTS.md) — session notes for AI coding tools
+- [.agents/skills/ask-matt/SKILL.md](./.agents/skills/ask-matt/SKILL.md) — router over the engineering skills; `/chain` is the AFK continuation for a non-empty work queue
