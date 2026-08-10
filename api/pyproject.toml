@@ -13,7 +13,7 @@ dependencies = [
     "depth-dive",
     "ingestion",
     "fastapi>=0.141.1",
-    "uvicorn>=0.30",
+    "uvicorn>=0.52.1",
     "python-multipart>=0.0.9",
 ]
 
