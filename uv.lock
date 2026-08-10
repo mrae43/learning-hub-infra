@@ -206,7 +206,7 @@ requires-dist = [
     { name = "ingestion", editable = "ingestion" },
     { name = "python-multipart", specifier = ">=0.0.9" },
     { name = "retrieval-qa", editable = "retrieval_qa" },
-    { name = "uvicorn", specifier = ">=0.30" },
+    { name = "uvicorn", specifier = ">=0.52.1" },
 ]
 
 [[package]]
@@ -404,14 +404,14 @@ requires-dist = [
     { name = "pgvector", specifier = ">=0.3" },
     { name = "psycopg2-binary", specifier = ">=2.9" },
     { name = "pydantic", specifier = ">=2" },
-    { name = "pydantic-settings", specifier = ">=2" },
+    { name = "pydantic-settings", specifier = ">=2.15.0" },
     { name = "sqlalchemy", specifier = ">=2" },
     { name = "uuid-utils", specifier = ">=0.10" },
 ]
 
 [[package]]
 name = "deepeval"
-version = "4.1.4"
+version = "4.1.5"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohttp" },
@@ -444,9 +444,9 @@ dependencies = [
     { name = "typer" },
     { name = "wheel" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/45/9e/5c9c403f25656dbffdfcd11a093ce13dabaea493e8b2568fd34781d86bf9/deepeval-4.1.4.tar.gz", hash = "sha256:cd8a393cb11cb6254b0e1da57be78bc5f927117f5edb9da938a63375dbc85967", size = 770881, upload-time = "2026-07-27T11:33:12.838Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/53/12/ec23bff209b1202e8cc342a6b50ec302f7cfa3e52edacd4372505fd31dea/deepeval-4.1.5.tar.gz", hash = "sha256:064bffc288b899d3ac010e0b7c5eaaba11232e93140d8aeb988bd3f9bb09ee3e", size = 783751, upload-time = "2026-07-31T10:04:38.252Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/b8/06/817d4d1f826ae478d79e6b188f75c2ba2499c476dc3a41a459d085029188/deepeval-4.1.4-py3-none-any.whl", hash = "sha256:86afbcd811e5a99eed370d14783dad5e990a8976c9e3e3b1690b22003f909a78", size = 1102921, upload-time = "2026-07-27T11:33:14.944Z" },
+    { url = "https://files.pythonhosted.org/packages/78/f4/249f70ecab6a64d3ce7b783f32aade32ed697f6a8179e3eb35ae90dba3e2/deepeval-4.1.5-py3-none-any.whl", hash = "sha256:402f0a0b5968162a7b3af1fb99d443130626f27442b768e20ac93986188ae280", size = 1120506, upload-time = "2026-07-31T10:04:40.143Z" },
 ]
 
 [[package]]
@@ -1064,7 +1064,7 @@ dev = [
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "deepeval", specifier = ">=4.1.4" },
+    { name = "deepeval", specifier = ">=4.1.5" },
     { name = "httpx2", specifier = ">=2.9.1" },
     { name = "import-linter", specifier = ">=2.1" },
     { name = "mypy", specifier = ">=1.11" },
@@ -1074,7 +1074,7 @@ dev = [
     { name = "reportlab", specifier = ">=4.0" },
     { name = "ruff", specifier = ">=0.16.1" },
     { name = "types-pyyaml", specifier = ">=6.0.12.20260724" },
-    { name = "types-reportlab", specifier = ">=4.5.1.20260728" },
+    { name = "types-reportlab", specifier = ">=4.5.1.20260807" },
 ]
 
 [[package]]
@@ -1852,16 +1852,16 @@ wheels = [
 
 [[package]]
 name = "pydantic-settings"
-version = "2.14.2"
+version = "2.15.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pydantic" },
     { name = "python-dotenv" },
     { name = "typing-inspection" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/5c/b5/8f48e906c3e0205276e8bd8cb7512217a87b2685304d64be27cad5b3019f/pydantic_settings-2.14.2.tar.gz", hash = "sha256:c19dd64b19097f1de80184f0cc7b0272a13ae6e170cbf240a3e27e381ed14a5f", size = 237700, upload-time = "2026-06-19T13:44:56.324Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/68/ca/31c57507b13119d7d3cfa1576dad2911a4861e3be07b579395f4e9d393f9/pydantic_settings-2.15.0.tar.gz", hash = "sha256:694b793e84f766ba76a90ebdefc01d0a9a045dab0382bee70393da93712ad117", size = 261253, upload-time = "2026-08-07T09:24:57.419Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/77/c1/6e422f34e569cf8e18df68d1939c81c099d2b61e4f7d9621c8a77560799c/pydantic_settings-2.14.2-py3-none-any.whl", hash = "sha256:a20c97b37910b6550d5ea50fbcc2d4187defe58cd57070b73863d069419c9440", size = 61715, upload-time = "2026-06-19T13:44:55.02Z" },
+    { url = "https://files.pythonhosted.org/packages/30/a4/2bffa9f8e804325a09867f0e9d30795c80ea9f8d62560bd1b6ad6220eb2f/pydantic_settings-2.15.0-py3-none-any.whl", hash = "sha256:0ba092c291c94baceb5eff768aa0d56400a457585bc0175925a5a5510303da42", size = 69413, upload-time = "2026-08-07T09:24:55.839Z" },
 ]
 
 [[package]]
@@ -1884,11 +1884,11 @@ wheels = [
 
 [[package]]
 name = "pypdf"
-version = "6.14.2"
+version = "6.15.0"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/03/72/7dfd5ff1c9c37de97a731701f51af091325f123d9d4270361c9c69e4431f/pypdf-6.14.2.tar.gz", hash = "sha256:7873f502fe4385e79539b21d872392dc0c4e3714327c15881cbc7fbfd1f95b25", size = 6491182, upload-time = "2026-06-23T14:18:30.859Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/17/17/ee75a92718ec7212de831e71454d702225aa5e474a805cce169806044453/pypdf-6.15.0.tar.gz", hash = "sha256:d39c4d955a76409284a905e2d65b40076d77ab76129e0faaeeb6612403ecfc79", size = 6993794, upload-time = "2026-08-06T13:06:49.929Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/49/e6/136aa8993a2ae7214e0b0ef2edaa0d2e08d1d4e4982635b08a835ff31ec8/pypdf-6.14.2-py3-none-any.whl", hash = "sha256:3f07891af76dc002657e04993ab9b4de81de29f9013b9761d0b7968bff12e946", size = 349514, upload-time = "2026-06-23T14:18:28.867Z" },
+    { url = "https://files.pythonhosted.org/packages/af/72/ce3067ac31e214a66388159f8462ddb8c13dd00170f24d555a1f1ae8ee91/pypdf-6.15.0-py3-none-any.whl", hash = "sha256:14e001d6504822cb1ca9c7ed9a69bccb320f59b320730f55af804361abe4d5ee", size = 378123, upload-time = "2026-08-06T13:06:47.709Z" },
 ]
 
 [[package]]
@@ -2093,7 +2093,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "core", editable = "core" },
-    { name = "pypdf", specifier = ">=4.2" },
+    { name = "pypdf", specifier = ">=6.15.0" },
 ]
 
 [[package]]
@@ -2343,11 +2343,11 @@ wheels = [
 
 [[package]]
 name = "types-reportlab"
-version = "4.5.1.20260728"
+version = "4.5.1.20260807"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/f4/b8/3115698bcebda28ef903c5a2c3f8673dc31f9023774246f25ffc09dd19b6/types_reportlab-4.5.1.20260728.tar.gz", hash = "sha256:5c8d0a2f12a533e400b9cbff82c5d11798b1a405a8ec5a2a5d84fb0ebee58c1e", size = 72669, upload-time = "2026-07-28T04:51:24.453Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ed/05/528a606d545ffb1b683fb1a8fb0173300dffb03aa7d237e43e51569f5ab2/types_reportlab-4.5.1.20260807.tar.gz", hash = "sha256:879b1dccd85daf6ec15bfa9c293a2ab0190a73666d0f7df54fb512b3b6c1c7b5", size = 72806, upload-time = "2026-08-07T04:17:09.743Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/a2/07/c8127a9e56083bbac9e5285ce1c27a659e11c660fb1af71c2b2707770c34/types_reportlab-4.5.1.20260728-py3-none-any.whl", hash = "sha256:a4841e6668cc4b86d1acde75ee804307c49774c43c772f0d8addb2ed24b503ad", size = 113079, upload-time = "2026-07-28T04:51:23.261Z" },
+    { url = "https://files.pythonhosted.org/packages/f2/56/dedb438964c691e69c3dcfc939db74c618bd5683a797bc42a14b95fc180d/types_reportlab-4.5.1.20260807-py3-none-any.whl", hash = "sha256:5f5081bf2ecfa7b2694336d446649048f93872ac9b296b9977f5bc9afba6bf39", size = 113194, upload-time = "2026-08-07T04:17:08.563Z" },
 ]
 
 [[package]]
@@ -2460,15 +2460,15 @@ wheels = [
 
 [[package]]
 name = "uvicorn"
-version = "0.51.0"
+version = "0.52.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "click" },
     { name = "h11" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/a2/65/b7c6c443ccc58678c91e1e973bbe2a878591538655d6e1d47f24ba1c51f3/uvicorn-0.51.0.tar.gz", hash = "sha256:f6f4b69b657c312f516dd2d268ab9ae6f254b11e4bac504f37b2ab58b24dd0b0", size = 94412, upload-time = "2026-07-08T10:59:05.962Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/03/18/ccce41535dee1be77735592bd19965f3972c82e07ee703d324709496b716/uvicorn-0.52.1.tar.gz", hash = "sha256:112ec661814189acbccd3f7b86460147cc065fc92c0821afa78918780e4354dd", size = 100571, upload-time = "2026-08-01T18:19:30.732Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/45/ec/dbb7e5a6b91f86bfb9eb7d2988a2730907b6a729875b949c7f022e8b88fa/uvicorn-0.51.0-py3-none-any.whl", hash = "sha256:5d38af6cd620f2ae3849fb44fd4879e0890aa1febe8d47eb355fb45d93fe6a5b", size = 73219, upload-time = "2026-07-08T10:59:04.44Z" },
+    { url = "https://files.pythonhosted.org/packages/c7/d5/68e6e9bca63c0badf67002890a46d3784c958de45b65e1275ec583ca1f06/uvicorn-0.52.1-py3-none-any.whl", hash = "sha256:e4403f9d93188cf9d1088e9f40e3acd12630e2df8675316704379a7fc20fff6a", size = 79859, upload-time = "2026-08-01T18:19:29.294Z" },
 ]
 
 [[package]]
