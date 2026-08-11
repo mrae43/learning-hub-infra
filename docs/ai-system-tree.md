@@ -10,8 +10,6 @@ learning-hub/
 │   │   │   ├── book_chunker.py
 │   │   │   ├── documentation_chunker.py
 │   │   │   └── _html_utils.py         # HTML parsing helpers
-│   │   ├── retrieval/                # Retrieve from pgvector
-│   │   │   └── query.py
 │   │   ├── _utils.py                 # Internal utility functions
 │   │   └── __init__.py
 │   ├── tests/retrieval_qa/           # chunker + retrieval tests
@@ -40,6 +38,8 @@ learning-hub/
 │   │   │   ├── llm_client.py
 │   │   │   ├── embeddings_client.py
 │   │   │   └── reranker_client.py
+│   │   ├── retrieval/                # Shared retrieval primitives (ADR-0019)
+│   │   │   └── query.py
 │   │   ├── database/                 # pgvector wrapper, Alembic migrations
 │   │   │   ├── connection.py
 │   │   │   ├── schema.py
@@ -130,7 +130,7 @@ learning-hub/
 **Why this is better for your goals:**
 
 1. **Retrieval-centered** — Retrieval QA and Depth Dive are top-level, self-contained modules. When you extract Retrieval QA into its own repo later (post-MVP), the `git subtree split` is clean.
-2. **Shared core/** — only truly shared things (types, API clients, config, DB) live here. No false "shared" abstractions you don't need yet.
+2. **Shared core/** — only truly shared things (types, API clients, config, DB, retrieval) live here. No false "shared" abstractions you don't need yet.
 3. **No generic agent cargo** — no planner, no executor, no memory abstraction that doesn't apply to RAG. Retrieval is deterministic; it doesn't need those patterns.
 4. **Tool-specificity** — web search lives _inside_ Depth Dive, not a generic tool, making it clear it's a Depth Dive-specific capability.
 5. **Clean import boundaries** — matches ADR-0011's import-linter rules exactly (retrieval_qa ↔ core, depth_dive ↔ core, never retrieval_qa ↔ depth_dive).
