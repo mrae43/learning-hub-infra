@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Prototype: Interactive Animation Output Contract</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --panel: #1e293b;
+      --panel-2: #334155;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --accent: #38bdf8;
+      --accent-2: #f472b6;
+      --ok: #34d399;
+      --warn: #fbbf24;
+      --font: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: var(--font); background: var(--bg); color: var(--text); line-height: 1.5; }
+    header { padding: 1.5rem 2rem; border-bottom: 1px solid var(--panel-2); }
+    header h1 { margin: 0 0 0.5rem; font-size: 1.5rem; }
+    header p { margin: 0; color: var(--muted); max-width: 70ch; }
+    .layout { display: grid; grid-template-columns: 1fr 28rem; gap: 1rem; padding: 1rem; }
+    .panel { background: var(--panel); border-radius: 0.75rem; border: 1px solid var(--panel-2); overflow: hidden; }
+    .panel h2 { margin: 0; padding: 0.75rem 1rem; font-size: 0.875rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); border-bottom: 1px solid var(--panel-2); background: rgba(255,255,255,0.03); }
+    .stage { position: relative; min-height: 28rem; }
+    svg { display: block; width: 100%; height: 100%; min-height: 28rem; }
+    .controls { display: flex; gap: 0.5rem; padding: 0.75rem 1rem; border-top: 1px solid var(--panel-2); flex-wrap: wrap; align-items: center; }
+    button, select { background: var(--panel-2); color: var(--text); border: 1px solid var(--panel-2); border-radius: 0.375rem; padding: 0.4rem 0.75rem; font-family: inherit; font-size: 0.875rem; cursor: pointer; }
+    button:hover { border-color: var(--accent); }
+    button.primary { background: var(--accent); color: #0f172a; border-color: var(--accent); font-weight: 600; }
+    button.active { border-color: var(--ok); color: var(--ok); }
+    label { color: var(--muted); font-size: 0.75rem; margin-right: 0.25rem; }
+    .body { padding: 1rem; }
+    .mono { font-family: var(--mono); font-size: 0.75rem; white-space: pre-wrap; background: #0b1220; padding: 0.75rem; border-radius: 0.375rem; overflow: auto; max-height: 18rem; }
+    .step-label { font-size: 0.9375rem; min-height: 3rem; margin-bottom: 0.75rem; color: var(--text); }
+    .tabs { display: flex; gap: 0.25rem; padding: 0.5rem; border-bottom: 1px solid var(--panel-2); }
+    .tab { background: transparent; border: 1px solid transparent; color: var(--muted); padding: 0.35rem 0.65rem; font-size: 0.8rem; }
+    .tab:hover { color: var(--text); }
+    .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .tab-content { display: none; padding: 0.75rem 1rem; }
+    .tab-content.active { display: block; }
+    .metric { font-size: 0.75rem; color: var(--muted); }
+    .metric strong { color: var(--text); }
+    .pill { display: inline-block; padding: 0.15rem 0.45rem; border-radius: 999px; font-size: 0.7rem; font-weight: 600; text-transform: uppercase; background: var(--panel-2); color: var(--accent); }
+    @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Prototype: Interactive Animation Output Contract</h1>
+    <p>
+      <strong>Question:</strong> What JSON/DSL/code shape lets a stateless client render an interactive animation
+      from a single <code>HarnessBResponse</code> payload? This page prototypes the recommended shape — a
+      declarative scene graph with step-level state — and renders one worked example (self-attention)
+      so you can poke it.
+    </p>
+  </header>
+  <div class="layout">
+    <section class="panel">
+      <h2>Animation player</h2>
+      <div class="stage"><svg id="stage" viewBox="0 0 800 520"></svg></div>
+      <div class="controls">
+        <button id="btn-play" class="primary">Play</button>
+        <button id="btn-pause">Pause</button>
+        <button id="btn-prev">Step back</button>
+        <button id="btn-next">Step forward</button>
+        <button id="btn-reset">Reset</button>
+        <div style="margin-left:auto;display:flex;align-items:center;gap:.5rem;">
+          <label for="treatment">Treatment</label>
+          <select id="treatment">
+            <option value="worked_example">worked_example</option>
+            <option value="prediction_reveal">prediction_reveal</option>
+            <option value="segmented_carousel">segmented_carousel</option>
+          </select>
+        </div>
+      </div>
+    </section>
+    <aside class="panel" style="display:flex;flex-direction:column;max-height:calc(100vh - 9rem);">
+      <h2>Contract explorer</h2>
+      <div class="body" style="overflow:auto;">
+        <div class="metric"><strong>Current step:</strong> <span id="step-index">0</span> / <span id="step-count">0</span></div>
+        <div class="metric"><strong>Progress:</strong> <span id="progress">0%</span></div>
+        <div class="step-label" id="step-label">Loading…</div>
+        <div class="tabs">
+          <button class="tab active" data-tab="schema">Schema</button>
+          <button class="tab" data-tab="payload">Payload</button>
+          <button class="tab" data-tab="candidates">Candidates</button>
+        </div>
+        <div class="tab-content active" id="tab-schema">
+          <p class="metric">Recommended contract: declarative scene graph. Elements keep stable IDs; steps mutate <code>element_states</code> and add annotations.</p>
+          <pre class="mono" id="schema-view"></pre>
+        </div>
+        <div class="tab-content" id="tab-payload">
+          <p class="metric">Live payload for the current treatment. Try switching treatments to see how the same concept is packaged differently.</p>
+          <pre class="mono" id="payload-view"></pre>
+        </div>
+        <div class="tab-content" id="tab-candidates">
+          <p class="metric">Four candidate shapes considered. The prototype argues for the scene graph; the others are shown for comparison.</p>
+          <pre class="mono" id="candidates-view"></pre>
+        </div>
+      </div>
+    </aside>
+  </div>
+  <script>
+    // ============================================================
+    // PURE MODULE: Animation contract builder
+    // Designed to be lifted into the real depth_dive package later.
+    // ============================================================
+
+    const DEFAULT_VIEWPORT = { width: 800, height: 520 };
+
+    /**
+     * Build a stateless, declarative interactive-animation payload.
+     * The whole artifact ships in one HarnessBResponse; the client renders it
+     * without further server calls.
+     */
+    function buildAttentionPayload(treatment) {
+      const base = {
+        version: "depth-dive-animation/2025-08",
+        treatment,
+        title: "Self-attention: how a word sees its neighbors",
+        concept: "attention",
+        viewport: DEFAULT_VIEWPORT,
+        elements: [
+          { id: "title", type: "text", x: 400, y: 36, text: "Self-attention: bank", style: { fontSize: 20, fontWeight: "bold", textAnchor: "middle" } },
+          { id: "tok-river", type: "token", x: 160, y: 100, text: "river" },
+          { id: "tok-bank",  type: "token", x: 400, y: 100, text: "bank" },
+          { id: "tok-money", type: "token", x: 640, y: 100, text: "money" },
+          { id: "q-label", type: "text", x: 160, y: 200, text: "Query (Q)", style: { fontSize: 12, textAnchor: "middle" } },
+          { id: "k-label", type: "text", x: 400, y: 200, text: "Key (K)", style: { fontSize: 12, textAnchor: "middle" } },
+          { id: "v-label", type: "text", x: 640, y: 200, text: "Value (V)", style: { fontSize: 12, textAnchor: "middle" } },
+          { id: "q-bank", type: "vector", x: 160, y: 240, label: "Q_bank", color: "var(--accent)" },
+          { id: "k-river", type: "vector", x: 400, y: 240, label: "K_river", color: "var(--accent-2)" },
+          { id: "k-bank", type: "vector", x: 400, y: 300, label: "K_bank", color: "var(--accent-2)" },
+          { id: "k-money", type: "vector", x: 400, y: 360, label: "K_money", color: "var(--accent-2)" },
+          { id: "v-river", type: "vector", x: 640, y: 240, label: "V_river", color: "var(--ok)" },
+          { id: "v-bank", type: "vector", x: 640, y: 300, label: "V_bank", color: "var(--ok)" },
+          { id: "v-money", type: "vector", x: 640, y: 360, label: "V_money", color: "var(--ok)" },
+          { id: "score-river", type: "score", x: 280, y: 260, value: 0.15 },
+          { id: "score-bank", type: "score", x: 280, y: 300, value: 0.35 },
+          { id: "score-money", type: "score", x: 280, y: 340, value: 0.50 },
+          { id: "out-bank", type: "vector", x: 400, y: 470, label: "context(bank)", color: "var(--warn)" },
+          { id: "caption", type: "text", x: 400, y: 510, text: "", style: { fontSize: 13, textAnchor: "middle", fill: "var(--muted)" } }
+        ],
+        interactions: { click_to_advance: true }
+      };
+
+      const commonSteps = [
+        {
+          id: "setup",
+          label: "Three input words. We want a context-aware meaning for 'bank'.",
+          duration_ms: 1500,
+          element_states: {
+            "title": { opacity: 1 },
+            "tok-river": { opacity: 1 }, "tok-bank": { opacity: 1, highlight: true }, "tok-money": { opacity: 1 },
+            "q-label": { opacity: 0 }, "k-label": { opacity: 0 }, "v-label": { opacity: 0 },
+            "q-bank": { opacity: 0 }, "k-river": { opacity: 0 }, "k-bank": { opacity: 0 }, "k-money": { opacity: 0 },
+            "v-river": { opacity: 0 }, "v-bank": { opacity: 0 }, "v-money": { opacity: 0 },
+            "score-river": { opacity: 0 }, "score-bank": { opacity: 0 }, "score-money": { opacity: 0 },
+            "out-bank": { opacity: 0 },
+            "caption": { opacity: 1, text: "Input: [river, bank, money]" }
+          }
+        },
+        {
+          id: "qkv",
+          label: "For every word, the model builds a Query, Key, and Value vector.",
+          duration_ms: 2000,
+          element_states: {
+            "q-label": { opacity: 1 }, "k-label": { opacity: 1 }, "v-label": { opacity: 1 },
+            "q-bank": { opacity: 1 }, "k-river": { opacity: 1 }, "k-bank": { opacity: 1 }, "k-money": { opacity: 1 },
+            "v-river": { opacity: 1 }, "v-bank": { opacity: 1 }, "v-money": { opacity: 1 },
+            "caption": { text: "Q, K, V are learned projections of each token." }
+          }
+        },
+        {
+          id: "scores",
+          label: "Query bank is compared to every Key to produce attention scores.",
+          duration_ms: 2500,
+          element_states: {
+            "score-river": { opacity: 1, value: 0.15 },
+            "score-bank":  { opacity: 1, value: 0.35 },
+            "score-money": { opacity: 1, value: 0.50 },
+            "caption": { text: "Higher score = more relevant context for 'bank'." }
+          }
+        },
+        {
+          id: "weighted",
+          label: "Scores become weights; Values are summed into the new context-aware 'bank' representation.",
+          duration_ms: 2500,
+          element_states: {
+            "out-bank": { opacity: 1 },
+            "score-river": { value: 0.15 }, "score-bank": { value: 0.35 }, "score-money": { value: 0.50 },
+            "caption": { text: "context(bank) = 0.15*V_river + 0.35*V_bank + 0.50*V_money" }
+          }
+        }
+      ];
+
+      if (treatment === "worked_example") {
+        return { ...base, steps: commonSteps };
+      }
+
+      if (treatment === "prediction_reveal") {
+        // Same animation, but the final answer is hidden until the user advances.
+        return {
+          ...base,
+          title: "Prediction reveal: what does 'bank' mean here?",
+          interactions: { click_to_advance: true, reveal_on_last_step: ["caption", "out-bank"] },
+          steps: commonSteps.map((s, i) =>
+            i === commonSteps.length - 1
+              ? { ...s, label: "Reveal: the dominant context is 'money', so 'bank' leans financial.", element_states: { ...s.element_states, "out-bank": { opacity: 0.25 }, "caption": { text: "Click to reveal the final representation." } } }
+              : s
+          ).concat([{
+            id: "reveal",
+            label: "The model's new representation for 'bank' is dominated by its financial context.",
+            duration_ms: 1500,
+            element_states: { "out-bank": { opacity: 1 }, "caption": { text: "context(bank) ≈ 0.50*V_money + ..." } }
+          }])
+        };
+      }
+
+      // segmented_carousel: break the concept into swipeable segments, each a mini animation.
+      return {
+        ...base,
+        title: "Segmented carousel: attention in three slides",
+        treatment: "segmented_carousel",
+        interactions: { click_to_advance: true, segments: ["setup", "qkv", "scores", "weighted"] },
+        steps: [
+          {
+            id: "seg-intro",
+            label: "Slide 1/3: We have three input tokens and we focus on 'bank'.",
+            duration_ms: 1500,
+            segment: 0,
+            element_states: {
+              "title": { opacity: 1, text: "Slide 1: the input" },
+              "tok-river": { opacity: 1 }, "tok-bank": { opacity: 1, highlight: true }, "tok-money": { opacity: 1 },
+              "caption": { text: "Input: [river, bank, money]" }
+            }
+          },
+          {
+            id: "seg-qkv",
+            label: "Slide 2/3: Every token gets a Query, Key, and Value vector.",
+            duration_ms: 2000,
+            segment: 1,
+            element_states: {
+              "title": { opacity: 1, text: "Slide 2: Q, K, V" },
+              "q-label": { opacity: 1 }, "k-label": { opacity: 1 }, "v-label": { opacity: 1 },
+              "q-bank": { opacity: 1 }, "k-river": { opacity: 1 }, "k-bank": { opacity: 1 }, "k-money": { opacity: 1 },
+              "v-river": { opacity: 1 }, "v-bank": { opacity: 1 }, "v-money": { opacity: 1 },
+              "caption": { text: "Q, K, V are learned projections." }
+            }
+          },
+          {
+            id: "seg-scores",
+            label: "Slide 3/3: Compare Q_bank to each Key, then weight the Values.",
+            duration_ms: 2500,
+            segment: 2,
+            element_states: {
+              "title": { opacity: 1, text: "Slide 3: scores & output" },
+              "q-label": { opacity: 1 }, "k-label": { opacity: 1 }, "v-label": { opacity: 1 },
+              "q-bank": { opacity: 1 }, "k-river": { opacity: 1 }, "k-bank": { opacity: 1 }, "k-money": { opacity: 1 },
+              "v-river": { opacity: 1 }, "v-bank": { opacity: 1 }, "v-money": { opacity: 1 },
+              "score-river": { opacity: 1, value: 0.15 }, "score-bank": { opacity: 1, value: 0.35 }, "score-money": { opacity: 1, value: 0.50 },
+              "out-bank": { opacity: 1 },
+              "caption": { text: "context(bank) = weighted sum of Values" }
+            }
+          }
+        ]
+      };
+    }
+
+    // === END CHUNK 1 ===
+
+    // ============================================================
+    // PURE MODULE: Player + renderer
+    // Stateless interpreter for the contract above.
+    // ============================================================
+
+    function lerp(a, b, t) { return a + (b - a) * Math.min(1, Math.max(0, t)); }
+
+    class AnimationPlayer {
+      constructor(payload, svg) {
+        this.payload = payload;
+        this.svg = svg;
+        this.stepIndex = 0;
+        this.stepTime = 0;
+        this.playing = false;
+        this.raf = null;
+        this.elements = new Map();
+        this.lastFrame = performance.now();
+        this.buildElements();
+        this.render(0);
+      }
+
+      buildElements() {
+        this.svg.innerHTML = "";
+        this.elements.clear();
+        // arrow markers
+        const defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
+        defs.innerHTML = `
+          <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+            <path d="M0,0 L0,6 L9,3 z" fill="var(--muted)" />
+          </marker>`;
+        this.svg.appendChild(defs);
+
+        for (const el of this.payload.elements) {
+          const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+          g.setAttribute("id", el.id);
+          g.setAttribute("class", "scene-element");
+          g.style.transition = "opacity 0.25s ease";
+          this.svg.appendChild(g);
+          this.elements.set(el.id, { def: el, node: g });
+        }
+      }
+
+      currentStep() { return this.payload.steps[this.stepIndex]; }
+
+      play() {
+        if (this.playing) return;
+        this.playing = true;
+        this.lastFrame = performance.now();
+        this.raf = requestAnimationFrame((t) => this.loop(t));
+      }
+
+      pause() {
+        this.playing = false;
+        if (this.raf) cancelAnimationFrame(this.raf);
+      }
+
+      reset() {
+        this.pause();
+        this.stepIndex = 0;
+        this.stepTime = 0;
+        this.render(0);
+      }
+
+      next() {
+        this.pause();
+        if (this.stepIndex < this.payload.steps.length - 1) {
+          this.stepIndex++;
+          this.stepTime = 0;
+          this.render(0);
+        }
+      }
+
+      prev() {
+        this.pause();
+        if (this.stepIndex > 0) {
+          this.stepIndex--;
+          this.stepTime = 0;
+          this.render(0);
+        }
+      }
+
+      loop(now) {
+        if (!this.playing) return;
+        const dt = now - this.lastFrame;
+        this.lastFrame = now;
+        const step = this.currentStep();
+        this.stepTime += dt;
+        const t = Math.min(1, this.stepTime / step.duration_ms);
+        this.render(t);
+        if (t >= 1) {
+          if (this.stepIndex < this.payload.steps.length - 1) {
+            this.stepIndex++;
+            this.stepTime = 0;
+          } else {
+            this.playing = false;
+          }
+        }
+        if (this.playing) this.raf = requestAnimationFrame((t2) => this.loop(t2));
+      }
+
+      render(t) {
+        const step = this.currentStep();
+        const prev = this.payload.steps[Math.max(0, this.stepIndex - 1)];
+        for (const [id, { def, node }] of this.elements) {
+          const target = step.element_states[id] || {};
+          const source = prev.element_states[id] || {};
+          const opacity = lerp(source.opacity ?? 1, target.opacity ?? 1, t);
+          node.setAttribute("opacity", opacity);
+          node.innerHTML = "";
+          this.drawElement(def, node, target, source, t);
+        }
+        this.onRender && this.onRender(this.stepIndex, t);
+      }
+
+      drawElement(def, node, target, source, t) {
+        const value = lerp(source.value ?? def.value ?? 0, target.value ?? def.value ?? 0, t);
+        const text = target.text ?? def.text ?? "";
+        const highlight = target.highlight ?? def.highlight ?? false;
+        const color = def.color || "var(--text)";
+
+        if (def.type === "text") {
+          const txt = document.createElementNS("http://www.w3.org/2000/svg", "text");
+          txt.setAttribute("x", def.x);
+          txt.setAttribute("y", def.y);
+          txt.setAttribute("text-anchor", def.style?.textAnchor || "start");
+          txt.setAttribute("fill", def.style?.fill || color);
+          txt.setAttribute("font-size", def.style?.fontSize || 14);
+          txt.setAttribute("font-weight", def.style?.fontWeight || "normal");
+          txt.textContent = text;
+          node.appendChild(txt);
+        } else if (def.type === "token") {
+          const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+          rect.setAttribute("x", def.x - 36);
+          rect.setAttribute("y", def.y - 24);
+          rect.setAttribute("width", 72);
+          rect.setAttribute("height", 36);
+          rect.setAttribute("rx", 8);
+          rect.setAttribute("fill", highlight ? "rgba(56,189,248,0.2)" : "var(--panel-2)");
+          rect.setAttribute("stroke", highlight ? "var(--accent)" : "var(--panel-2)");
+          rect.setAttribute("stroke-width", highlight ? 2 : 1);
+          node.appendChild(rect);
+          const txt = document.createElementNS("http://www.w3.org/2000/svg", "text");
+          txt.setAttribute("x", def.x);
+          txt.setAttribute("y", def.y - 2);
+          txt.setAttribute("text-anchor", "middle");
+          txt.setAttribute("fill", "var(--text)");
+          txt.setAttribute("font-size", 15);
+          txt.textContent = def.text;
+          node.appendChild(txt);
+        } else if (def.type === "vector") {
+          const bar = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+          bar.setAttribute("x", def.x - 40);
+          bar.setAttribute("y", def.y - 8);
+          bar.setAttribute("width", 80);
+          bar.setAttribute("height", 16);
+          bar.setAttribute("rx", 4);
+          bar.setAttribute("fill", color);
+          node.appendChild(bar);
+          const txt = document.createElementNS("http://www.w3.org/2000/svg", "text");
+          txt.setAttribute("x", def.x);
+          txt.setAttribute("y", def.y + 24);
+          txt.setAttribute("text-anchor", "middle");
+          txt.setAttribute("fill", "var(--muted)");
+          txt.setAttribute("font-size", 11);
+          txt.textContent = def.label;
+          node.appendChild(txt);
+        } else if (def.type === "score") {
+          const txt = document.createElementNS("http://www.w3.org/2000/svg", "text");
+          txt.setAttribute("x", def.x);
+          txt.setAttribute("y", def.y);
+          txt.setAttribute("text-anchor", "middle");
+          txt.setAttribute("fill", "var(--text)");
+          txt.setAttribute("font-size", 13);
+          txt.setAttribute("font-weight", "bold");
+          txt.textContent = value.toFixed(2);
+          node.appendChild(txt);
+          const w = value * 120;
+          const bar = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+          bar.setAttribute("x", def.x - w / 2);
+          bar.setAttribute("y", def.y + 8);
+          bar.setAttribute("width", w);
+          bar.setAttribute("height", 6);
+          bar.setAttribute("rx", 3);
+          bar.setAttribute("fill", "var(--accent)");
+          node.appendChild(bar);
+        }
+      }
+    }
+
+    // === END CHUNK 2 ===
+
+    // ============================================================
+    // THROWAWAY UI SHELL: wires the pure module to the page.
+    // ============================================================
+
+    const SCHEMA_BLURB = `// Declarative scene graph (recommended)
+{
+  "version": "depth-dive-animation/2025-08",
+  "treatment": "worked_example" | "prediction_reveal" | "segmented_carousel",
+  "title": string,
+  "concept": string,
+  "viewport": { "width": number, "height": number },
+  "elements": [
+    {
+      "id": string,          // stable identity; renderer interpolates
+      "type": "text" | "token" | "vector" | "score" | ...,
+      "x": number,
+      "y": number,
+      // type-specific payload (text, label, value, style, color, ...)
+    }
+  ],
+  "steps": [
+    {
+      "id": string,
+      "label": string,       // narration / instruction for this step
+      "duration_ms": number, // auto-advance time when playing
+      "segment": number,     // optional: for carousel treatments
+      "element_states": {    // sparse update keyed by element id
+        "<id>": { opacity, highlight, value, text, ... }
+      },
+      "annotations": [...]   // optional arrows, highlights, callouts
+    }
+  ],
+  "interactions": {
+    "click_to_advance": boolean,
+    "reveal_on_last_step": [string], // element ids hidden until final click
+    "segments": [string]             // step ids that start a new carousel slide
+  }
+}`;
+
+    const CANDIDATE_BLURB = `1) DECLARATIVE SCENE GRAPH  <-- recommended
+   JSON elements + step-level state. Renderer interpolates. Self-contained,
+   inspectable, easy to validate, trivially serialisable.
+
+2) GENERATED ANIMATION CODE (e.g. Manim / Remotion-style)
+   Pros: extremely expressive. Cons: requires sandboxed execution or a
+   compiler on the client; security/reproducibility headaches; not easy
+   to introspect or caption.
+
+3) LOTTIEFORMAT
+   Pros: mature ecosystem, vector renderer. Cons: overkill for conceptual
+   diagrams, text/math-heavy scenes are painful, adds a heavy dependency,
+   schema is animation-first rather than concept-first.
+
+4) ANNOTATED STEP-THROUGH FRAMES
+   Pros: dead simple. Cons: not truly interactive, no smooth transitions,
+   large payload if frames are images, hard to adapt to screen size.
+
+Verdict for MVP: scene graph (#1). It is the only candidate that is
+stateless, self-contained, screen-size independent, and concept-centric.`;
+
+    const svg = document.getElementById("stage");
+    const treatmentSelect = document.getElementById("treatment");
+    const stepIndexEl = document.getElementById("step-index");
+    const stepCountEl = document.getElementById("step-count");
+    const progressEl = document.getElementById("progress");
+    const stepLabelEl = document.getElementById("step-label");
+    const payloadView = document.getElementById("payload-view");
+    const schemaView = document.getElementById("schema-view");
+    const candidatesView = document.getElementById("candidates-view");
+    let player = null;
+
+    function loadTreatment(treatment) {
+      if (player) player.pause();
+      const payload = buildAttentionPayload(treatment);
+      player = new AnimationPlayer(payload, svg);
+      player.onRender = (idx, t) => {
+        stepIndexEl.textContent = String(idx + 1);
+        stepCountEl.textContent = String(payload.steps.length);
+        const total = payload.steps.reduce((a, s) => a + s.duration_ms, 0);
+        const elapsed = payload.steps.slice(0, idx).reduce((a, s) => a + s.duration_ms, 0) + t * payload.steps[idx].duration_ms;
+        progressEl.textContent = Math.round((elapsed / total) * 100) + "%";
+        stepLabelEl.textContent = payload.steps[idx].label;
+        payloadView.textContent = JSON.stringify(payload, null, 2);
+      };
+      schemaView.textContent = SCHEMA_BLURB;
+      candidatesView.textContent = CANDIDATE_BLURB;
+      player.render(0);
+    }
+
+    document.getElementById("btn-play").addEventListener("click", () => player && player.play());
+    document.getElementById("btn-pause").addEventListener("click", () => player && player.pause());
+    document.getElementById("btn-next").addEventListener("click", () => player && player.next());
+    document.getElementById("btn-prev").addEventListener("click", () => player && player.prev());
+    document.getElementById("btn-reset").addEventListener("click", () => player && player.reset());
+    treatmentSelect.addEventListener("change", (e) => loadTreatment(e.target.value));
+
+    document.querySelectorAll(".tab").forEach((tab) => {
+      tab.addEventListener("click", () => {
+        document.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"));
+        document.querySelectorAll(".tab-content").forEach((c) => c.classList.remove("active"));
+        tab.classList.add("active");
+        document.getElementById("tab-" + tab.dataset.tab).classList.add("active");
+      });
+    });
+
+    // Click on the stage advances one step (if the contract allows it).
+    svg.addEventListener("click", () => {
+      if (player && player.payload.interactions.click_to_advance) player.next();
+    });
+
+    loadTreatment("worked_example");
+  </script>
+</body>
+</html>
