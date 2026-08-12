@@ -25,11 +25,11 @@ from sqlalchemy.orm import Session, sessionmaker
 # would shadow the installed package under importlib import mode.
 import api.controllers.qa_controller
 import api.server  # noqa: F401
+import core.retrieval.query  # noqa: F401
 import ingestion.tasks  # noqa: F401
 import retrieval_qa.chunking.book_chunker
 import retrieval_qa.chunking.documentation_chunker
-import retrieval_qa.chunking.paper_chunker
-import retrieval_qa.retrieval.query  # noqa: F401
+import retrieval_qa.chunking.paper_chunker  # noqa: F401
 
 # Pre-import the workspace packages so their installed (src/) versions are
 # cached in sys.modules before per-package test collection runs. Without this,

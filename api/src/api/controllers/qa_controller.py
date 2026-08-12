@@ -24,9 +24,9 @@ from sqlalchemy.orm import Session
 
 from api.prompt import build_messages
 from core.clients import CompletionProvider, Embedder, Reranker
+from core.retrieval.query import retrieve_relevant_chunks
 from core.types.responses import CitedPassage, HarnessAResponse
 from core.types.retrieval_config import RetrievalConfig
-from retrieval_qa.retrieval.query import retrieve_relevant_chunks
 
 
 def run_query(

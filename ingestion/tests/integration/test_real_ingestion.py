@@ -208,8 +208,8 @@ def test_real_ingestion_is_grounded(
     test_session.commit()
 
     # Embed the query and retrieve relevant chunks
+    from core.retrieval.query import retrieve_relevant_chunks
     from core.types.retrieval_config import RetrievalConfig
-    from retrieval_qa.retrieval.query import retrieve_relevant_chunks
 
     query_vector = client.embed([query_text])[0]
     config = RetrievalConfig(

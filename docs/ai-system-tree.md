@@ -12,7 +12,7 @@ learning-hub/
 │   │   │   └── _html_utils.py         # HTML parsing helpers
 │   │   ├── _utils.py                 # Internal utility functions
 │   │   └── __init__.py
-│   ├── tests/retrieval_qa/           # chunker + retrieval tests
+│   ├── tests/retrieval_qa/           # chunker tests
 │   ├── tests/eval/                   # retrieval eval (path-gated, eval_set.yaml + eval_vectors.json)
 │   ├── pyproject.toml
 │   └── README.md
@@ -39,7 +39,9 @@ learning-hub/
 │   │   │   ├── embeddings_client.py
 │   │   │   └── reranker_client.py
 │   │   ├── retrieval/                # Shared retrieval primitives (ADR-0019)
-│   │   │   └── query.py
+│   │   │   ├── query.py              # Full hybrid pipeline
+│   │   │   ├── neighbors.py          # Dense semantic-neighbor search
+│   │   │   └── parents.py            # Parent-chunk fetch
 │   │   ├── database/                 # pgvector wrapper, Alembic migrations
 │   │   │   ├── connection.py
 │   │   │   ├── schema.py

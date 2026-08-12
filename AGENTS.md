@@ -64,7 +64,7 @@ These docs are **not** auto-loaded into session context. Only this `AGENTS.md` i
 
 ## Testing conventions
 
-- Mirror package structure: `retrieval_qa/retrieval.py` → `tests/retrieval_qa/test_retrieval.py`.
+- Mirror package structure: `core/retrieval/query.py` → `core/tests/core/retrieval/test_query.py`.
 - Mock hosted API calls (embeddings, LLM, web search) in unit tests.
 - Keep retrieval-relevant tests identifiable (consistent module naming).
 - Retrieval evaluation at the package level is path-gated per ADR-0007 (superseded by ADR-0015) and lives under `retrieval_qa/tests/eval/` with `eval_set.yaml` / `eval_vectors.json`.
@@ -73,7 +73,7 @@ These docs are **not** auto-loaded into session context. Only this `AGENTS.md` i
 ## Where to add things
 
 - **New chunking strategy for a doc type** → `retrieval_qa/src/retrieval_qa/chunking/`
-- **Bug fix in retrieval logic** → `retrieval_qa/src/retrieval_qa/retrieval/`
+- **Bug fix in retrieval logic** → `core/src/core/retrieval/`
 - **New Depth Dive generation feature** → `depth_dive/src/depth_dive/generation/`
 - **Web search improvements** → `depth_dive/src/depth_dive/web_search/`
 - **New shared type** → `core/src/core/types/`
@@ -117,7 +117,7 @@ Rules:
 - **Depth Dive implementation** — `depth_dive/src/depth_dive/` is a stub; `generation/` and `web_search/` subdirectories don't exist yet.
 - **`api/routes/__init__.py`** — route modules are imported directly in `server.py`; no package init file exists.
 
-Bootstrap order is complete for the first four packages (`core/` → `retrieval_qa/` (query logic included) → `api/` → `ingestion/`), plus the `scripts/` eval & tuning tooling over the `eval_corpus/` tuning set. `depth_dive/` is the remaining package to implement.
+Bootstrap order is complete for the first four packages (`core/` (shared retrieval layer included) → `retrieval_qa/` → `api/` → `ingestion/`), plus the `scripts/` eval & tuning tooling over the `eval_corpus/` tuning set. `depth_dive/` is the remaining package to implement.
 
 ## Agent skills
 
