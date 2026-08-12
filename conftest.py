@@ -26,6 +26,9 @@ from sqlalchemy.orm import Session, sessionmaker
 import api.controllers.qa_controller
 import api.server  # noqa: F401
 import core.retrieval.query  # noqa: F401
+import depth_dive.generation.demo_animation
+import depth_dive.harness
+import depth_dive.transform  # noqa: F401
 import ingestion.tasks  # noqa: F401
 import retrieval_qa.chunking.book_chunker
 import retrieval_qa.chunking.documentation_chunker
