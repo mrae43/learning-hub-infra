@@ -33,8 +33,8 @@ Structured monorepo with extractable module boundaries:
 
 | Package         | Role                                                           |
 | --------------- | -------------------------------------------------------------- |
-| `core/`         | Shared types, config, API clients, database (`pgvector`)       |
-| `retrieval_qa/` | Closed-corpus retrieval QA (MVP)                               |
+| `core/`         | Shared types, config, API clients, database (`pgvector`), retrieval primitives |
+| `retrieval_qa/` | Closed-corpus retrieval QA: chunking + retrieval eval (MVP)    |
 | `depth_dive/`   | Depth Dive generation (post-MVP 1)                             |
 | `api/`          | FastAPI server (thin routes → controllers)                     |
 | `ingestion/`    | Document upload + background ingestion pipeline                |

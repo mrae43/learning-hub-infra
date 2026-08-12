@@ -20,9 +20,9 @@ import yaml
 from core.clients.embeddings_client import Embedder, EmbeddingsClient, InMemoryEmbedder
 from core.config.settings import Settings
 from core.database.connection import get_engine
+from core.retrieval.query import retrieve_relevant_chunks
 from core.types.responses import RetrievalResult
 from core.types.retrieval_config import RetrievalConfig
-from retrieval_qa.retrieval.query import retrieve_relevant_chunks
 from scripts.eval_metrics import MRRMetric, RecallAtKMetric, is_hit
 from scripts.seed_schema import CONFIG_NAMES, seed_schema, teardown_schema
 
@@ -390,7 +390,7 @@ def run_tuning(args: argparse.Namespace) -> int:
 
             session: Session = SessionClass()
             try:
-                # The retrieval queries (retrieval_qa.retrieval.query) use raw
+                # The retrieval queries (core.retrieval.query) use raw
                 # text() SQL with unqualified table names. schema_translate_map
                 # only rewrites ORM/Core Table SQL, so point search_path at the
                 # seeded schema to route the raw queries to the right tables.

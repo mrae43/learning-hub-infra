@@ -23,8 +23,8 @@ from pydantic import BaseModel, model_validator
 from sqlalchemy.orm import Session
 
 from core.config.settings import Settings
+from core.retrieval.query import retrieve_relevant_chunks
 from core.types.retrieval_config import RetrievalConfig
-from retrieval_qa.retrieval.query import retrieve_relevant_chunks
 
 _EVAL_SET_PATH = Path(__file__).parent / "eval_set.yaml"
 

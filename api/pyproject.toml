@@ -9,7 +9,6 @@ requires-python = ">=3.12"
 license = "MIT"
 dependencies = [
     "core",
-    "retrieval-qa",
     "depth-dive",
     "ingestion",
     "fastapi>=0.141.1",
@@ -19,7 +18,6 @@ dependencies = [
 
 [tool.uv.sources]
 core = { workspace = true }
-retrieval-qa = { workspace = true }
 depth-dive = { workspace = true }
 ingestion = { workspace = true }
 

@@ -10,10 +10,10 @@ from sqlalchemy.orm import Session
 from core.clients.reranker_client import NoopReranker
 from core.database.schema import Chunk, Document, Embedding
 from core.exceptions import RerankerRateLimitError
+from core.retrieval.query import _build_scored_chunks, retrieve_relevant_chunks
 from core.types.document import DocumentStatus, DocumentType
 from core.types.responses import CitedPassage, ScoredChunk
 from core.types.retrieval_config import RetrievalConfig
-from retrieval_qa.retrieval.query import _build_scored_chunks, retrieve_relevant_chunks
 
 
 def _seed_paper(
@@ -670,7 +670,7 @@ def test_sparse_query_exercises_gin_index(
     ``content_search`` column; the sparse query must read that column (not an
     inline ``to_tsvector``) or the plan falls back to a per-row scan.
     """
-    from retrieval_qa.retrieval.query import _SPARSE_SQL
+    from core.retrieval.query import _SPARSE_SQL
 
     content = "postgresql full text search with tsvector and gin indexes"
     vector = [0.5] * 1536

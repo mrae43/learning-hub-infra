@@ -38,7 +38,7 @@ def chunk_paper(document: IngestedDocument) -> list[Chunk]:
 
 ## Testing
 
-- **pytest**, one test module per source module, mirroring the package structure (`retrieval_qa/retrieval.py` → `tests/retrieval_qa/test_retrieval.py`).
+- **pytest**, one test module per source module, mirroring the package structure (`core/retrieval/query.py` → `core/tests/core/retrieval/test_query.py`).
 - Test names describe behavior, not implementation: `test_recall_at_k_flags_missing_expected_passage`, not `test_eval_function`.
 - Retrieval-relevant tests (chunking, embedding calls, query logic) are the ones most likely to be gated by a future retrieval-evaluation CI job — keep this code path identifiable (e.g. consistent module naming) so path-based CI gating stays accurate as the codebase grows.
 - Mock hosted API calls (embeddings, inference) in unit tests — real API calls belong in the retrieval eval job specifically, not scattered across the general test suite.
