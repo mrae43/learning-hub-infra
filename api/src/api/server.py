@@ -3,6 +3,7 @@
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 
+from api.routes.dive import router as dive_router
 from api.routes.documents import router as documents_router
 from api.routes.health import router as health_router
 from api.routes.ingest import router as ingest_router
@@ -27,6 +28,7 @@ def create_app() -> FastAPI:
     app.include_router(ingest_router)
     app.include_router(documents_router)
     app.include_router(query_router)
+    app.include_router(dive_router)
 
     app.add_exception_handler(
         UpstreamBadResponse,
