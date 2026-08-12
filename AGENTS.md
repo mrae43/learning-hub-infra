@@ -118,3 +118,17 @@ Rules:
 - **`api/routes/__init__.py`** — route modules are imported directly in `server.py`; no package init file exists.
 
 Bootstrap order is complete for the first four packages (`core/` → `retrieval_qa/` (query logic included) → `api/` → `ingestion/`), plus the `scripts/` eval & tuning tooling over the `eval_corpus/` tuning set. `depth_dive/` is the remaining package to implement.
+
+## Agent skills
+
+### Issue tracker
+
+Issues and specs for this repo live as GitHub issues. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+This repo uses the default five canonical triage labels: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context repo: read `CONTEXT.md` at the repo root and `docs/adr/` for relevant decisions. See `docs/agents/domain.md`.
