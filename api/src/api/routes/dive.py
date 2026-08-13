@@ -20,7 +20,7 @@ def dive(body: HarnessBRequest) -> HarnessBResponse:
     FastAPI defaults.
     """
     try:
-        return run_dive(body.captured_passage)
+        return run_dive(body)
     except PassageTransformError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
