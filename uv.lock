@@ -453,10 +453,14 @@ version = "0.1.0"
 source = { editable = "depth_dive" }
 dependencies = [
     { name = "core" },
+    { name = "pillow" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "core", editable = "core" }]
+requires-dist = [
+    { name = "core", editable = "core" },
+    { name = "pillow", specifier = ">=12.0" },
+]
 
 [[package]]
 name = "distro"
