@@ -14,9 +14,10 @@ import pytest
 from PIL import Image
 from pydantic import TypeAdapter
 
-from core.clients import InMemoryEmbedder
+from core.clients import InMemoryEmbedder, MockCompletionProvider
 from core.types.captured_passage import (
     CapturedPassage,
+    CodePassage,
     ImagePassage,
     TablePassage,
     TextPassage,
@@ -32,6 +33,7 @@ from core.types.retrieval_config import RetrievalConfig
 from depth_dive import harness
 from depth_dive.assembly.assembly_agent import AssemblyResult
 from depth_dive.framing.framing_agent import FramingBrief
+from depth_dive.generation.fallback_animation import build_fallback_animation
 from depth_dive.harness import run_dive
 from depth_dive.transform import PassageTransformError
 from depth_dive.web_search.client import StubWebSearchClient, WebSearchResult
@@ -42,11 +44,24 @@ _captured_passage_adapter: TypeAdapter[CapturedPassage] = TypeAdapter(CapturedPa
 
 _CONFIG = RetrievalConfig(model_name="text-embedding-3-small", ef_search=40, top_k=5)
 
+_FALLBACK_ANIMATION = build_fallback_animation("test fallback")
+
+
+def _completion() -> MockCompletionProvider:
+    """A deterministic completion provider for the mocked-assembly tests."""
+    return MockCompletionProvider("""{"output_type":"interactive_animation"}""")
+
 
 @pytest.fixture
 def patched_assembly(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
     """Patch ``run_assembly`` to return an ungrounded result by default."""
-    assembly = MagicMock(return_value=AssemblyResult(grounded=False, cited_passages=[]))
+    assembly = MagicMock(
+        return_value=AssemblyResult(
+            grounded=False,
+            cited_passages=[],
+            animation=_FALLBACK_ANIMATION,
+        )
+    )
     monkeypatch.setattr(harness, "run_assembly", assembly)
     return assembly
 
@@ -55,6 +70,7 @@ def _dive(
     passage: CapturedPassage,
     *,
     web_search: StubWebSearchClient | None = None,
+    completion_provider: MockCompletionProvider | None = None,
 ) -> HarnessBResponse:
     return run_dive(
         HarnessBRequest(captured_passage=passage),
@@ -62,6 +78,7 @@ def _dive(
         embedder=InMemoryEmbedder(),
         config=_CONFIG,
         web_search=web_search or StubWebSearchClient(),
+        completion_provider=completion_provider or _completion(),
     )
 
 
@@ -110,6 +127,7 @@ def test_run_dive_mirrors_grounded_assembly_result(
         return_value=AssemblyResult(
             grounded=True,
             cited_passages=[CitedPassage(chunk_id=passage_id, text="cited corpus chunk")],
+            animation=_FALLBACK_ANIMATION,
         )
     )
     monkeypatch.setattr(harness, "run_assembly", assembly)
@@ -136,6 +154,7 @@ def test_run_dive_mirrors_successful_search_outcome(
             external_search_attempted=True,
             external_search_failed=False,
             external_search_results=results,
+            animation=_FALLBACK_ANIMATION,
         )
     )
     monkeypatch.setattr(harness, "run_assembly", assembly)
@@ -156,6 +175,7 @@ def test_run_dive_mirrors_failed_search_outcome(monkeypatch: pytest.MonkeyPatch)
             external_search_attempted=True,
             external_search_failed=True,
             external_search_note=FALLBACK_NOTE,
+            animation=_FALLBACK_ANIMATION,
         )
     )
     monkeypatch.setattr(harness, "run_assembly", assembly)
@@ -171,7 +191,13 @@ def test_run_dive_passes_web_search_client_to_assembly(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The harness hands the web-search provider to the assembly agent."""
-    assembly = MagicMock(return_value=AssemblyResult(grounded=False, cited_passages=[]))
+    assembly = MagicMock(
+        return_value=AssemblyResult(
+            grounded=False,
+            cited_passages=[],
+            animation=_FALLBACK_ANIMATION,
+        )
+    )
     monkeypatch.setattr(harness, "run_assembly", assembly)
     client = StubWebSearchClient()
 
@@ -181,6 +207,7 @@ def test_run_dive_passes_web_search_client_to_assembly(
         embedder=InMemoryEmbedder(),
         config=_CONFIG,
         web_search=client,
+        completion_provider=_completion(),
     )
 
     assert assembly.call_args.kwargs["web_search"] is client
@@ -189,15 +216,17 @@ def test_run_dive_passes_web_search_client_to_assembly(
 def test_run_dive_passes_passage_and_brief_to_assembly(
     patched_assembly: MagicMock,
 ) -> None:
-    """Assembly consumes the captured passage and the framing brief."""
+    """Assembly consumes the captured passage, the brief, and the providers."""
     session = MagicMock()
     embedder = InMemoryEmbedder()
+    completion_provider = _completion()
     run_dive(
         HarnessBRequest(captured_passage=_VALID_TEXT),
         session=session,
         embedder=embedder,
         config=_CONFIG,
         web_search=StubWebSearchClient(),
+        completion_provider=completion_provider,
     )
 
     patched_assembly.assert_called_once()
@@ -207,21 +236,61 @@ def test_run_dive_passes_passage_and_brief_to_assembly(
     assert call.kwargs["session"] is session
     assert call.kwargs["embedder"] is embedder
     assert call.kwargs["config"] is _CONFIG
+    assert call.kwargs["completion_provider"] is completion_provider
 
 
 def test_run_dive_recommends_and_applies_worked_example(patched_assembly: MagicMock) -> None:
-    """The demo treats the passage as a worked_example; no routing overrides."""
+    """The harness treats the passage as a worked_example; no routing overrides."""
     response = _dive(_VALID_TEXT)
     assert response.recommended_treatments == [Treatment.WORKED_EXAMPLE]
     assert response.applied_treatments == [Treatment.WORKED_EXAMPLE]
     assert response.routing_note is None
 
 
-def test_run_dive_output_is_static_across_passages(patched_assembly: MagicMock) -> None:
-    """The tracer bullet returns the identical hardcoded payload for any text."""
+def test_run_dive_mirrors_the_assembly_animation(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The harness returns the assembly agent's generated scene graph as output."""
+    first_animation = build_fallback_animation("first dive")
+    assembly = MagicMock(
+        return_value=AssemblyResult(grounded=False, cited_passages=[], animation=first_animation)
+    )
+    monkeypatch.setattr(harness, "run_assembly", assembly)
+
+    response = _dive(_VALID_TEXT)
+
+    assert response.output is first_animation
+    assert response.output.model_dump() == first_animation.model_dump()
+
+
+def test_run_dive_output_tracks_assembly_not_hardcoded(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Different assembly animations yield different outputs (no hardcoded payload)."""
+    first_animation = build_fallback_animation("first dive")
+    second_animation = build_fallback_animation("second dive")
+    monkeypatch.setattr(
+        harness,
+        "run_assembly",
+        MagicMock(
+            return_value=AssemblyResult(
+                grounded=False,
+                cited_passages=[],
+                animation=first_animation,
+            )
+        ),
+    )
     first = _dive(_VALID_TEXT)
+    monkeypatch.setattr(
+        harness,
+        "run_assembly",
+        MagicMock(
+            return_value=AssemblyResult(
+                grounded=False,
+                cited_passages=[],
+                animation=second_animation,
+            )
+        ),
+    )
     second = _dive(TextPassage(content="A completely different passage."))
-    assert first.output.model_dump() == second.output.model_dump()
+
+    assert first.output.model_dump() != second.output.model_dump()
 
 
 def test_run_dive_validates_before_building(patched_assembly: MagicMock) -> None:
@@ -241,6 +310,13 @@ def test_run_dive_accepts_image_passage(patched_assembly: MagicMock) -> None:
 def test_run_dive_accepts_table_passage(patched_assembly: MagicMock) -> None:
     """A valid table passage returns a valid HarnessBResponse."""
     response = _dive(_valid_table())
+    assert isinstance(response, HarnessBResponse)
+    assert response.output.output_type == "interactive_animation"
+
+
+def test_run_dive_accepts_code_passage(patched_assembly: MagicMock) -> None:
+    """A valid code passage returns a valid HarnessBResponse."""
+    response = _dive(CodePassage(content="def f():\n    return 1", language="python"))
     assert isinstance(response, HarnessBResponse)
     assert response.output.output_type == "interactive_animation"
 

@@ -4,20 +4,19 @@ Runs the Depth Dive pipeline for one ``HarnessBRequest`` and returns a
 ``HarnessBResponse``. The passage is validated by the Passage Transform stage,
 the framing agent resolves the treatment set and search intent (ticket #242),
 and the assembly agent grounds the passage against the ingested corpus via the
-shared ``core/retrieval/`` primitives (ticket #243) and runs the retry-once
-web-search step when the brief carries a ``search_intent`` (ticket #244). The
-artifact payload stays the hardcoded demo until LLM generation lands (ticket
-#245).
+shared ``core/retrieval/`` primitives (ticket #243), runs the retry-once
+web-search step when the brief carries a ``search_intent`` (ticket #244), and
+runs the LLM generation turn that produces the ``interactive_animation`` scene
+graph (ticket #245).
 """
 
 from sqlalchemy.orm import Session
 
-from core.clients import Embedder
+from core.clients import CompletionProvider, Embedder
 from core.types.depth_dive import HarnessBRequest, HarnessBResponse
 from core.types.retrieval_config import RetrievalConfig
 from depth_dive.assembly.assembly_agent import run_assembly
 from depth_dive.framing.framing_agent import run_framing
-from depth_dive.generation.demo_animation import build_demo_animation
 from depth_dive.transform import transform_passage
 from depth_dive.web_search.client import WebSearchClient
 
@@ -29,6 +28,7 @@ def run_dive(
     embedder: Embedder,
     config: RetrievalConfig,
     web_search: WebSearchClient,
+    completion_provider: CompletionProvider,
 ) -> HarnessBResponse:
     """Validate a request and return the dive response.
 
@@ -41,10 +41,13 @@ def run_dive(
         config: Retrieval configuration (model name, ef_search, top_k).
         web_search: Web-search provider used by the assembly agent when the
             framing brief carries a ``search_intent`` (ADR-0012, ADR-0013).
+        completion_provider: Chat-completions provider used by the assembly
+            agent's LLM generation turn (ticket #245).
 
     Returns:
-        A ``HarnessBResponse`` whose ``output`` is the hardcoded demo
-        ``interactive_animation`` scene graph, whose treatment fields come
+        A ``HarnessBResponse`` whose ``output`` is the LLM-generated
+        ``interactive_animation`` scene graph (or the minimal fallback scene
+        graph when model output was malformed), whose treatment fields come
         from the framing agent, whose ``grounded``/``cited_passages`` come
         from the assembly agent's corpus grounding, and whose
         ``external_search_*`` fields come from the web-search step.
@@ -52,10 +55,12 @@ def run_dive(
     Raises:
         PassageTransformError: The passage violates the declared size/bounds
             or is a type this harness does not yet support.
-        UpstreamBadResponse: The embeddings API returned an unexpected
-            response during grounding (route maps to 502).
-        UpstreamUnavailable: The embeddings API or the database was
-            unreachable during grounding (route maps to 503).
+        UpstreamBadResponse: The embeddings API or the inference API returned
+            an unexpected response during grounding/generation (route maps to
+            502).
+        UpstreamUnavailable: The embeddings API, the database, or the
+            inference API was unreachable during grounding/generation (route
+            maps to 503).
     """
     transform_passage(request.captured_passage)
     brief = run_framing(
@@ -70,9 +75,10 @@ def run_dive(
         embedder=embedder,
         config=config,
         web_search=web_search,
+        completion_provider=completion_provider,
     )
     return HarnessBResponse(
-        output=build_demo_animation(),
+        output=assembly.animation,
         recommended_treatments=brief.recommended_treatments,
         applied_treatments=brief.applied_treatments,
         routing_note=brief.routing_note,

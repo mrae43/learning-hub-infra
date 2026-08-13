@@ -120,22 +120,8 @@ def test_dive_oversized_text_returns_422(mock_client: TestClient) -> None:
     assert "detail" in response.json()
 
 
-def test_dive_code_passage_returns_422(mock_client: TestClient) -> None:
-    """A code passage is unsupported by the MVP tracer bullet and returns 422."""
-    body = {
-        "captured_passage": {
-            "passage_type": "code",
-            "content": "def f():\n    return 1",
-            "language": "python",
-        }
-    }
-    response = mock_client.post("/dive", json=body)
-    assert response.status_code == 422
-    assert "detail" in response.json()
-
-
 # ============================================================
-# 200 — valid text passage returns the hardcoded animation
+# 200 — valid text passage returns the interactive animation
 # ============================================================
 
 
@@ -155,6 +141,21 @@ def test_dive_returns_interactive_animation_scene_graph(
     assert isinstance(output["title"], str)
     assert output["viewport"]["width"] > 0
     assert output["viewport"]["height"] > 0
+
+
+def test_dive_accepts_code_passage(mock_client: TestClient, patched_dive_grounding: Any) -> None:
+    """A valid code passage returns 200 with the interactive animation."""
+    patched_dive_grounding()
+    body = {
+        "captured_passage": {
+            "passage_type": "code",
+            "content": "def f():\n    return 1",
+            "language": "python",
+        }
+    }
+    response = mock_client.post("/dive", json=body)
+    assert response.status_code == 200, response.text
+    assert response.json()["output"]["output_type"] == "interactive_animation"
 
 
 def test_dive_response_has_exact_field_set(

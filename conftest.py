@@ -26,7 +26,8 @@ from sqlalchemy.orm import Session, sessionmaker
 import api.controllers.qa_controller
 import api.server  # noqa: F401
 import core.retrieval.query  # noqa: F401
-import depth_dive.generation.demo_animation
+import depth_dive.generation.fallback_animation
+import depth_dive.generation.generation_agent
 import depth_dive.harness
 import depth_dive.transform
 import depth_dive.web_search.client

@@ -257,11 +257,45 @@ def test_table_boundary_shape_is_accepted() -> None:
 
 
 # ============================================================
-# unsupported types
+# code
 # ============================================================
 
 
-def test_code_passage_is_rejected_for_tracer_bullet() -> None:
-    """Code passages remain unsupported by the MVP tracer bullet."""
+def test_code_passage_returns_text_block_with_language() -> None:
+    """A valid code passage normalizes to a ``TextBlock`` with its language hint."""
+    result = transform_passage(CodePassage(content="def f():\n    return 1", language="python"))
+    assert isinstance(result, TextBlock)
+    assert result.text == "def f():\n    return 1"
+    assert result.language == "python"
+
+
+def test_code_passage_without_language_returns_text_block() -> None:
+    """A code passage without a language hint still transforms."""
+    result = transform_passage(CodePassage(content="def f():\n    return 1"))
+    assert isinstance(result, TextBlock)
+    assert result.language is None
+
+
+def test_code_passage_with_anchor_transforms() -> None:
+    """An anchored code passage still transforms; the anchor is ignored here."""
+    result = transform_passage(
+        CodePassage(content="def f():\n    return 1", language="python", chunk_id=None)
+    )
+    assert isinstance(result, TextBlock)
+
+
+def test_empty_code_content_is_rejected() -> None:
+    """Empty code content fails transform validation like empty text."""
     with pytest.raises(PassageTransformError):
-        transform_passage(CodePassage(content="def f():\n    pass"))
+        transform_passage(CodePassage(content=""))
+
+
+def test_oversized_code_content_is_rejected() -> None:
+    """Code exceeding the declared character bound fails transform validation."""
+    with pytest.raises(PassageTransformError):
+        transform_passage(CodePassage(content="x" * (TEXT_PASSAGE_MAX_CHARS + 1)))
+
+
+# ============================================================
+# unsupported types
+# ============================================================
