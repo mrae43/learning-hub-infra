@@ -1,8 +1,9 @@
 """Tests for the Depth Dive harness entrypoint (ADR-0020).
 
 The assembly agent is mocked at the harness boundary (its own suite covers
-grounding policy) so these tests exercise orchestration only: transform ->
-framing -> assembly -> response assembly.
+grounding and search policy) so these tests exercise orchestration only:
+transform -> framing -> assembly -> response assembly. The web-search provider
+is the deterministic ``StubWebSearchClient``.
 """
 
 import io
@@ -29,10 +30,12 @@ from core.types.depth_dive import (
 from core.types.responses import CitedPassage
 from core.types.retrieval_config import RetrievalConfig
 from depth_dive import harness
-from depth_dive.assembly.assembly_agent import GroundingResult
+from depth_dive.assembly.assembly_agent import AssemblyResult
 from depth_dive.framing.framing_agent import FramingBrief
 from depth_dive.harness import run_dive
 from depth_dive.transform import PassageTransformError
+from depth_dive.web_search.client import StubWebSearchClient, WebSearchResult
+from depth_dive.web_search.wrapper import FALLBACK_NOTE
 
 _VALID_TEXT = TextPassage(content="Attention is all you need.")
 _captured_passage_adapter: TypeAdapter[CapturedPassage] = TypeAdapter(CapturedPassage)
@@ -43,17 +46,22 @@ _CONFIG = RetrievalConfig(model_name="text-embedding-3-small", ef_search=40, top
 @pytest.fixture
 def patched_assembly(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
     """Patch ``run_assembly`` to return an ungrounded result by default."""
-    assembly = MagicMock(return_value=GroundingResult(grounded=False, cited_passages=[]))
+    assembly = MagicMock(return_value=AssemblyResult(grounded=False, cited_passages=[]))
     monkeypatch.setattr(harness, "run_assembly", assembly)
     return assembly
 
 
-def _dive(passage: CapturedPassage) -> HarnessBResponse:
+def _dive(
+    passage: CapturedPassage,
+    *,
+    web_search: StubWebSearchClient | None = None,
+) -> HarnessBResponse:
     return run_dive(
         HarnessBRequest(captured_passage=passage),
         session=MagicMock(),
         embedder=InMemoryEmbedder(),
         config=_CONFIG,
+        web_search=web_search or StubWebSearchClient(),
     )
 
 
@@ -99,7 +107,7 @@ def test_run_dive_mirrors_grounded_assembly_result(
     """A grounded assembly result populates grounded and cited_passages."""
     passage_id = uuid4()
     assembly = MagicMock(
-        return_value=GroundingResult(
+        return_value=AssemblyResult(
             grounded=True,
             cited_passages=[CitedPassage(chunk_id=passage_id, text="cited corpus chunk")],
         )
@@ -114,6 +122,70 @@ def test_run_dive_mirrors_grounded_assembly_result(
     assert response.cited_passages[0].text == "cited corpus chunk"
 
 
+def test_run_dive_mirrors_successful_search_outcome(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A successful search leaves the failed flag off and no note."""
+    results = [
+        WebSearchResult(title="Paper", url="https://example.com/paper", snippet="short quote")
+    ]
+    assembly = MagicMock(
+        return_value=AssemblyResult(
+            grounded=False,
+            cited_passages=[],
+            external_search_attempted=True,
+            external_search_failed=False,
+            external_search_results=results,
+        )
+    )
+    monkeypatch.setattr(harness, "run_assembly", assembly)
+
+    response = _dive(_VALID_TEXT)
+
+    assert response.external_search_attempted is True
+    assert response.external_search_failed is False
+    assert response.external_search_note is None
+
+
+def test_run_dive_mirrors_failed_search_outcome(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A double-failed search surfaces the failed flag and the user-facing note."""
+    assembly = MagicMock(
+        return_value=AssemblyResult(
+            grounded=False,
+            cited_passages=[],
+            external_search_attempted=True,
+            external_search_failed=True,
+            external_search_note=FALLBACK_NOTE,
+        )
+    )
+    monkeypatch.setattr(harness, "run_assembly", assembly)
+
+    response = _dive(_VALID_TEXT)
+
+    assert response.external_search_attempted is True
+    assert response.external_search_failed is True
+    assert response.external_search_note == FALLBACK_NOTE
+
+
+def test_run_dive_passes_web_search_client_to_assembly(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The harness hands the web-search provider to the assembly agent."""
+    assembly = MagicMock(return_value=AssemblyResult(grounded=False, cited_passages=[]))
+    monkeypatch.setattr(harness, "run_assembly", assembly)
+    client = StubWebSearchClient()
+
+    run_dive(
+        HarnessBRequest(captured_passage=_VALID_TEXT),
+        session=MagicMock(),
+        embedder=InMemoryEmbedder(),
+        config=_CONFIG,
+        web_search=client,
+    )
+
+    assert assembly.call_args.kwargs["web_search"] is client
+
+
 def test_run_dive_passes_passage_and_brief_to_assembly(
     patched_assembly: MagicMock,
 ) -> None:
@@ -125,6 +197,7 @@ def test_run_dive_passes_passage_and_brief_to_assembly(
         session=session,
         embedder=embedder,
         config=_CONFIG,
+        web_search=StubWebSearchClient(),
     )
 
     patched_assembly.assert_called_once()

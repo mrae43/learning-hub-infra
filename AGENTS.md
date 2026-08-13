@@ -114,10 +114,10 @@ Rules:
 
 ## What does not exist yet
 
-- **Depth Dive implementation** — `depth_dive/src/depth_dive/` is a stub; `generation/` and `web_search/` subdirectories don't exist yet.
+- **LLM-driven Depth Dive generation** — `depth_dive/src/depth_dive/generation/` only ships the hardcoded demo animation (`demo_animation.py`); the LLM assembly turn that builds a per-request `interactive_animation` from the framing brief, corpus grounding, and web-search results is ticket #245.
 - **`api/routes/__init__.py`** — route modules are imported directly in `server.py`; no package init file exists.
 
-Bootstrap order is complete for the first four packages (`core/` (shared retrieval layer included) → `retrieval_qa/` → `api/` → `ingestion/`), plus the `scripts/` eval & tuning tooling over the `eval_corpus/` tuning set. `depth_dive/` is the remaining package to implement.
+Bootstrap order is complete for all six packages (`core/` (shared retrieval layer included) → `retrieval_qa/` → `depth_dive/` → `api/` → `ingestion/`, plus the `scripts/` eval & tuning tooling over the `eval_corpus/` tuning set). `depth_dive/` now runs the full harness: transform → framing → assembly (corpus grounding + retry-once web search) → demo artifact.
 
 ## Agent skills
 
