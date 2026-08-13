@@ -19,6 +19,9 @@ from pydantic import BaseModel, ConfigDict, Field
 TableRow = list[str] | dict[str, str]
 """Canonical structured table row: column cells or a header-keyed dict."""
 
+ImageMediaType = Literal["image/png", "image/jpeg", "image/webp", "image/gif"]
+"""Allowed image/diagram media types (spec §4). Non-animated GIF only."""
+
 
 class _PassageBase(BaseModel):
     """Shared ``source`` provenance field for every passage variant."""
@@ -54,10 +57,22 @@ class CodePassage(_PassageBase):
 
 
 class _BinaryPassageBase(_PassageBase):
-    """Carrier shared by the image and diagram variants."""
+    """Carrier shared by the image and diagram variants.
+
+    ``content`` is raw image ``bytes``. In the JSON request/response contract
+    these serialize and validate as base64 (``val_json_bytes``/
+    ``ser_json_bytes``) so the payload survives the HTTP round trip intact;
+    Python-mode validation still accepts raw ``bytes`` directly.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        val_json_bytes="base64",
+        ser_json_bytes="base64",
+    )
 
     content: bytes
-    media_type: Literal["image/png", "image/jpeg", "image/webp", "image/gif"]
+    media_type: ImageMediaType
     caption: str | None = None
     document_id: UUID | None = None
     ordinal: str | None = None
@@ -110,6 +125,7 @@ __all__ = [
     "CapturedPassage",
     "CodePassage",
     "DiagramPassage",
+    "ImageMediaType",
     "ImagePassage",
     "TablePassage",
     "TextPassage",

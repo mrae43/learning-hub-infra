@@ -5,11 +5,14 @@ mocked upstream providers) exercises the full request -> transform -> response
 path without a Postgres instance.
 """
 
+import base64
+import io
 from typing import Any
 
 from fastapi.testclient import TestClient
+from PIL import Image
 
-from depth_dive.transform import TEXT_PASSAGE_MAX_CHARS
+from depth_dive.transform import IMAGE_MAX_BYTES, TABLE_MAX_ROWS, TEXT_PASSAGE_MAX_CHARS
 
 _VALID_BODY = {
     "captured_passage": {
@@ -21,6 +24,35 @@ _VALID_BODY = {
 
 def _faulty_body(*, content: str) -> dict[str, Any]:
     return {"captured_passage": {"passage_type": "text", "content": content}}
+
+
+def _png(w: int = 4, h: int = 4) -> str:
+    """Return base64-encoded PNG bytes of the requested dimensions."""
+    buffer = io.BytesIO()
+    Image.new("RGB", (w, h), (10, 20, 30)).save(buffer, format="PNG")
+    return base64.b64encode(buffer.getvalue()).decode("ascii")
+
+
+def _image_body(*, png: str, media_type: str = "image/png") -> dict[str, Any]:
+    return {
+        "captured_passage": {
+            "passage_type": "image",
+            "content": png,
+            "media_type": media_type,
+        }
+    }
+
+
+def _table_body(*, rows: list[list[str]], headers: list[str] | None = None) -> dict[str, Any]:
+    body: dict[str, Any] = {
+        "captured_passage": {
+            "passage_type": "table",
+            "rows": rows,
+        }
+    }
+    if headers is not None:
+        body["captured_passage"]["headers"] = headers
+    return body
 
 
 # ============================================================
@@ -80,8 +112,8 @@ def test_dive_oversized_text_returns_422(mock_client: TestClient) -> None:
     assert "detail" in response.json()
 
 
-def test_dive_non_text_passage_returns_422(mock_client: TestClient) -> None:
-    """A non-text passage is unsupported by the MVP tracer bullet and returns 422."""
+def test_dive_code_passage_returns_422(mock_client: TestClient) -> None:
+    """A code passage is unsupported by the MVP tracer bullet and returns 422."""
     body = {
         "captured_passage": {
             "passage_type": "code",
@@ -162,3 +194,76 @@ def test_dive_steps_reference_declared_elements(mock_client: TestClient) -> None
     for step in output["steps"]:
         for element_id in step["element_states"]:
             assert element_id in element_ids
+
+
+# ============================================================
+# 200 + 422 — image, diagram, and table passages
+# ============================================================
+
+
+def test_dive_accepts_image_passage(mock_client: TestClient) -> None:
+    """A valid image passage returns 200 with the interactive animation."""
+    response = mock_client.post("/dive", json=_image_body(png=_png()))
+    assert response.status_code == 200, response.text
+    assert response.json()["output"]["output_type"] == "interactive_animation"
+
+
+def test_dive_accepts_diagram_passage(mock_client: TestClient) -> None:
+    """A valid diagram passage uses the same carrier and returns 200."""
+    body = {
+        "captured_passage": {
+            "passage_type": "diagram",
+            "content": _png(),
+            "media_type": "image/png",
+        }
+    }
+    response = mock_client.post("/dive", json=body)
+    assert response.status_code == 200
+
+
+def test_dive_accepts_table_passage(mock_client: TestClient) -> None:
+    """A valid table passage returns 200 with the interactive animation."""
+    response = mock_client.post("/dive", json=_table_body(rows=[["a", "1"], ["b", "2"]]))
+    assert response.status_code == 200
+    assert response.json()["output"]["output_type"] == "interactive_animation"
+
+
+def test_dive_image_oversized_returns_422(mock_client: TestClient) -> None:
+    """Image bytes exceeding the 5 MB size bound return 422 with a clear message."""
+    oversized = base64.b64encode(b"_" * (IMAGE_MAX_BYTES + 1)).decode("ascii")
+    response = mock_client.post("/dive", json=_image_body(png=oversized))
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert "size limit" in detail
+
+
+def test_dive_image_invalid_payload_returns_422(mock_client: TestClient) -> None:
+    """Non-image bytes declared as image content return 422 with a clear message."""
+    bogus = base64.b64encode(b"not actually an image").decode("ascii")
+    response = mock_client.post("/dive", json=_image_body(png=bogus))
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert "not a valid image" in detail
+
+
+def test_dive_image_unsupported_media_type_returns_422(mock_client: TestClient) -> None:
+    """A media_type outside the allowed set is rejected with 422."""
+    png = _png()
+    body = {
+        "captured_passage": {
+            "passage_type": "image",
+            "content": png,
+            "media_type": "image/bmp",
+        }
+    }
+    response = mock_client.post("/dive", json=body)
+    assert response.status_code == 422
+
+
+def test_dive_table_over_row_bound_returns_422(mock_client: TestClient) -> None:
+    """A table exceeding the row bound returns 422 with a clear message."""
+    rows = [["x"] for _ in range(TABLE_MAX_ROWS + 1)]
+    response = mock_client.post("/dive", json=_table_body(rows=rows))
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert "row limit" in detail
