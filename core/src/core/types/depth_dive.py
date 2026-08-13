@@ -15,16 +15,33 @@ from core.types.responses import CitedPassage
 
 
 class Treatment(StrEnum):
-    """Pedagogical patterns layered onto an interactive animation (spec §3).
+    """MVP pedagogical patterns layered onto an interactive animation (spec §3).
 
-    Only the three MVP treatments are modeled; the deferred treatments
-    (``analogy_mapping``, ``elaborative_prompt``, ``interactive_concept_map``)
-    are eval-gated and out of the MVP type set.
+    These are the treatments the harness can actually produce. The deferred
+    treatments live in :class:`DeferredTreatment` so a request can name them
+    and be routed (with a ``routing_note``) rather than rejected.
     """
 
     WORKED_EXAMPLE = "worked_example"
     PREDICTION_REVEAL = "prediction_reveal"
     SEGMENTED_CAROUSEL = "segmented_carousel"
+
+
+class DeferredTreatment(StrEnum):
+    """Eval-gated treatments that are deferred from the MVP type set (spec §3).
+
+    Modeled separately from :class:`Treatment` so clients can still name them
+    in a request hint; the framing agent drops them with a ``routing_note`` and
+    they never appear in the applied/recommended response fields.
+    """
+
+    ANALOGY_MAPPING = "analogy_mapping"
+    ELABORATIVE_PROMPT = "elaborative_prompt"
+    INTERACTIVE_CONCEPT_MAP = "interactive_concept_map"
+
+
+TreatmentHint = Treatment | DeferredTreatment
+"""Any treatment name a request may carry, MVP supported or deferred."""
 
 
 class Viewport(BaseModel):
@@ -138,8 +155,8 @@ class HarnessBRequest(BaseModel):
 
     captured_passage: CapturedPassage
     requested_output_type: Literal["interactive_animation"] | None = None
-    requested_treatments: list[Treatment] | None = None
-    preferred_treatments: list[Treatment] | None = None
+    requested_treatments: list[TreatmentHint] | None = None
+    preferred_treatments: list[TreatmentHint] | None = None
     client_passage_id: str | None = None
 
 
@@ -161,6 +178,7 @@ class HarnessBResponse(BaseModel):
 
 __all__ = [
     "AnimationStep",
+    "DeferredTreatment",
     "ElementState",
     "ElementStyle",
     "HarnessBRequest",
@@ -169,5 +187,6 @@ __all__ = [
     "InteractiveAnimation",
     "SceneElement",
     "Treatment",
+    "TreatmentHint",
     "Viewport",
 ]

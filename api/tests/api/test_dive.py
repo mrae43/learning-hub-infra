@@ -196,6 +196,28 @@ def test_dive_steps_reference_declared_elements(mock_client: TestClient) -> None
             assert element_id in element_ids
 
 
+def test_dive_explicit_request_override_routes_treatment(mock_client: TestClient) -> None:
+    """An explicit requested treatment wins over the recommendation with a note."""
+    body = {**_VALID_BODY, "requested_treatments": ["segmented_carousel"]}
+    response = mock_client.post("/dive", json=body)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["recommended_treatments"] == ["worked_example"]
+    assert data["applied_treatments"] == ["segmented_carousel"]
+    assert data["routing_note"] is not None
+
+
+def test_dive_deferred_treatment_is_accepted_and_routed_not_422(mock_client: TestClient) -> None:
+    """A deferred requested treatment is accepted, dropped, and noted (not a 422)."""
+    body = {**_VALID_BODY, "requested_treatments": ["analogy_mapping"]}
+    response = mock_client.post("/dive", json=body)
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["applied_treatments"] == ["worked_example"]
+    assert data["routing_note"] is not None
+    assert "analogy_mapping" in data["routing_note"]
+
+
 # ============================================================
 # 200 + 422 — image, diagram, and table passages
 # ============================================================
