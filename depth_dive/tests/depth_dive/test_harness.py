@@ -1,11 +1,19 @@
-"""Tests for the Depth Dive harness entrypoint (ADR-0020)."""
+"""Tests for the Depth Dive harness entrypoint (ADR-0020).
+
+The assembly agent is mocked at the harness boundary (its own suite covers
+grounding policy) so these tests exercise orchestration only: transform ->
+framing -> assembly -> response assembly.
+"""
 
 import io
+from unittest.mock import MagicMock
+from uuid import uuid4
 
 import pytest
 from PIL import Image
 from pydantic import TypeAdapter
 
+from core.clients import InMemoryEmbedder
 from core.types.captured_passage import (
     CapturedPassage,
     ImagePassage,
@@ -18,16 +26,35 @@ from core.types.depth_dive import (
     InteractiveAnimation,
     Treatment,
 )
+from core.types.responses import CitedPassage
+from core.types.retrieval_config import RetrievalConfig
+from depth_dive import harness
+from depth_dive.assembly.assembly_agent import GroundingResult
+from depth_dive.framing.framing_agent import FramingBrief
 from depth_dive.harness import run_dive
 from depth_dive.transform import PassageTransformError
 
 _VALID_TEXT = TextPassage(content="Attention is all you need.")
 _captured_passage_adapter: TypeAdapter[CapturedPassage] = TypeAdapter(CapturedPassage)
 
+_CONFIG = RetrievalConfig(model_name="text-embedding-3-small", ef_search=40, top_k=5)
 
-def _request(passage: CapturedPassage) -> HarnessBRequest:
-    """Wrap a passage in a request with no treatment hints."""
-    return HarnessBRequest(captured_passage=passage)
+
+@pytest.fixture
+def patched_assembly(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
+    """Patch ``run_assembly`` to return an ungrounded result by default."""
+    assembly = MagicMock(return_value=GroundingResult(grounded=False, cited_passages=[]))
+    monkeypatch.setattr(harness, "run_assembly", assembly)
+    return assembly
+
+
+def _dive(passage: CapturedPassage) -> HarnessBResponse:
+    return run_dive(
+        HarnessBRequest(captured_passage=passage),
+        session=MagicMock(),
+        embedder=InMemoryEmbedder(),
+        config=_CONFIG,
+    )
 
 
 def _png_bytes() -> bytes:
@@ -45,9 +72,9 @@ def _valid_table() -> TablePassage:
     return TablePassage(rows=[["a", "1"], ["b", "2"]], headers=["l", "v"])
 
 
-def test_run_dive_returns_hardcoded_animation() -> None:
+def test_run_dive_returns_hardcoded_animation(patched_assembly: MagicMock) -> None:
     """A valid text passage yields a HarnessBResponse with the demo animation."""
-    response = run_dive(_request(_VALID_TEXT))
+    response = _dive(_VALID_TEXT)
     assert isinstance(response, HarnessBResponse)
     assert isinstance(response.output, InteractiveAnimation)
     assert response.output.output_type == "interactive_animation"
@@ -56,61 +83,106 @@ def test_run_dive_returns_hardcoded_animation() -> None:
     assert response.output.initial_state
 
 
-def test_run_dive_response_is_not_grounded_without_retrieval() -> None:
-    """No retrieval/search runs in the tracer bullet: grounded=False, search off."""
-    response = run_dive(_request(_VALID_TEXT))
+def test_run_dive_mirrors_ungrounded_assembly_result(patched_assembly: MagicMock) -> None:
+    """An ungrounded assembly result leaves the search flags off and cites nothing."""
+    response = _dive(_VALID_TEXT)
     assert response.grounded is False
+    assert response.cited_passages == []
     assert response.external_search_attempted is False
     assert response.external_search_failed is False
     assert response.external_search_note is None
-    assert response.cited_passages == []
 
 
-def test_run_dive_recommends_and_applies_worked_example() -> None:
+def test_run_dive_mirrors_grounded_assembly_result(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A grounded assembly result populates grounded and cited_passages."""
+    passage_id = uuid4()
+    assembly = MagicMock(
+        return_value=GroundingResult(
+            grounded=True,
+            cited_passages=[CitedPassage(chunk_id=passage_id, text="cited corpus chunk")],
+        )
+    )
+    monkeypatch.setattr(harness, "run_assembly", assembly)
+
+    response = _dive(_VALID_TEXT)
+
+    assert response.grounded is True
+    assert len(response.cited_passages) == 1
+    assert response.cited_passages[0].chunk_id == passage_id
+    assert response.cited_passages[0].text == "cited corpus chunk"
+
+
+def test_run_dive_passes_passage_and_brief_to_assembly(
+    patched_assembly: MagicMock,
+) -> None:
+    """Assembly consumes the captured passage and the framing brief."""
+    session = MagicMock()
+    embedder = InMemoryEmbedder()
+    run_dive(
+        HarnessBRequest(captured_passage=_VALID_TEXT),
+        session=session,
+        embedder=embedder,
+        config=_CONFIG,
+    )
+
+    patched_assembly.assert_called_once()
+    call = patched_assembly.call_args
+    assert call.args[0] == _VALID_TEXT
+    assert isinstance(call.args[1], FramingBrief)
+    assert call.kwargs["session"] is session
+    assert call.kwargs["embedder"] is embedder
+    assert call.kwargs["config"] is _CONFIG
+
+
+def test_run_dive_recommends_and_applies_worked_example(patched_assembly: MagicMock) -> None:
     """The demo treats the passage as a worked_example; no routing overrides."""
-    response = run_dive(_request(_VALID_TEXT))
+    response = _dive(_VALID_TEXT)
     assert response.recommended_treatments == [Treatment.WORKED_EXAMPLE]
     assert response.applied_treatments == [Treatment.WORKED_EXAMPLE]
     assert response.routing_note is None
 
 
-def test_run_dive_output_is_static_across_passages() -> None:
+def test_run_dive_output_is_static_across_passages(patched_assembly: MagicMock) -> None:
     """The tracer bullet returns the identical hardcoded payload for any text."""
-    first = run_dive(_request(_VALID_TEXT))
-    second = run_dive(_request(TextPassage(content="A completely different passage.")))
-    assert first.model_dump() == second.model_dump()
+    first = _dive(_VALID_TEXT)
+    second = _dive(TextPassage(content="A completely different passage."))
+    assert first.output.model_dump() == second.output.model_dump()
 
 
-def test_run_dive_validates_before_building() -> None:
+def test_run_dive_validates_before_building(patched_assembly: MagicMock) -> None:
     """A passage violating text bounds is rejected, not silently built."""
     with pytest.raises(PassageTransformError):
-        run_dive(_request(TextPassage(content="")))
+        _dive(TextPassage(content=""))
+    patched_assembly.assert_not_called()
 
 
-def test_run_dive_accepts_image_passage() -> None:
+def test_run_dive_accepts_image_passage(patched_assembly: MagicMock) -> None:
     """A valid image passage returns a valid HarnessBResponse."""
-    response = run_dive(_request(_valid_image()))
+    response = _dive(_valid_image())
     assert isinstance(response, HarnessBResponse)
     assert response.output.output_type == "interactive_animation"
 
 
-def test_run_dive_accepts_table_passage() -> None:
+def test_run_dive_accepts_table_passage(patched_assembly: MagicMock) -> None:
     """A valid table passage returns a valid HarnessBResponse."""
-    response = run_dive(_request(_valid_table()))
+    response = _dive(_valid_table())
     assert isinstance(response, HarnessBResponse)
     assert response.output.output_type == "interactive_animation"
 
 
-def test_run_dive_rejects_invalid_image() -> None:
+def test_run_dive_rejects_invalid_image(patched_assembly: MagicMock) -> None:
     """An image that fails transform validation is rejected, not silently built."""
     with pytest.raises(PassageTransformError):
-        run_dive(_request(ImagePassage(content=b"not an image", media_type="image/png")))
+        _dive(ImagePassage(content=b"not an image", media_type="image/png"))
+    patched_assembly.assert_not_called()
 
 
-def test_run_dive_accepts_type_checked_union_payload() -> None:
+def test_run_dive_accepts_type_checked_union_payload(patched_assembly: MagicMock) -> None:
     """The union type parses request-shaped payloads before the harness runs."""
     passage = _captured_passage_adapter.validate_python(
         {"passage_type": "text", "content": "Typed union payload", "chunk_id": None}
     )
-    response = run_dive(_request(passage))
+    response = _dive(passage)
     assert response.output.output_type == "interactive_animation"

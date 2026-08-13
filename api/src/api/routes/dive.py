@@ -1,8 +1,15 @@
 """Depth Dive route: POST /dive (depth-dive spec §9)."""
 
-from fastapi import APIRouter, HTTPException
+from typing import Annotated
 
+from fastapi import APIRouter, Depends, HTTPException
+
+from api.dependencies import get_embedder
+from core.clients import Embedder
+from core.config.settings import settings
+from core.database.connection import db_session
 from core.types.depth_dive import HarnessBRequest, HarnessBResponse
+from core.types.retrieval_config import RetrievalConfig
 from depth_dive.harness import run_dive
 from depth_dive.transform import PassageTransformError
 
@@ -10,17 +17,33 @@ router = APIRouter(tags=["dive"])
 
 
 @router.post("/dive", response_model=HarnessBResponse)
-def dive(body: HarnessBRequest) -> HarnessBResponse:
+def dive(
+    body: HarnessBRequest,
+    embeddings_client: Annotated[Embedder, Depends(get_embedder)],
+) -> HarnessBResponse:
     """Generate a Depth Dive interactive animation for a Captured Passage.
 
-    Returns 200 with a ``HarnessBResponse`` carrying the hardcoded demo
-    ``interactive_animation`` scene graph. Passages that violate the declared
-    size/bounds or that the tracer bullet does not support are rejected with
-    422 (``PassageTransformError``). Malformed request bodies return 422 via
-    FastAPI defaults.
+    Runs the framing + assembly pipeline (ADR-0020): the assembly agent
+    grounds the passage against the ingested corpus and populates
+    ``grounded``/``cited_passages``. Returns 200 with a ``HarnessBResponse``
+    carrying the ``interactive_animation`` scene graph. Passages that violate
+    the declared size/bounds or that the tracer bullet does not support are
+    rejected with 422 (``PassageTransformError``). Upstream failures map to
+    502 / 503 via the ``RetrievalError`` subclass handlers registered on the
+    app; malformed request bodies return 422 via FastAPI defaults.
     """
     try:
-        return run_dive(body)
+        with db_session() as session:
+            return run_dive(
+                body,
+                session=session,
+                embedder=embeddings_client,
+                config=RetrievalConfig(
+                    model_name=settings.embedding_model,
+                    ef_search=settings.hnsw_ef_search,
+                    top_k=settings.query_top_k,
+                ),
+            )
     except PassageTransformError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 

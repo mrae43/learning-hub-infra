@@ -8,10 +8,18 @@ path without a Postgres instance.
 import base64
 import io
 from typing import Any
+from unittest.mock import MagicMock
+from uuid import uuid4
 
 from fastapi.testclient import TestClient
 from PIL import Image
+from sqlalchemy.orm import Session
 
+from api.dependencies import get_embedder
+from api.tests.conftest import set_dependency_override
+from core.database.schema import Chunk
+from core.exceptions import UpstreamBadResponse, UpstreamUnavailable
+from core.types.responses import CitedPassage
 from depth_dive.transform import IMAGE_MAX_BYTES, TABLE_MAX_ROWS, TEXT_PASSAGE_MAX_CHARS
 
 _VALID_BODY = {
@@ -131,8 +139,11 @@ def test_dive_code_passage_returns_422(mock_client: TestClient) -> None:
 # ============================================================
 
 
-def test_dive_returns_interactive_animation_scene_graph(mock_client: TestClient) -> None:
+def test_dive_returns_interactive_animation_scene_graph(
+    mock_client: TestClient, patched_dive_grounding: Any
+) -> None:
     """A valid text passage returns 200 with elements, steps, and initial_state."""
+    patched_dive_grounding()
     response = mock_client.post("/dive", json=_VALID_BODY)
     assert response.status_code == 200
     body = response.json()
@@ -146,8 +157,11 @@ def test_dive_returns_interactive_animation_scene_graph(mock_client: TestClient)
     assert output["viewport"]["height"] > 0
 
 
-def test_dive_response_has_exact_field_set(mock_client: TestClient) -> None:
+def test_dive_response_has_exact_field_set(
+    mock_client: TestClient, patched_dive_grounding: Any
+) -> None:
     """The 200 body exposes exactly the HarnessBResponse spec §9 fields."""
+    patched_dive_grounding()
     response = mock_client.post("/dive", json=_VALID_BODY)
     assert response.status_code == 200
     assert set(response.json().keys()) == {
@@ -163,8 +177,11 @@ def test_dive_response_has_exact_field_set(mock_client: TestClient) -> None:
     }
 
 
-def test_dive_tracer_bullet_is_not_grounded(mock_client: TestClient) -> None:
-    """No retrieval runs in the tracer bullet: grounded=False, search flags off."""
+def test_dive_tracer_bullet_is_not_grounded(
+    mock_client: TestClient, patched_dive_grounding: Any
+) -> None:
+    """An ungrounded assembly result leaves the search flags off and cites nothing."""
+    patched_dive_grounding()
     response = mock_client.post("/dive", json=_VALID_BODY)
     assert response.status_code == 200
     body = response.json()
@@ -175,8 +192,30 @@ def test_dive_tracer_bullet_is_not_grounded(mock_client: TestClient) -> None:
     assert body["cited_passages"] == []
 
 
-def test_dive_applies_worked_example_treatment(mock_client: TestClient) -> None:
+def test_dive_grounded_response_populates_citations(
+    mock_client: TestClient, patched_dive_grounding: Any
+) -> None:
+    """A grounded assembly result populates grounded and cited_passages."""
+    passage_id = uuid4()
+    patched_dive_grounding(
+        grounded=True, cited_passages=[CitedPassage(chunk_id=passage_id, text="corpus chunk")]
+    )
+    response = mock_client.post("/dive", json=_VALID_BODY)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["grounded"] is True
+    assert len(body["cited_passages"]) == 1
+    passage = body["cited_passages"][0]
+    assert set(passage.keys()) == {"chunk_id", "text"}
+    assert passage["chunk_id"] == str(passage_id)
+    assert passage["text"] == "corpus chunk"
+
+
+def test_dive_applies_worked_example_treatment(
+    mock_client: TestClient, patched_dive_grounding: Any
+) -> None:
     """The demo payload recommends and applies the worked_example treatment."""
+    patched_dive_grounding()
     response = mock_client.post("/dive", json=_VALID_BODY)
     assert response.status_code == 200
     body = response.json()
@@ -185,8 +224,11 @@ def test_dive_applies_worked_example_treatment(mock_client: TestClient) -> None:
     assert body["routing_note"] is None
 
 
-def test_dive_steps_reference_declared_elements(mock_client: TestClient) -> None:
+def test_dive_steps_reference_declared_elements(
+    mock_client: TestClient, patched_dive_grounding: Any
+) -> None:
     """Every step's element_states key resolves to a declared scene element."""
+    patched_dive_grounding()
     response = mock_client.post("/dive", json=_VALID_BODY)
     assert response.status_code == 200
     output = response.json()["output"]
@@ -196,8 +238,11 @@ def test_dive_steps_reference_declared_elements(mock_client: TestClient) -> None
             assert element_id in element_ids
 
 
-def test_dive_explicit_request_override_routes_treatment(mock_client: TestClient) -> None:
+def test_dive_explicit_request_override_routes_treatment(
+    mock_client: TestClient, patched_dive_grounding: Any
+) -> None:
     """An explicit requested treatment wins over the recommendation with a note."""
+    patched_dive_grounding()
     body = {**_VALID_BODY, "requested_treatments": ["segmented_carousel"]}
     response = mock_client.post("/dive", json=body)
     assert response.status_code == 200
@@ -207,8 +252,11 @@ def test_dive_explicit_request_override_routes_treatment(mock_client: TestClient
     assert data["routing_note"] is not None
 
 
-def test_dive_deferred_treatment_is_accepted_and_routed_not_422(mock_client: TestClient) -> None:
+def test_dive_deferred_treatment_is_accepted_and_routed_not_422(
+    mock_client: TestClient, patched_dive_grounding: Any
+) -> None:
     """A deferred requested treatment is accepted, dropped, and noted (not a 422)."""
+    patched_dive_grounding()
     body = {**_VALID_BODY, "requested_treatments": ["analogy_mapping"]}
     response = mock_client.post("/dive", json=body)
     assert response.status_code == 200, response.text
@@ -223,15 +271,17 @@ def test_dive_deferred_treatment_is_accepted_and_routed_not_422(mock_client: Tes
 # ============================================================
 
 
-def test_dive_accepts_image_passage(mock_client: TestClient) -> None:
+def test_dive_accepts_image_passage(mock_client: TestClient, patched_dive_grounding: Any) -> None:
     """A valid image passage returns 200 with the interactive animation."""
+    patched_dive_grounding()
     response = mock_client.post("/dive", json=_image_body(png=_png()))
     assert response.status_code == 200, response.text
     assert response.json()["output"]["output_type"] == "interactive_animation"
 
 
-def test_dive_accepts_diagram_passage(mock_client: TestClient) -> None:
+def test_dive_accepts_diagram_passage(mock_client: TestClient, patched_dive_grounding: Any) -> None:
     """A valid diagram passage uses the same carrier and returns 200."""
+    patched_dive_grounding()
     body = {
         "captured_passage": {
             "passage_type": "diagram",
@@ -243,8 +293,9 @@ def test_dive_accepts_diagram_passage(mock_client: TestClient) -> None:
     assert response.status_code == 200
 
 
-def test_dive_accepts_table_passage(mock_client: TestClient) -> None:
+def test_dive_accepts_table_passage(mock_client: TestClient, patched_dive_grounding: Any) -> None:
     """A valid table passage returns 200 with the interactive animation."""
+    patched_dive_grounding()
     response = mock_client.post("/dive", json=_table_body(rows=[["a", "1"], ["b", "2"]]))
     assert response.status_code == 200
     assert response.json()["output"]["output_type"] == "interactive_animation"
@@ -289,3 +340,124 @@ def test_dive_table_over_row_bound_returns_422(mock_client: TestClient) -> None:
     assert response.status_code == 422
     detail = response.json()["detail"]
     assert "row limit" in detail
+
+
+# ============================================================
+# 502 / 503 — upstream error mapping
+# ============================================================
+
+
+def test_dive_embeddings_bad_response_returns_502(mock_client: TestClient) -> None:
+    """A mocked embeddings provider returning a bad response maps to 502."""
+
+    def _bad_embedder() -> Any:
+        embedder = MagicMock()
+        embedder.embed.side_effect = UpstreamBadResponse("bad upstream response")
+        return embedder
+
+    set_dependency_override(mock_client, get_embedder, _bad_embedder)
+    response = mock_client.post("/dive", json=_VALID_BODY)
+
+    assert response.status_code == 502
+    assert "detail" in response.json()
+
+
+def test_dive_embeddings_unavailable_returns_503(mock_client: TestClient) -> None:
+    """A mocked embeddings provider that's unreachable/timeout maps to 503."""
+
+    def _unavailable_embedder() -> Any:
+        embedder = MagicMock()
+        embedder.embed.side_effect = UpstreamUnavailable("timeout")
+        return embedder
+
+    set_dependency_override(mock_client, get_embedder, _unavailable_embedder)
+    response = mock_client.post("/dive", json=_VALID_BODY)
+
+    assert response.status_code == 503
+    assert "detail" in response.json()
+
+
+# ============================================================
+# 200 — end-to-end against a real test DB (skips without Postgres)
+# ============================================================
+
+
+def test_dive_end_to_end_anchored_text_is_grounded(
+    client: TestClient,
+    test_session: Session,
+    ingest_a_paper: Any,
+) -> None:
+    """An anchored text passage against a ready corpus is grounded with citations."""
+    ingest_a_paper("RAG Paper")
+    anchor = test_session.query(Chunk).first()
+    assert anchor is not None
+    parent_id = anchor.parent_chunk_id or anchor.chunk_id
+
+    body = {
+        "captured_passage": {
+            "passage_type": "text",
+            "content": "Attention is all you need.",
+            "chunk_id": str(anchor.chunk_id),
+        }
+    }
+    response = client.post("/dive", json=body)
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["grounded"] is True
+    assert len(data["cited_passages"]) >= 1
+    assert data["cited_passages"][0]["chunk_id"] == str(parent_id)
+    assert data["cited_passages"][0]["text"]
+
+
+def test_dive_end_to_end_unanchored_text_is_grounded(
+    client: TestClient,
+    ingest_a_paper: Any,
+) -> None:
+    """An unanchored passage matching a ready corpus passes the similarity gate."""
+    ingest_a_paper("RAG Paper")
+    body = {
+        "captured_passage": {
+            "passage_type": "text",
+            "content": "Attention is all you need.",
+        }
+    }
+    response = client.post("/dive", json=body)
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["grounded"] is True
+    assert len(data["cited_passages"]) >= 1
+
+
+def test_dive_end_to_end_empty_corpus_unanchored_is_not_grounded(client: TestClient) -> None:
+    """An unanchored passage against an empty corpus is ungrounded, not an error."""
+    body = {
+        "captured_passage": {
+            "passage_type": "text",
+            "content": "Attention is all you need.",
+        }
+    }
+    response = client.post("/dive", json=body)
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["grounded"] is False
+    assert data["cited_passages"] == []
+
+
+def test_dive_end_to_end_empty_corpus_anchored_is_not_grounded(client: TestClient) -> None:
+    """An anchor that no ready corpus can resolve is ungrounded, not an error."""
+    body = {
+        "captured_passage": {
+            "passage_type": "text",
+            "content": "Attention is all you need.",
+            "chunk_id": str(uuid4()),
+        }
+    }
+    response = client.post("/dive", json=body)
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["grounded"] is False
+    assert data["cited_passages"] == []
