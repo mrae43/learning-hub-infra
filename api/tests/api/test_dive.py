@@ -211,6 +211,43 @@ def test_dive_grounded_response_populates_citations(
     assert passage["text"] == "corpus chunk"
 
 
+# ============================================================
+# 200 — external_search_* flag wiring (web-search step, ticket #244)
+# ============================================================
+
+
+def test_dive_successful_search_reports_attempted_only(
+    mock_client: TestClient, patched_dive_grounding: Any
+) -> None:
+    """A successful web search leaves attempted=True with no failure or note."""
+    patched_dive_grounding(external_search_attempted=True)
+    response = mock_client.post("/dive", json=_VALID_BODY)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["external_search_attempted"] is True
+    assert body["external_search_failed"] is False
+    assert body["external_search_note"] is None
+
+
+def test_dive_failed_search_surfaces_flag_and_note(
+    mock_client: TestClient, patched_dive_grounding: Any
+) -> None:
+    """A double-failed search surfaces the failed flag and the user-facing note."""
+    patched_dive_grounding(
+        external_search_attempted=True,
+        external_search_failed=True,
+        external_search_note="External grounding was sought but could not be "
+        "retrieved; this dive reflects the ingested corpus only.",
+    )
+    response = mock_client.post("/dive", json=_VALID_BODY)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["external_search_attempted"] is True
+    assert body["external_search_failed"] is True
+    assert body["external_search_note"] is not None
+    assert "external" in body["external_search_note"].lower()
+
+
 def test_dive_applies_worked_example_treatment(
     mock_client: TestClient, patched_dive_grounding: Any
 ) -> None:

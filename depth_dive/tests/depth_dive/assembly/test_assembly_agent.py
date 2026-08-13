@@ -1,9 +1,10 @@
-"""Tests for the Depth Dive assembly agent (ADR-0020, ticket #243).
+"""Tests for the Depth Dive assembly agent (ADR-0020, ticket #243, #244).
 
 The ``core/retrieval/`` primitives are mocked at the assembly module boundary
 (their database behaviour is covered by ``core``'s own retrieval tests) and the
-embedder is a stub, per coding-standards.md: hosted API calls stay out of unit
-tests.
+embedder is a stub; the web-search provider is the deterministic
+``StubWebSearchClient``. Hosted API calls stay out of unit tests per
+coding-standards.md.
 """
 
 from collections.abc import Sequence
@@ -27,10 +28,12 @@ from core.types.retrieval_config import RetrievalConfig
 from depth_dive.assembly import assembly_agent
 from depth_dive.assembly.assembly_agent import (
     SIMILARITY_GATE_THRESHOLD,
-    GroundingResult,
+    AssemblyResult,
     run_assembly,
 )
 from depth_dive.framing.framing_agent import run_framing
+from depth_dive.web_search.client import StubWebSearchClient, WebSearchResult
+from depth_dive.web_search.wrapper import FALLBACK_NOTE
 
 _CONFIG = RetrievalConfig(model_name="text-embedding-3-small", ef_search=40, top_k=5)
 
@@ -51,13 +54,22 @@ def _neighbor(chunk_id: UUID, text: str, score: float) -> ScoredChunk:
     return ScoredChunk(chunk_id=chunk_id, text=text, score=score)
 
 
-def _run(passage: CapturedPassage, *, session: Session, embedder: Embedder) -> GroundingResult:
+def _run(
+    passage: CapturedPassage,
+    *,
+    session: Session,
+    embedder: Embedder,
+    web_search: StubWebSearchClient | None = None,
+) -> AssemblyResult:
+    if web_search is None:
+        web_search = StubWebSearchClient()
     return run_assembly(
         passage,
         run_framing(passage),
         session=session,
         embedder=embedder,
         config=_CONFIG,
+        web_search=web_search,
     )
 
 
@@ -325,6 +337,118 @@ def test_anchored_image_falls_back_to_gate(monkeypatch: pytest.MonkeyPatch) -> N
     assert result.grounded is True
     assert [p.chunk_id for p in result.cited_passages] == [close_id]
     fetch_parent.assert_not_called()
+
+
+# ============================================================
+# Web search: triggered by the brief's search_intent (ticket #244)
+# ============================================================
+
+
+def _passing_gate(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Patch retrieval so an unanchored text passage clears the similarity gate."""
+    monkeypatch.setattr(assembly_agent, "fetch_parent_chunk", MagicMock())
+    monkeypatch.setattr(
+        assembly_agent,
+        "search_dense_neighbors",
+        MagicMock(return_value=[_neighbor(uuid4(), "similar chunk", 0.9)]),
+    )
+
+
+def test_assembly_runs_web_search_when_brief_carries_search_intent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An unanchored passage with a search intent triggers the web-search step."""
+    _passing_gate(monkeypatch)
+    results = [
+        WebSearchResult(title="Paper", url="https://example.com/paper", snippet="short quote")
+    ]
+    client = StubWebSearchClient(results=results)
+
+    passage = TextPassage(content="Attention is all you need.")
+    result = _run(passage, session=MagicMock(), embedder=_StubEmbedder(), web_search=client)
+
+    assert result.external_search_attempted is True
+    assert result.external_search_failed is False
+    assert result.external_search_note is None
+    assert result.external_search_results == results
+    assert client.calls == ["Attention is all you need."]
+
+
+def test_assembly_skips_web_search_without_search_intent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An anchored passage has no search intent, so the search client is never called."""
+    monkeypatch.setattr(
+        assembly_agent,
+        "fetch_parent_chunk",
+        MagicMock(return_value=CitedPassage(chunk_id=uuid4(), text="parent")),
+    )
+    monkeypatch.setattr(assembly_agent, "search_dense_neighbors", MagicMock(return_value=[]))
+    client = StubWebSearchClient()
+
+    passage = TextPassage(content="Attention is all you need.", chunk_id=uuid4())
+    result = _run(passage, session=MagicMock(), embedder=_StubEmbedder(), web_search=client)
+
+    assert result.external_search_attempted is False
+    assert result.external_search_failed is False
+    assert result.external_search_note is None
+    assert result.external_search_results == []
+    assert client.calls == []
+
+
+def test_assembly_search_double_failure_sets_failed_and_note(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Two failed attempts set the failed flag and carry the user-facing note."""
+    _passing_gate(monkeypatch)
+    client = StubWebSearchClient(results=[], failures=2)
+
+    passage = TextPassage(content="Attention is all you need.")
+    result = _run(passage, session=MagicMock(), embedder=_StubEmbedder(), web_search=client)
+
+    assert result.external_search_attempted is True
+    assert result.external_search_failed is True
+    assert result.external_search_note == FALLBACK_NOTE
+    assert result.external_search_results == []
+    assert len(client.calls) == 2
+
+
+def test_assembly_search_recovers_on_retry(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A transient failure is retried exactly once and the search succeeds."""
+    _passing_gate(monkeypatch)
+    results = [
+        WebSearchResult(title="Recovered", url="https://example.com/recovered", snippet="span")
+    ]
+    client = StubWebSearchClient(results=results, failures=1)
+
+    passage = TextPassage(content="Attention is all you need.")
+    result = _run(passage, session=MagicMock(), embedder=_StubEmbedder(), web_search=client)
+
+    assert result.external_search_attempted is True
+    assert result.external_search_failed is False
+    assert result.external_search_results == results
+    assert len(client.calls) == 2
+
+
+def test_assembly_search_failure_still_reports_grounding(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A failed search does not degrade the corpus-grounding outcome."""
+    _passing_gate(monkeypatch)
+    close_id = uuid4()
+    monkeypatch.setattr(
+        assembly_agent,
+        "search_dense_neighbors",
+        MagicMock(return_value=[_neighbor(close_id, "similar chunk", 0.9)]),
+    )
+    client = StubWebSearchClient(results=[], failures=2)
+
+    passage = TextPassage(content="Attention is all you need.")
+    result = _run(passage, session=MagicMock(), embedder=_StubEmbedder(), web_search=client)
+
+    assert result.grounded is True
+    assert [p.chunk_id for p in result.cited_passages] == [close_id]
+    assert result.external_search_failed is True
 
 
 # ============================================================

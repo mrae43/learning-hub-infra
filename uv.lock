@@ -453,12 +453,14 @@ version = "0.1.0"
 source = { editable = "depth_dive" }
 dependencies = [
     { name = "core" },
+    { name = "openai" },
     { name = "pillow" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "core", editable = "core" },
+    { name = "openai", specifier = ">=2.51.0" },
     { name = "pillow", specifier = ">=12.0" },
 ]
 

@@ -1,8 +1,8 @@
 """FastAPI dependency providers.
 
 Factories here let route handlers depend on protocols (``Embedder``,
-``CompletionProvider``, ``Reranker``) rather than concrete clients, following
-the dependency inversion principle (ADR-0011, SOLID review).
+``CompletionProvider``, ``Reranker``, ``WebSearchClient``) rather than concrete
+clients, following the dependency inversion principle (ADR-0011, SOLID review).
 """
 
 from core.clients import (
@@ -15,6 +15,7 @@ from core.clients import (
     Reranker,
 )
 from core.config.settings import settings
+from depth_dive.web_search.client import OpenAIWebSearchClient, WebSearchClient
 
 
 def get_embedder() -> Embedder:
@@ -44,4 +45,14 @@ def get_reranker() -> Reranker:
     return NoopReranker()
 
 
-__all__ = ["get_completion_provider", "get_embedder", "get_reranker"]
+def get_web_search_client() -> WebSearchClient:
+    """Return the configured web-search provider for Depth Dive."""
+    return OpenAIWebSearchClient(api_key=settings.openai_api_key)
+
+
+__all__ = [
+    "get_completion_provider",
+    "get_embedder",
+    "get_reranker",
+    "get_web_search_client",
+]

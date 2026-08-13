@@ -20,6 +20,8 @@ class Settings(BaseSettings):
         query_top_k: Number of chunks the retrieval step fetches per query
             (server-side infra knob, not client-controlled per ADR-0014).
         inference_model: Active chat-completion model ID for generation.
+        web_search_model: Model used by the Depth Dive web-search client
+            (OpenAI Responses API ``web_search`` tool).
         max_upload_bytes: Maximum accepted upload size in bytes.
         allowed_file_extensions: Lower-case file extensions accepted for upload.
     """
@@ -38,6 +40,7 @@ class Settings(BaseSettings):
     hnsw_ef_search: int = 40
     query_top_k: int = 5
     inference_model: str = "gpt-4o-mini"
+    web_search_model: str = "gpt-4o-mini"
     max_upload_bytes: int = 100 * 1024 * 1024  # 100 MB placeholder
     allowed_file_extensions: set[str] = {"pdf", "epub", "md", "html"}
     cohere_api_key: str | None = None

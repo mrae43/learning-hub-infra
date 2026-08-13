@@ -14,10 +14,16 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from api.dependencies import get_completion_provider, get_embedder, get_reranker
+from api.dependencies import (
+    get_completion_provider,
+    get_embedder,
+    get_reranker,
+    get_web_search_client,
+)
 from api.server import create_app
 from core.clients import InMemoryEmbedder, MockCompletionProvider, NoopReranker
 from core.types.responses import CitedPassage, RetrievalResult, ScoredChunk
+from depth_dive.web_search.client import StubWebSearchClient
 
 IngestADocument = Callable[[str], str]
 
@@ -88,6 +94,7 @@ def client(override_route_db_session: object) -> TestClient:
     app.dependency_overrides[get_embedder] = _default_fake_embedder
     app.dependency_overrides[get_completion_provider] = _default_fake_llm_refusal_provider
     app.dependency_overrides[get_reranker] = lambda: NoopReranker()
+    app.dependency_overrides[get_web_search_client] = lambda: StubWebSearchClient()
     return TestClient(app)
 
 
@@ -122,28 +129,39 @@ def mock_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     app.dependency_overrides[get_embedder] = _default_fake_embedder
     app.dependency_overrides[get_completion_provider] = _default_fake_llm_refusal_provider
     app.dependency_overrides[get_reranker] = lambda: NoopReranker()
+    app.dependency_overrides[get_web_search_client] = lambda: StubWebSearchClient()
     return TestClient(app)
 
 
 @pytest.fixture
 def patched_dive_grounding(
     monkeypatch: pytest.MonkeyPatch,
-) -> Callable[[bool, Sequence[CitedPassage] | None], None]:
+) -> Callable[..., None]:
     """Return a factory that patches ``depth_dive.harness.run_assembly``.
 
-    Sets the assembly grounding outcome the harness should report, so the
-    POST /dive route can be exercised without a database.
+    Sets the assembly outcome (grounding plus the ``external_search_*``
+    flags) the harness should report, so the POST /dive route can be
+    exercised without a database.
     """
 
     def _patch(
-        grounded: bool = False, cited_passages: Sequence[CitedPassage] | None = None
+        grounded: bool = False,
+        cited_passages: Sequence[CitedPassage] | None = None,
+        *,
+        external_search_attempted: bool = False,
+        external_search_failed: bool = False,
+        external_search_note: str | None = None,
     ) -> None:
-        from depth_dive.assembly.assembly_agent import GroundingResult
+        from depth_dive.assembly.assembly_agent import AssemblyResult
 
         monkeypatch.setattr(
             "depth_dive.harness.run_assembly",
-            lambda *args, **kwargs: GroundingResult(
-                grounded=grounded, cited_passages=list(cited_passages or [])
+            lambda *args, **kwargs: AssemblyResult(
+                grounded=grounded,
+                cited_passages=list(cited_passages or []),
+                external_search_attempted=external_search_attempted,
+                external_search_failed=external_search_failed,
+                external_search_note=external_search_note,
             ),
         )
 

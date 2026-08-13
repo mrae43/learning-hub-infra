@@ -4,9 +4,10 @@ Runs the Depth Dive pipeline for one ``HarnessBRequest`` and returns a
 ``HarnessBResponse``. The passage is validated by the Passage Transform stage,
 the framing agent resolves the treatment set and search intent (ticket #242),
 and the assembly agent grounds the passage against the ingested corpus via the
-shared ``core/retrieval/`` primitives (ticket #243). Web search does not
-participate yet (ticket #244), so the search flags stay off; the artifact
-payload stays the hardcoded demo until LLM generation lands (ticket #245).
+shared ``core/retrieval/`` primitives (ticket #243) and runs the retry-once
+web-search step when the brief carries a ``search_intent`` (ticket #244). The
+artifact payload stays the hardcoded demo until LLM generation lands (ticket
+#245).
 """
 
 from sqlalchemy.orm import Session
@@ -18,6 +19,7 @@ from depth_dive.assembly.assembly_agent import run_assembly
 from depth_dive.framing.framing_agent import run_framing
 from depth_dive.generation.demo_animation import build_demo_animation
 from depth_dive.transform import transform_passage
+from depth_dive.web_search.client import WebSearchClient
 
 
 def run_dive(
@@ -26,6 +28,7 @@ def run_dive(
     session: Session,
     embedder: Embedder,
     config: RetrievalConfig,
+    web_search: WebSearchClient,
 ) -> HarnessBResponse:
     """Validate a request and return the dive response.
 
@@ -36,13 +39,15 @@ def run_dive(
         embedder: Provider used to embed the passage for grounding
             (1536-dim).
         config: Retrieval configuration (model name, ef_search, top_k).
+        web_search: Web-search provider used by the assembly agent when the
+            framing brief carries a ``search_intent`` (ADR-0012, ADR-0013).
 
     Returns:
         A ``HarnessBResponse`` whose ``output`` is the hardcoded demo
         ``interactive_animation`` scene graph, whose treatment fields come
-        from the framing agent, and whose ``grounded``/``cited_passages``
-        come from the assembly agent's corpus grounding. The search flags
-        stay off until the web-search step lands (ticket #244).
+        from the framing agent, whose ``grounded``/``cited_passages`` come
+        from the assembly agent's corpus grounding, and whose
+        ``external_search_*`` fields come from the web-search step.
 
     Raises:
         PassageTransformError: The passage violates the declared size/bounds
@@ -58,22 +63,24 @@ def run_dive(
         requested_treatments=request.requested_treatments,
         preferred_treatments=request.preferred_treatments,
     )
-    grounding = run_assembly(
+    assembly = run_assembly(
         request.captured_passage,
         brief,
         session=session,
         embedder=embedder,
         config=config,
+        web_search=web_search,
     )
     return HarnessBResponse(
         output=build_demo_animation(),
         recommended_treatments=brief.recommended_treatments,
         applied_treatments=brief.applied_treatments,
         routing_note=brief.routing_note,
-        grounded=grounding.grounded,
-        external_search_attempted=False,
-        external_search_failed=False,
-        cited_passages=grounding.cited_passages,
+        grounded=assembly.grounded,
+        external_search_attempted=assembly.external_search_attempted,
+        external_search_failed=assembly.external_search_failed,
+        external_search_note=assembly.external_search_note,
+        cited_passages=assembly.cited_passages,
     )
 
 
