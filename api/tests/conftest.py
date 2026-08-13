@@ -17,7 +17,7 @@ from fastapi.testclient import TestClient
 from api.dependencies import get_completion_provider, get_embedder, get_reranker
 from api.server import create_app
 from core.clients import InMemoryEmbedder, MockCompletionProvider, NoopReranker
-from core.types.responses import RetrievalResult, ScoredChunk
+from core.types.responses import CitedPassage, RetrievalResult, ScoredChunk
 
 IngestADocument = Callable[[str], str]
 
@@ -116,12 +116,38 @@ def mock_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     monkeypatch.setattr("api.routes.ingest.db_session", _mock_db_session)
     monkeypatch.setattr("api.routes.documents.db_session", _mock_db_session)
     monkeypatch.setattr("api.routes.retrieval_qa.db_session", _mock_db_session)
+    monkeypatch.setattr("api.routes.dive.db_session", _mock_db_session)
 
     app = create_app()
     app.dependency_overrides[get_embedder] = _default_fake_embedder
     app.dependency_overrides[get_completion_provider] = _default_fake_llm_refusal_provider
     app.dependency_overrides[get_reranker] = lambda: NoopReranker()
     return TestClient(app)
+
+
+@pytest.fixture
+def patched_dive_grounding(
+    monkeypatch: pytest.MonkeyPatch,
+) -> Callable[[bool, Sequence[CitedPassage] | None], None]:
+    """Return a factory that patches ``depth_dive.harness.run_assembly``.
+
+    Sets the assembly grounding outcome the harness should report, so the
+    POST /dive route can be exercised without a database.
+    """
+
+    def _patch(
+        grounded: bool = False, cited_passages: Sequence[CitedPassage] | None = None
+    ) -> None:
+        from depth_dive.assembly.assembly_agent import GroundingResult
+
+        monkeypatch.setattr(
+            "depth_dive.harness.run_assembly",
+            lambda *args, **kwargs: GroundingResult(
+                grounded=grounded, cited_passages=list(cited_passages or [])
+            ),
+        )
+
+    return _patch
 
 
 @pytest.fixture
