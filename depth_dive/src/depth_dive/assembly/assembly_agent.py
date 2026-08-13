@@ -12,8 +12,9 @@ through the shared ``core/retrieval/`` primitives (ADR-0019):
 The brief's ``search_intent`` drives the web-search step (ticket #244): when
 the framing agent judged external grounding would help (ADR-0012), the
 assembly agent calls the retry-once web-search wrapper (ADR-0013) and surfaces
-the outcome on :class:`AssemblyResult`. The artifact payload stays the
-hardcoded demo until LLM generation lands (ticket #245).
+the outcome on :class:`AssemblyResult`. The final turn is the LLM generation
+step (ticket #245), which builds a scene graph from the brief, the cited
+passages, and any search results.
 """
 
 from uuid import UUID
@@ -21,7 +22,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
-from core.clients import Embedder
+from core.clients import CompletionProvider, Embedder
 from core.retrieval import fetch_parent_chunk, search_dense_neighbors
 from core.types.captured_passage import (
     CapturedPassage,
@@ -32,9 +33,11 @@ from core.types.captured_passage import (
     TableRow,
     TextPassage,
 )
+from core.types.depth_dive import InteractiveAnimation
 from core.types.responses import CitedPassage
 from core.types.retrieval_config import RetrievalConfig
 from depth_dive.framing.framing_agent import FramingBrief
+from depth_dive.generation.generation_agent import run_generation
 from depth_dive.web_search.client import WebSearchClient, WebSearchResult
 from depth_dive.web_search.wrapper import SearchOutcome, run_web_search
 
@@ -74,8 +77,9 @@ class AssemblyResult(BaseModel):
     the dive, and ``cited_passages`` empty whenever ``grounded`` is False.
     ``external_search_*`` carry the web-search outcome (ADR-0013), and
     ``external_search_results`` the surfaced external material for the
-    generation step (ticket #245); the internal results are not exposed on the
-    response.
+    generation turn. ``animation`` is the generated ``interactive_animation``
+    scene graph — the model's output, or the minimal fallback scene graph when
+    that output was malformed (ticket #245).
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -86,6 +90,7 @@ class AssemblyResult(BaseModel):
     external_search_failed: bool = False
     external_search_note: str | None = None
     external_search_results: list[WebSearchResult] = Field(default_factory=list)
+    animation: InteractiveAnimation
 
 
 def run_assembly(
@@ -96,8 +101,9 @@ def run_assembly(
     embedder: Embedder,
     config: RetrievalConfig,
     web_search: WebSearchClient,
+    completion_provider: CompletionProvider,
 ) -> AssemblyResult:
-    """Ground one captured passage and run the web-search step.
+    """Ground one captured passage, run the web-search step, and generate.
 
     Args:
         passage: The captured passage carried in the request.
@@ -109,18 +115,22 @@ def run_assembly(
         config: Retrieval configuration (model name, ef_search, top_k).
         web_search: Provider for the web-search step; called only when the
             brief carries a ``search_intent``.
+        completion_provider: The chat-completions provider used by the LLM
+            generation turn (ticket #245).
 
     Returns:
         An ``AssemblyResult`` carrying the grounded flag, the cited passages,
-        and the web-search outcome. An unresolvable anchor or a failed
-        similarity gate is a valid ungrounded result, and a failed search is a
-        valid degraded outcome (with a note) — never exceptions.
+        the web-search outcome, and the generated scene graph. An unresolvable
+        anchor or a failed similarity gate is a valid ungrounded result, a
+        failed search is a valid degraded outcome (with a note), and malformed
+        model output falls back to a minimal valid scene graph — never
+        exceptions.
 
     Raises:
-        UpstreamBadResponse: The embeddings API returned an unexpected
-            response (route maps to 502).
-        UpstreamUnavailable: The embeddings API or the database was
-            unreachable (route maps to 503).
+        UpstreamBadResponse: The embeddings API or the inference API returned
+            an unexpected response (route maps to 502).
+        UpstreamUnavailable: The embeddings API, the database, or the
+            inference API was unreachable (route maps to 503).
     """
     if isinstance(passage, (TextPassage, CodePassage)) and passage.chunk_id is not None:
         grounding = _ground_anchored(
@@ -129,6 +139,12 @@ def run_assembly(
     else:
         grounding = _ground_via_gate(passage, session=session, embedder=embedder, config=config)
     outcome = _search_outcome(brief, web_search)
+    generation = run_generation(
+        brief,
+        grounding.cited_passages,
+        outcome.results,
+        completion_provider=completion_provider,
+    )
     return AssemblyResult(
         grounded=grounding.grounded,
         cited_passages=grounding.cited_passages,
@@ -136,6 +152,7 @@ def run_assembly(
         external_search_failed=outcome.failed,
         external_search_note=outcome.note,
         external_search_results=outcome.results,
+        animation=generation.animation,
     )
 
 

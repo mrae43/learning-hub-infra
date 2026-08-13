@@ -14,7 +14,7 @@ from uuid import UUID, uuid4
 import pytest
 from sqlalchemy.orm import Session
 
-from core.clients import Embedder
+from core.clients import CompletionProvider, Embedder, MockCompletionProvider
 from core.exceptions import UpstreamUnavailable
 from core.types.captured_passage import (
     CapturedPassage,
@@ -32,10 +32,27 @@ from depth_dive.assembly.assembly_agent import (
     run_assembly,
 )
 from depth_dive.framing.framing_agent import run_framing
+from depth_dive.generation.fallback_animation import build_fallback_animation
+from depth_dive.generation.generation_agent import GenerationResult
 from depth_dive.web_search.client import StubWebSearchClient, WebSearchResult
 from depth_dive.web_search.wrapper import FALLBACK_NOTE
 
 _CONFIG = RetrievalConfig(model_name="text-embedding-3-small", ef_search=40, top_k=5)
+
+
+@pytest.fixture(autouse=True)
+def _stub_generation(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
+    """Patch the generation turn so no LLM call runs in these tests.
+
+    Grounding and search policy are the focus of this suite; the generation
+    turn's own behaviour is covered by ``test_generation_agent.py``. The stub
+    records the call so wiring tests can assert its inputs.
+    """
+    generation = MagicMock(
+        return_value=GenerationResult(animation=build_fallback_animation("test"))
+    )
+    monkeypatch.setattr(assembly_agent, "run_generation", generation)
+    return generation
 
 
 class _StubEmbedder:
@@ -60,6 +77,7 @@ def _run(
     session: Session,
     embedder: Embedder,
     web_search: StubWebSearchClient | None = None,
+    completion_provider: CompletionProvider | None = None,
 ) -> AssemblyResult:
     if web_search is None:
         web_search = StubWebSearchClient()
@@ -70,6 +88,7 @@ def _run(
         embedder=embedder,
         config=_CONFIG,
         web_search=web_search,
+        completion_provider=completion_provider or MockCompletionProvider(),
     )
 
 
@@ -449,6 +468,87 @@ def test_assembly_search_failure_still_reports_grounding(
     assert result.grounded is True
     assert [p.chunk_id for p in result.cited_passages] == [close_id]
     assert result.external_search_failed is True
+
+
+# ============================================================
+# Generation turn wiring (ticket #245)
+# ============================================================
+
+
+def test_assembly_passes_citations_and_provider_to_generation(
+    monkeypatch: pytest.MonkeyPatch, _stub_generation: MagicMock
+) -> None:
+    """The generation turn receives the brief, the cited passages, and the provider."""
+    parent_id = uuid4()
+    monkeypatch.setattr(
+        assembly_agent,
+        "fetch_parent_chunk",
+        MagicMock(return_value=CitedPassage(chunk_id=parent_id, text="parent")),
+    )
+    monkeypatch.setattr(assembly_agent, "search_dense_neighbors", MagicMock(return_value=[]))
+    provider = MockCompletionProvider()
+    passage = TextPassage(content="Attention is all you need.", chunk_id=uuid4())
+    result = _run(
+        passage,
+        session=MagicMock(),
+        embedder=_StubEmbedder(),
+        completion_provider=provider,
+    )
+
+    brief = run_framing(passage)
+    _stub_generation.assert_called_once()
+    args, kwargs = _stub_generation.call_args
+    assert args[0] == brief
+    assert args[1] == [CitedPassage(chunk_id=parent_id, text="parent")]
+    assert args[2] == []
+    assert kwargs["completion_provider"] is provider
+    assert result.animation == _stub_generation.return_value.animation
+
+
+def test_assembly_passes_search_results_to_generation(
+    monkeypatch: pytest.MonkeyPatch, _stub_generation: MagicMock
+) -> None:
+    """Successful web-search material reaches the generation turn."""
+    _passing_gate(monkeypatch)
+    results = [WebSearchResult(title="Paper", url="https://example.com/paper", snippet="quote")]
+    client = StubWebSearchClient(results=results)
+
+    passage = TextPassage(content="Attention is all you need.")
+    _run(passage, session=MagicMock(), embedder=_StubEmbedder(), web_search=client)
+
+    _stub_generation.assert_called_once()
+    assert _stub_generation.call_args.args[2] == results
+
+
+def test_assembly_skips_generation_search_results_when_none(
+    monkeypatch: pytest.MonkeyPatch, _stub_generation: MagicMock
+) -> None:
+    """An anchored passage generates with an empty search-results list."""
+    monkeypatch.setattr(
+        assembly_agent,
+        "fetch_parent_chunk",
+        MagicMock(return_value=CitedPassage(chunk_id=uuid4(), text="parent")),
+    )
+    monkeypatch.setattr(assembly_agent, "search_dense_neighbors", MagicMock(return_value=[]))
+
+    passage = TextPassage(content="Attention is all you need.", chunk_id=uuid4())
+    _run(passage, session=MagicMock(), embedder=_StubEmbedder())
+
+    _stub_generation.assert_called_once()
+    assert _stub_generation.call_args.args[2] == []
+
+
+def test_assembly_surfaces_generated_animation(
+    monkeypatch: pytest.MonkeyPatch, _stub_generation: MagicMock
+) -> None:
+    """The assembly result carries the scene graph produced by the generation turn."""
+    _passing_gate(monkeypatch)
+    result = _run(
+        TextPassage(content="Attention is all you need."),
+        session=MagicMock(),
+        embedder=_StubEmbedder(),
+    )
+    assert result.animation == _stub_generation.return_value.animation
 
 
 # ============================================================

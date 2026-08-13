@@ -153,6 +153,7 @@ def patched_dive_grounding(
         external_search_note: str | None = None,
     ) -> None:
         from depth_dive.assembly.assembly_agent import AssemblyResult
+        from depth_dive.generation.fallback_animation import build_fallback_animation
 
         monkeypatch.setattr(
             "depth_dive.harness.run_assembly",
@@ -162,6 +163,7 @@ def patched_dive_grounding(
                 external_search_attempted=external_search_attempted,
                 external_search_failed=external_search_failed,
                 external_search_note=external_search_note,
+                animation=build_fallback_animation("test"),
             ),
         )
 

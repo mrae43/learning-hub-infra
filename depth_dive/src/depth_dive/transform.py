@@ -21,6 +21,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from core.types.captured_passage import (
     CapturedPassage,
+    CodePassage,
     DiagramPassage,
     ImageMediaType,
     ImagePassage,
@@ -79,12 +80,17 @@ class PassageTransformError(Exception):
 
 
 class TextBlock(BaseModel):
-    """A model-ready plain text content block."""
+    """A model-ready plain text content block.
+
+    ``text``/``code`` passages share this carrier; a ``code`` passage sets
+    ``language`` to its (unvalidated) language hint (spec §5).
+    """
 
     model_config = ConfigDict(extra="forbid")
 
     kind: Literal["text"] = "text"
     text: str
+    language: str | None = None
 
 
 class ImageBlock(BaseModel):
@@ -141,6 +147,8 @@ def transform_passage(passage: CapturedPassage) -> ModelReadyBlock:
     """
     if isinstance(passage, TextPassage):
         return TextBlock(text=_transform_text(passage.content))
+    if isinstance(passage, CodePassage):
+        return TextBlock(text=_transform_text(passage.content), language=passage.language)
     if isinstance(passage, (ImagePassage, DiagramPassage)):
         return _transform_image(passage.content, passage.media_type)
     if isinstance(passage, TablePassage):

@@ -4,7 +4,7 @@
 
 ## Current state
 
-This repository is in **early implementation (tracer bullet complete)**. ADRs, stack decisions, coding standards, and the monorepo layout are in place, plus the build/CI scaffolding: root + per-module `pyproject.toml` (uv workspace), `uv.lock`, `.github/workflows/` (`ci.yml`, `cd.yml`, `security.yml`, `dependabot-auto-merge.yml`), `commitlint.config.mjs`, and `Dockerfile`. Six packages make up the workspace (`core/`, `retrieval_qa/`, `api/`, `ingestion/`, `depth_dive/`, `scripts/`); five of six have real implementation code (~5300 source lines, plus ~6300 lines of tests); only `depth_dive/` is still a stub (just `__init__.py` + smoke test). `scripts/` holds the eval & chunk-size-tuning tooling over the `eval_corpus/` tuning set, with its tests in root `tests/scripts/`. The toolchain is green: `uv sync --all-packages` installs all deps; `uv run ruff check`, `uv run mypy`, `uv run lint-imports`, and `uv run pytest` all pass. (`uv run ruff format --check` reports 3 unformatted markdown files in `docs/adr/` and `docs/.out-of-scope/`; cosmetic, outside package dirs, so not caught by per-package CI checks.)
+This repository is in **early implementation (tracer bullet complete)**. ADRs, stack decisions, coding standards, and the monorepo layout are in place, plus the build/CI scaffolding: root + per-module `pyproject.toml` (uv workspace), `uv.lock`, `.github/workflows/` (`ci.yml`, `cd.yml`, `security.yml`, `dependabot-auto-merge.yml`), `commitlint.config.mjs`, and `Dockerfile`. Six packages make up the workspace (`core/`, `retrieval_qa/`, `api/`, `ingestion/`, `depth_dive/`, `scripts/`); all six have real implementation code (~5300 source lines, plus ~6300 lines of tests) — `depth_dive/` runs the full transform → framing → assembly (corpus grounding + web search) → LLM-generation harness. `scripts/` holds the eval & chunk-size-tuning tooling over the `eval_corpus/` tuning set, with its tests in root `tests/scripts/`. The toolchain is green: `uv sync --all-packages` installs all deps; `uv run ruff check`, `uv run mypy`, `uv run lint-imports`, and `uv run pytest` all pass. (`uv run ruff format --check` reports 3 unformatted markdown files in `docs/adr/` and `docs/.out-of-scope/`; cosmetic, outside package dirs, so not caught by per-package CI checks.)
 
 ## Authoritative sources — read before acting
 
@@ -114,10 +114,9 @@ Rules:
 
 ## What does not exist yet
 
-- **LLM-driven Depth Dive generation** — `depth_dive/src/depth_dive/generation/` only ships the hardcoded demo animation (`demo_animation.py`); the LLM assembly turn that builds a per-request `interactive_animation` from the framing brief, corpus grounding, and web-search results is ticket #245.
 - **`api/routes/__init__.py`** — route modules are imported directly in `server.py`; no package init file exists.
 
-Bootstrap order is complete for all six packages (`core/` (shared retrieval layer included) → `retrieval_qa/` → `depth_dive/` → `api/` → `ingestion/`, plus the `scripts/` eval & tuning tooling over the `eval_corpus/` tuning set). `depth_dive/` now runs the full harness: transform → framing → assembly (corpus grounding + retry-once web search) → demo artifact.
+Bootstrap order is complete for all six packages (`core/` (shared retrieval layer included) → `retrieval_qa/` → `depth_dive/` → `api/` → `ingestion/`, plus the `scripts/` eval & tuning tooling over the `eval_corpus/` tuning set). `depth_dive/` now runs the full harness: transform → framing → assembly (corpus grounding + retry-once web search + LLM generation turn) → `interactive_animation` scene graph. The framing brief and the pre-framing demo payload are gone; the framing agent is still a deterministic tracer-bullet stand-in for the eventual LLM framing turn (ADR-0012).
 
 ## Agent skills
 
