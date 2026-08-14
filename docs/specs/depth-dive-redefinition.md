@@ -192,32 +192,56 @@ The `interactive_animation` payload is a declarative JSON scene graph. It is ful
 
 ### Top-level shape
 
+The ratified top-level contract (finalized during implementation, ticket #257):
+
 ```json
 {
   "output_type": "interactive_animation",
+  "title": "Self-attention: how a word sees its neighbors",
+  "concept": "attention",
+  "viewport": {"width": 800, "height": 520},
   "elements": [...],
   "steps": [...],
-  "initial_state": {...}
+  "initial_state": {...},
+  "interactions": {"click_to_advance": true}
 }
 ```
 
+| Field | Type | Description |
+|---|---|---|
+| `output_type` | `Literal["interactive_animation"]` | Discriminated union root; the MVP's only output type. |
+| `title` | `str` | Short headline for the animation. |
+| `concept` | `str` | The concept being animated. |
+| `viewport` | `Viewport` (`width`, `height`) | Design-time coordinate space that element `x`/`y` positions are relative to. Screen-size independence is the client's job; these are nominal dimensions (prototype: 800 × 520). |
+| `elements` | `list[SceneElement]` | Persistent scene primitives with stable IDs (non-empty). |
+| `steps` | `list[AnimationStep]` | Ordered states that mutate `element_states` by element ID (non-empty). |
+| `initial_state` | `dict[str, ElementState]` | Seeds the initial state of every declared element. |
+| `interactions` | `InteractionHints` | Interaction affordances the client may expose (`click_to_advance`, `reveal_on_last_step`, `segments`). |
+
+`title`, `concept`, `viewport`, and `interactions` are ratified parts of the contract beyond the bare `{output_type, elements, steps, initial_state}` skeleton: `viewport` gives `x`/`y` positions a reference space (the spec's "relative coordinates" constraint below), and `interactions` carries the per-treatment affordances that §6 treatments rely on (`click_to_advance` for `worked_example`/`prediction_reveal`, `segments` for `segmented_carousel`, `reveal_on_last_step` for `prediction_reveal`).
+
 ### `elements`
 
-Persistent scene primitives with stable IDs. Candidate primitive types (exact set to be finalized during implementation):
+Persistent scene primitives with stable IDs. The finalized primitive set (originally a candidate set to be settled during implementation):
 
 - `text` — labels, narration, math.
 - `token` — individual tokens / vectors.
 - `vector` — numeric vectors (e.g., embeddings, attention scores).
-- `arrow` / `edge` — connections between elements.
+- `score` — scalar attention/similarity scores.
+- `arrow` — connections between elements.
 - `group` — layout containers.
+
+Each element carries an `id`, a `type`, and an `x`/`y` position; type-specific payload lives in optional fields (`text`, `label`, `color`, `value`) and a `highlight` flag, with an optional `style` (`fontSize`, `fontWeight`, `textAnchor`, `fill`).
 
 ### `steps`
 
 Ordered states that mutate `element_states` by ID. Each step carries:
 
+- `id: str` — stable step identifier.
 - `label: str` — narration/caption for the step.
-- `element_states: dict[str, ElementState]` — per-element visibility, position, value, color, etc.
-- Optional transition hints (easing, duration) — to be finalized during implementation.
+- `element_states: dict[str, ElementState]` — per-element mutations (`opacity`, `highlight`, `value`, `text`).
+- `duration_ms: int | None` — transition duration hint (the sketch's "easing, duration" transition hints; duration was finalized, easing was dropped).
+- `segment: int | None` — zero-based segment index when the animation is a `segmented_carousel`.
 
 ### Design constraints
 
@@ -226,7 +250,7 @@ Ordered states that mutate `element_states` by ID. Each step carries:
 - Concept-centric: primitives are learning concepts (tokens, vectors, scores), not arbitrary shapes.
 - Text/math-first: must render technical notation well.
 
-A worked example (self-attention for `[river, bank, money]`) exists on the `prototype/interactive-animation-contract` branch for reference.
+A worked example (self-attention for `[river, bank, money]`) exists on the `prototype/interactive-animation-contract` branch for reference. That prototype is illustrative only: it carries demo-only fields not present in the ratified contract — a top-level `version` (omitted) and a top-level `treatment` (superseded by the `HarnessBResponse.applied_treatments` list). The shape above is authoritative.
 
 ## 8. Harness B agent architecture
 
