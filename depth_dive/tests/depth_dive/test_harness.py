@@ -18,6 +18,7 @@ from core.clients import InMemoryEmbedder, MockCompletionProvider
 from core.types.captured_passage import (
     CapturedPassage,
     CodePassage,
+    DiagramPassage,
     ImagePassage,
     TablePassage,
     TextPassage,
@@ -35,7 +36,7 @@ from depth_dive.assembly.assembly_agent import AssemblyResult
 from depth_dive.framing.framing_agent import FramingBrief
 from depth_dive.generation.fallback_animation import build_fallback_animation
 from depth_dive.harness import run_dive
-from depth_dive.transform import PassageTransformError
+from depth_dive.transform import ImageBlock, PassageTransformError, TableBlock, TextBlock
 from depth_dive.web_search.client import StubWebSearchClient, WebSearchResult
 from depth_dive.web_search.wrapper import FALLBACK_NOTE
 
@@ -233,6 +234,7 @@ def test_run_dive_passes_passage_and_brief_to_assembly(
     call = patched_assembly.call_args
     assert call.args[0] == _VALID_TEXT
     assert isinstance(call.args[1], FramingBrief)
+    assert call.args[2] == TextBlock(text="Attention is all you need.")
     assert call.kwargs["session"] is session
     assert call.kwargs["embedder"] is embedder
     assert call.kwargs["config"] is _CONFIG
@@ -326,6 +328,33 @@ def test_run_dive_rejects_invalid_image(patched_assembly: MagicMock) -> None:
     with pytest.raises(PassageTransformError):
         _dive(ImagePassage(content=b"not an image", media_type="image/png"))
     patched_assembly.assert_not_called()
+
+
+def test_run_dive_passes_image_carrier_to_assembly(patched_assembly: MagicMock) -> None:
+    """An image passage's transform carrier (ImageBlock) reaches the assembly agent."""
+    _dive(_valid_image())
+    patched_assembly.assert_called_once()
+    carrier = patched_assembly.call_args.args[2]
+    assert isinstance(carrier, ImageBlock)
+    assert carrier.media_type == "image/png"
+
+
+def test_run_dive_passes_diagram_carrier_to_assembly(patched_assembly: MagicMock) -> None:
+    """A diagram passage shares the image carrier and reaches the assembly agent."""
+    _dive(DiagramPassage(content=_png_bytes(), media_type="image/png"))
+    patched_assembly.assert_called_once()
+    carrier = patched_assembly.call_args.args[2]
+    assert isinstance(carrier, ImageBlock)
+    assert carrier.media_type == "image/png"
+
+
+def test_run_dive_passes_table_carrier_to_assembly(patched_assembly: MagicMock) -> None:
+    """A table passage's transform carrier (TableBlock) reaches the assembly agent."""
+    _dive(_valid_table())
+    patched_assembly.assert_called_once()
+    carrier = patched_assembly.call_args.args[2]
+    assert isinstance(carrier, TableBlock)
+    assert carrier.rows == [["a", "1"], ["b", "2"]]
 
 
 def test_run_dive_accepts_type_checked_union_payload(patched_assembly: MagicMock) -> None:

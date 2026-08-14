@@ -35,6 +35,7 @@ from depth_dive.assembly.assembly_agent import (
 from depth_dive.framing.framing_agent import run_framing
 from depth_dive.generation.fallback_animation import build_fallback_animation
 from depth_dive.generation.generation_agent import GenerationResult
+from depth_dive.transform import ModelReadyBlock, TextBlock
 from depth_dive.web_search.client import StubWebSearchClient, WebSearchResult
 from depth_dive.web_search.wrapper import FALLBACK_NOTE
 
@@ -79,12 +80,14 @@ def _run(
     embedder: Embedder,
     web_search: StubWebSearchClient | None = None,
     completion_provider: CompletionProvider | None = None,
+    carrier: ModelReadyBlock | None = None,
 ) -> AssemblyResult:
     if web_search is None:
         web_search = StubWebSearchClient()
     return run_assembly(
         passage,
         run_framing(passage),
+        carrier or TextBlock(text="Attention is all you need."),
         session=session,
         embedder=embedder,
         config=_CONFIG,
@@ -688,6 +691,7 @@ def test_assembly_passes_citations_and_provider_to_generation(
     assert args[0] == brief
     assert args[1] == [CitedPassage(chunk_id=parent_id, text="parent")]
     assert args[2] == []
+    assert args[3] == TextBlock(text="Attention is all you need.")
     assert kwargs["completion_provider"] is provider
     assert result.animation == _stub_generation.return_value.animation
 
@@ -736,6 +740,22 @@ def test_assembly_surfaces_generated_animation(
         embedder=_StubEmbedder(),
     )
     assert result.animation == _stub_generation.return_value.animation
+
+
+def test_assembly_forwards_the_model_ready_carrier_to_generation(
+    monkeypatch: pytest.MonkeyPatch, _stub_generation: MagicMock
+) -> None:
+    """The carrier chosen by the transform reaches the generation turn."""
+    _passing_gate(monkeypatch)
+    carrier = TextBlock(text="the captured passage")
+    _run(
+        TextPassage(content="Attention is all you need."),
+        session=MagicMock(),
+        embedder=_StubEmbedder(),
+        carrier=carrier,
+    )
+    _stub_generation.assert_called_once()
+    assert _stub_generation.call_args.args[3] == carrier
 
 
 # ============================================================

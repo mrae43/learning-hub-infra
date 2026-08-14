@@ -7,7 +7,12 @@ from openai import APIConnectionError, APIStatusError
 
 from core.clients.llm_client import CompletionProvider, LLMClient, MockCompletionProvider
 from core.exceptions import UpstreamBadResponse, UpstreamUnavailable
-from core.types.chat import ChatMessage
+from core.types.chat import (
+    ChatContentImagePart,
+    ChatContentImageURL,
+    ChatContentTextPart,
+    ChatMessage,
+)
 
 
 def _fake_completion(content: str) -> MagicMock:
@@ -53,6 +58,42 @@ def test_chat_returns_message_content(monkeypatch: pytest.MonkeyPatch) -> None:
     fake_openai.chat.completions.create.assert_called_once_with(
         model="gpt-4o-mini",
         messages=[{"role": "user", "content": "What is the answer?"}],
+    )
+
+
+def test_chat_serializes_multimodal_content_parts(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A message with image content serializes to the OpenAI content-part shape."""
+    client = LLMClient(api_key="sk-test", model="gpt-4o-mini")
+
+    fake_openai = MagicMock()
+    fake_openai.chat.completions.create = MagicMock(return_value=_fake_completion("Understood."))
+    monkeypatch.setattr(client, "_get_client", lambda: fake_openai)
+
+    message = ChatMessage(
+        role="user",
+        content=[
+            ChatContentTextPart(text="Here is the figure:"),
+            ChatContentImagePart(
+                image_url=ChatContentImageURL(url="data:image/png;base64,aGVsbG8=")
+            ),
+        ],
+    )
+    client.chat(messages=[message])
+
+    fake_openai.chat.completions.create.assert_called_once_with(
+        model="gpt-4o-mini",
+        messages=[
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Here is the figure:"},
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": "data:image/png;base64,aGVsbG8="},
+                    },
+                ],
+            }
+        ],
     )
 
 

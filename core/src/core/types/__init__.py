@@ -9,7 +9,13 @@ from core.types.captured_passage import (
     TablePassage,
     TextPassage,
 )
-from core.types.chat import ChatMessage
+from core.types.chat import (
+    ChatContentImagePart,
+    ChatContentImageURL,
+    ChatContentPart,
+    ChatContentTextPart,
+    ChatMessage,
+)
 from core.types.chunk import (
     BookChunkMetadata,
     Chunk,
@@ -46,6 +52,10 @@ __all__ = [
     "AnimationStep",
     "BookChunkMetadata",
     "CapturedPassage",
+    "ChatContentImagePart",
+    "ChatContentImageURL",
+    "ChatContentPart",
+    "ChatContentTextPart",
     "ChatMessage",
     "Chunk",
     "CitedPassage",

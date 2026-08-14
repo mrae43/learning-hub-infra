@@ -17,8 +17,8 @@ The brief's ``search_intent`` drives the web-search step (ticket #244): when
 the framing agent judged external grounding would help (ADR-0012), the
 assembly agent calls the retry-once web-search wrapper (ADR-0013) and surfaces
 the outcome on :class:`AssemblyResult`. The final turn is the LLM generation
-step (ticket #245), which builds a scene graph from the brief, the cited
-passages, and any search results.
+step (ticket #245), which builds a scene graph from the brief, the
+model-ready carrier, the cited passages, and any search results.
 """
 
 from collections.abc import Sequence
@@ -43,6 +43,7 @@ from core.types.responses import CitedPassage, ScoredChunk
 from core.types.retrieval_config import RetrievalConfig
 from depth_dive.framing.framing_agent import FramingBrief
 from depth_dive.generation.generation_agent import run_generation
+from depth_dive.transform import ModelReadyBlock
 from depth_dive.web_search.client import WebSearchClient, WebSearchResult
 from depth_dive.web_search.wrapper import SearchOutcome, run_web_search
 
@@ -101,6 +102,7 @@ class AssemblyResult(BaseModel):
 def run_assembly(
     passage: CapturedPassage,
     brief: FramingBrief,
+    carrier: ModelReadyBlock,
     *,
     session: Session,
     embedder: Embedder,
@@ -115,6 +117,9 @@ def run_assembly(
         brief: The framing agent's creative brief for this dive. Its
             ``search_intent`` drives the web-search step (ADR-0012, ADR-0013);
             corpus grounding is keyed on the passage's anchor.
+        carrier: The model-ready carrier chosen by the Passage Transform for
+            ``passage``; forwarded to the generation turn so its content
+            (text, structured rows, or image bytes) reaches the model.
         session: SQLAlchemy session bound to the documents database.
         embedder: Provider used to embed the passage content (1536-dim).
         config: Retrieval configuration (model name, ef_search, top_k).
@@ -155,6 +160,7 @@ def run_assembly(
         brief,
         grounding.cited_passages,
         outcome.results,
+        carrier,
         completion_provider=completion_provider,
     )
     return AssemblyResult(
