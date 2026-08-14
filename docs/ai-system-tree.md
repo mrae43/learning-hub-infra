@@ -14,13 +14,27 @@ learning-hub/
 │   │   └── __init__.py
 │   ├── tests/retrieval_qa/           # chunker tests
 │   ├── tests/eval/                   # retrieval eval (path-gated, eval_set.yaml + eval_vectors.json)
-│   ├── pyproject.toml
-│   └── README.md
-├── depth_dive/                        # Depth Dive generation (stub — TODO)
+│   └── pyproject.toml
+├── depth_dive/                        # Depth Dive generation (Harness B, ADR-0020)
 │   ├── src/depth_dive/
-│   │   └── __init__.py               # Package marker only
-│   ├── tests/depth_dive/
-│   │   └── test_smoke.py
+│   │   ├── transform.py               # Passage transform → model-ready carrier
+│   │   ├── harness.py                 # Harness B entrypoint (ADR-0020)
+│   │   ├── framing/                   # Framing agent (treatment routing + search intent)
+│   │   │   ├── framing_agent.py
+│   │   │   └── __init__.py
+│   │   ├── assembly/                  # Assembly agent (corpus grounding + web search + generation)
+│   │   │   ├── assembly_agent.py
+│   │   │   └── __init__.py
+│   │   ├── generation/                # LLM generation turn + fallback scene graph
+│   │   │   ├── generation_agent.py
+│   │   │   ├── fallback_animation.py
+│   │   │   └── __init__.py
+│   │   ├── web_search/                # Web-search wrapper (retry-once + fallback)
+│   │   │   ├── client.py
+│   │   │   ├── wrapper.py
+│   │   │   └── __init__.py
+│   │   └── __init__.py
+│   ├── tests/depth_dive/              # transform/harness/framing/assembly/generation/web_search tests
 │   └── pyproject.toml
 ├── core/                             # Shared (may stay here or move to common/ later)
 │   ├── src/core/
@@ -30,6 +44,8 @@ learning-hub/
 │   │   │   ├── chat.py               # Chat / conversation models
 │   │   │   ├── responses.py          # HarnessAResponse, etc.
 │   │   │   ├── retrieval_config.py   # Retrieval config models
+│   │   │   ├── depth_dive.py         # HarnessBRequest/Response, scene graph types
+│   │   │   ├── captured_passage.py   # Captured Passage five-type model (ADR-0021)
 │   │   │   └── __init__.py
 │   │   ├── config/
 │   │   │   ├── settings.py           # Pydantic settings
@@ -41,24 +57,25 @@ learning-hub/
 │   │   ├── retrieval/                # Shared retrieval primitives (ADR-0019)
 │   │   │   ├── query.py              # Full hybrid pipeline
 │   │   │   ├── neighbors.py          # Dense semantic-neighbor search
-│   │   │   └── parents.py            # Parent-chunk fetch
+│   │   │   ├── parents.py            # Parent-chunk fetch
+│   │   │   └── documents.py          # Document-level lookup helpers
 │   │   ├── database/                 # pgvector wrapper, Alembic migrations
 │   │   │   ├── connection.py
 │   │   │   ├── schema.py
-│   │   │   └── migrations/           # env.py + script.py.mako + versions/
+│   │   │   └── migrations/           # env.py + script.py.mako + versions/ (2 revisions)
 │   │   ├── exceptions.py             # Named exception types
 │   │   ├── utils.py                  # Shared text utilities (e.g. count_tokens)
 │   │   └── __init__.py
-│   ├── tests/core/                   # types, clients, migration tests
-│   ├── pyproject.toml
-│   └── README.md
+│   ├── tests/core/                   # types, clients, retrieval, migration tests
+│   └── pyproject.toml
 ├── api/                              # FastAPI server (thin controller layer)
 │   ├── src/api/
 │   │   ├── routes/
 │   │   │   ├── retrieval_qa.py       # /query endpoint
 │   │   │   ├── health.py             # /health endpoint
 │   │   │   ├── ingest.py             # /ingest endpoint
-│   │   │   └── documents.py          # /documents/{id} endpoint
+│   │   │   ├── documents.py          # /documents/{id} endpoint
+│   │   │   └── dive.py               # /dive endpoint (Harness B)
 │   │   ├── controllers/
 │   │   │   └── qa_controller.py      # Orchestrates Harness A
 │   │   ├── dependencies.py           # FastAPI dependency injection
@@ -67,9 +84,10 @@ learning-hub/
 │   │   ├── main.py                   # Entry point
 │   │   └── __init__.py
 │   ├── tests/api/                    # route + controller + prompt tests
+│   │   ├── controllers/               # qa_controller tests
+│   │   └── test_dive.py               # /dive route tests
 │   ├── tests/conftest.py
-│   ├── pyproject.toml
-│   └── README.md
+│   └── pyproject.toml
 ├── ingestion/                        # Document upload & background task logic
 │   ├── src/ingestion/
 │   │   ├── models.py                 # Pydantic models for ingestion
@@ -79,8 +97,7 @@ learning-hub/
 │   │   └── __init__.py
 │   ├── tests/ingestion/              # pipeline/splitting/tasks unit tests
 │   ├── tests/integration/            # real-API ingestion tests (integration-marked)
-│   ├── pyproject.toml
-│   └── README.md
+│   └── pyproject.toml
 ├── scripts/                          # Eval & chunk-size tuning tooling
 │   ├── __init__.py
 │   ├── eval_metrics.py               # Recall@k, MRR, is_hit metrics
@@ -94,12 +111,21 @@ learning-hub/
 │   ├── books/                        # DDIA excerpts, deep learning concepts
 │   ├── papers/                       # FlashAttention, vLLM paged attention
 │   ├── synthetic/                    # RAG reference, SOLID principles
-│   └── eval_set_tuning.yaml          # Tuning query set
+│   ├── eval_set_tuning.yaml          # Tuning query set
+│   └── eval_vectors_*.json           # Pre-generated eval vectors (256/512/1024-dim)
 ├── tests/                            # Root-level tests (scripts/ eval tooling)
 │   └── scripts/
 ├── docs/
-│   ├── adr/                          # 0001–0018 (skip 0008; 0015 supersedes 0007 scorer)
-│   ├── agent/issue-tracker.md        # Code review tracker
+│   ├── adr/                          # 0001–0021 (skip 0008; 0015 supersedes 0007 scorer)
+│   ├── agents/                       # Agent skill docs (issue tracker, triage labels, domain)
+│   │   ├── issue-tracker.md
+│   │   ├── triage-labels.md
+│   │   └── domain.md
+│   ├── research/                     # Research notes (multimodal inputs, neuroscience methods)
+│   │   ├── multimodal-passage-inputs.md
+│   │   └── neuroscience-methods-output-types.md
+│   ├── specs/                        # Feature specs
+│   │   └── depth-dive-redefinition.md
 │   ├── ai-system-tree.md
 │   ├── coding-standards.md
 │   ├── commit-instructions.md
@@ -116,7 +142,7 @@ learning-hub/
 │   ├── security.yml                  # CodeQL, secret scanning (gitleaks), Trivy, license audit
 │   └── dependabot-auto-merge.yml     # Auto-merge for low-risk Dependabot bumps
 ├── pyproject.toml                    # Root: uv workspace, ruff config, import-linter contracts
-├── conftest.py                       # Root test fixtures (276 lines, shared by all packages)
+├── conftest.py                       # Root test fixtures (282 lines, shared by all packages)
 ├── alembic.ini                       # Alembic configuration for DB migrations
 ├── Makefile                          # Thin docker-compose wrapper for local dev (up/logs/down)
 ├── docker-entrypoint.sh              # Container entrypoint: alembic upgrade + uvicorn
@@ -124,6 +150,8 @@ learning-hub/
 ├── docker-compose.yml                # Local dev: PostgreSQL + pgvector
 ├── Dockerfile                        # Multi-stage build (all 6 packages)
 ├── .env.example
+├── skills-lock.json                  # Pinned agent skill versions
+├── tuning_results.json               # Chunk-size tuning run output
 ├── AGENTS.md                         # Session notes for AI coding tools
 ├── CONTEXT.md                        # Domain glossary
 └── README.md

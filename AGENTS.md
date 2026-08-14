@@ -4,7 +4,7 @@
 
 ## Current state
 
-This repository is in **early implementation (tracer bullet complete)**. ADRs, stack decisions, coding standards, and the monorepo layout are in place, plus the build/CI scaffolding: root + per-module `pyproject.toml` (uv workspace), `uv.lock`, `.github/workflows/` (`ci.yml`, `cd.yml`, `security.yml`, `dependabot-auto-merge.yml`), `commitlint.config.mjs`, and `Dockerfile`. Six packages make up the workspace (`core/`, `retrieval_qa/`, `api/`, `ingestion/`, `depth_dive/`, `scripts/`); all six have real implementation code (~5300 source lines, plus ~6300 lines of tests) — `depth_dive/` runs the full transform → framing → assembly (corpus grounding + web search) → LLM-generation harness. `scripts/` holds the eval & chunk-size-tuning tooling over the `eval_corpus/` tuning set, with its tests in root `tests/scripts/`. The toolchain is green: `uv sync --all-packages` installs all deps; `uv run ruff check`, `uv run mypy`, `uv run lint-imports`, and `uv run pytest` all pass. (`uv run ruff format --check` reports 3 unformatted markdown files in `docs/adr/` and `docs/.out-of-scope/`; cosmetic, outside package dirs, so not caught by per-package CI checks.)
+This repository is in **early implementation (tracer bullet complete)**. ADRs, stack decisions, coding standards, and the monorepo layout are in place, plus the build/CI scaffolding: root + per-module `pyproject.toml` (uv workspace), `uv.lock`, `.github/workflows/` (`ci.yml`, `cd.yml`, `security.yml`, `dependabot-auto-merge.yml`), `commitlint.config.mjs`, and `Dockerfile`. Six packages make up the workspace (`core/`, `retrieval_qa/`, `api/`, `ingestion/`, `depth_dive/`, `scripts/`); all six have real implementation code (~7,800 source lines, plus ~10,700 lines of tests) — `depth_dive/` runs the full transform → framing → assembly (corpus grounding + web search) → LLM-generation harness. `scripts/` holds the eval & chunk-size-tuning tooling over the `eval_corpus/` tuning set, with its tests in root `tests/scripts/`. The toolchain is green: `uv sync --all-packages` installs all deps; `uv run ruff check`, `uv run mypy`, `uv run lint-imports`, and `uv run pytest` all pass. (`uv run ruff format --check` reports 3 unformatted markdown files in `docs/adr/` and `docs/.out-of-scope/`; cosmetic, outside package dirs, so not caught by per-package CI checks.)
 
 ## Authoritative sources — read before acting
 
@@ -28,7 +28,7 @@ These docs are **not** auto-loaded into session context. Only this `AGENTS.md` i
 **Before choosing or adding a library, model, or external service:**
 
 - `docs/tech-stack.md` — MVP stack and staged post-MVP milestones.
-- `docs/adr/` — read the ADR(s) most relevant to the area (e.g., ADR-0001 inference, ADR-0002 pgvector, ADR-0003 hand-rolled RAG, ADR-0004 embeddings, ADR-0006 background ingestion, ADR-0007 path-gated retrieval eval (superseded by ADR-0015), ADR-0009 HarnessAResponse shape, ADR-0012 depth-dive-web-search-agentic, ADR-0013 depth-dive-search-failure-retry-fallback, ADR-0014 data-schema-api-contracts-harness-a, ADR-0015 deepeval-for-retrieval-evaluation, ADR-0016 retrieval-qa-critical-gaps-parent-child-hybrid-rerank, ADR-0017 important-but-gatable-retrieval-phase, ADR-0018 no-auth-access-control-for-mvp). Note: ADR-0008 is intentionally skipped in numbering. Treat ADRs as **constraints, not suggestions**. If a decision contradicts an ADR, stop and propose a new/updated ADR rather than silently deviating.
+- `docs/adr/` — read the ADR(s) most relevant to the area (e.g., ADR-0001 inference, ADR-0002 pgvector, ADR-0003 hand-rolled RAG, ADR-0004 embeddings, ADR-0006 background ingestion, ADR-0007 path-gated retrieval eval (superseded by ADR-0015), ADR-0009 HarnessAResponse shape, ADR-0012 depth-dive-web-search-agentic, ADR-0013 depth-dive-search-failure-retry-fallback, ADR-0014 data-schema-api-contracts-harness-a, ADR-0015 deepeval-for-retrieval-evaluation, ADR-0016 retrieval-qa-critical-gaps-parent-child-hybrid-rerank, ADR-0017 important-but-gatable-retrieval-phase, ADR-0018 no-auth-access-control-for-mvp, ADR-0019 shared-retrieval-primitives-in-core, ADR-0020 depth-dive-harness-b-architecture, ADR-0021 captured-passage-model). Note: ADR-0008 is intentionally skipped in numbering. Treat ADRs as **constraints, not suggestions**. If a decision contradicts an ADR, stop and propose a new/updated ADR rather than silently deviating.
 
 **Before writing a commit message:**
 
@@ -115,8 +115,7 @@ Rules:
 ## What does not exist yet
 
 - **`api/routes/__init__.py`** — route modules are imported directly in `server.py`; no package init file exists.
-
-Bootstrap order is complete for all six packages (`core/` (shared retrieval layer included) → `retrieval_qa/` → `depth_dive/` → `api/` → `ingestion/`, plus the `scripts/` eval & tuning tooling over the `eval_corpus/` tuning set). `depth_dive/` now runs the full harness: transform → framing → assembly (corpus grounding + retry-once web search + LLM generation turn) → `interactive_animation` scene graph. The framing brief and the pre-framing demo payload are gone; the framing agent is still a deterministic tracer-bullet stand-in for the eventual LLM framing turn (ADR-0012).
+- **LLM framing turn** — the framing agent (`depth_dive/src/depth_dive/framing/framing_agent.py`) is still a deterministic tracer-bullet stand-in for the eventual LLM framing turn (ADR-0012); treatment routing and search intent are keyed on the passage's type/content rather than content analysis.
 
 ## Agent skills
 
