@@ -14,14 +14,16 @@ A hand-rolled RAG study tool for learning AI/ML from papers, books, and document
 
 **Query (MVP).** Send `{query: str}` to `POST /query`. The system retrieves candidate chunks from your entire corpus using a hybrid dense + sparse retrieval pipeline, reranks the top candidates with a cross-encoder, and assembles the most relevant grounded context for model generation. The response is a structured `HarnessAResponse` — answer text, cited passages, and a `grounded: bool` flag so you know whether the answer actually came from your documents.
 
+**Depth Dive (post-MVP 1).** Send a `CapturedPassage` to `POST /dive`. The framing agent resolves the treatment set and search intent, the assembly agent grounds the passage against the corpus (with retry-once web search when the brief calls for it), and the LLM generates an `interactive_animation` scene graph — the richer, multi-modal explanation format ([ADR-0020](./docs/adr/0020-depth-dive-harness-b-architecture.md)).
+
 **Roadmap.**
 | Phase | What | Status |
 |---|---|---|
 | MVP | Grounded Q&A against your personal corpus | ✅ Operational |
-| Post-MVP 1 | **Depth Dive** — richer explanations (text + diagrams + code) with agentic web search | 🔧 Scaffold |
+| Post-MVP 1 | **Depth Dive** — richer explanations (text + diagrams + code) with agentic web search | ✅ Operational |
 | Post-MVP 2 | **Concept Linking + Retrieval Practice / Spaced Repetition** — query-independent relationship surfacing and review-style learning triggers | 📅 Planned |
 
-> **Status:** Early implementation — tracer bullet complete. Five of six packages (`core/`, `retrieval_qa/`, `api/`, `ingestion/`, `scripts/`) have implementation code (~5300 source lines, plus `tests/`). Only `depth_dive/` is still a stub (just `__init__.py` + smoke test). Ingestion pipeline, Harness A query pipeline, four API endpoints (`POST /ingest`, `GET /documents/{id}`, `POST /query`, `GET /health`), and the `scripts/` eval & chunk-size-tuning tooling are operational. See [docs/](./docs/) for architecture decisions and plans.
+> **Status:** Early implementation — tracer bullet complete. All six packages (`core/`, `retrieval_qa/`, `depth_dive/`, `api/`, `ingestion/`, `scripts/`) have implementation code (~7,800 source lines, plus ~10,700 lines of tests). `depth_dive/` runs the full Harness B: transform → framing → assembly (corpus grounding + retry-once web search) → LLM generation of the `interactive_animation` scene graph. Ingestion pipeline, Harness A query pipeline, five API endpoints (`POST /ingest`, `GET /documents/{id}`, `POST /query`, `POST /dive`, `GET /health`), and the `scripts/` eval & chunk-size-tuning tooling are operational. See [docs/](./docs/) for architecture decisions and plans.
 
 ## Local development
 
