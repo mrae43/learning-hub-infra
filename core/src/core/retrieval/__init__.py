@@ -13,12 +13,20 @@ Public surface:
 - ``search_dense_neighbors`` — dense semantic-neighbor search scored by
   cosine similarity.
 - ``fetch_parent_chunk`` — parent-chunk fetch for an anchored chunk id.
+- ``fetch_document_chunks`` — document-relative parent-chunk fetch for an
+  anchored non-text ``document_id`` (ticket #253).
 
 Sparse search and RRF fusion stay private internals of the pipeline module.
 """
 
+from core.retrieval.documents import fetch_document_chunks
 from core.retrieval.neighbors import search_dense_neighbors
 from core.retrieval.parents import fetch_parent_chunk
 from core.retrieval.query import retrieve_relevant_chunks
 
-__all__ = ["fetch_parent_chunk", "retrieve_relevant_chunks", "search_dense_neighbors"]
+__all__ = [
+    "fetch_document_chunks",
+    "fetch_parent_chunk",
+    "retrieve_relevant_chunks",
+    "search_dense_neighbors",
+]

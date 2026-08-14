@@ -19,6 +19,7 @@ from core.exceptions import UpstreamUnavailable
 from core.types.captured_passage import (
     CapturedPassage,
     CodePassage,
+    DiagramPassage,
     ImagePassage,
     TablePassage,
     TextPassage,
@@ -333,16 +334,114 @@ def test_unanchored_dict_table_rows_serialize_keyed_cells(
     assert embedder.embedded == ["l: a | v: 1"]
 
 
-def test_anchored_image_falls_back_to_gate(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A document_id anchor cannot resolve yet (ADR-0019), so the gate runs."""
-    close_id = uuid4()
-    fetch_parent = MagicMock()
-    monkeypatch.setattr(assembly_agent, "fetch_parent_chunk", fetch_parent)
+def _doc_chunk(chunk_id: UUID, text: str) -> CitedPassage:
+    return CitedPassage(chunk_id=chunk_id, text=text)
+
+
+# ============================================================
+# Anchored non-text passages: document-relative context (ticket #253)
+# ============================================================
+
+
+def test_anchored_image_grounds_with_document_context_and_neighbors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A valid document anchor grounds on the document's text plus neighbors."""
+    document_id = uuid4()
+    doc_chunk_id = uuid4()
+    neighbor_id = uuid4()
+    fetch_document = MagicMock(
+        return_value=[_doc_chunk(doc_chunk_id, "the section surrounding the figure")]
+    )
+    search_neighbors = MagicMock(return_value=[_neighbor(neighbor_id, "a semantic neighbor", 0.9)])
+    monkeypatch.setattr(assembly_agent, "fetch_document_chunks", fetch_document)
+    monkeypatch.setattr(assembly_agent, "search_dense_neighbors", search_neighbors)
+
+    passage = ImagePassage(
+        content=b"\x00",
+        media_type="image/png",
+        caption="An attention plot",
+        document_id=document_id,
+        ordinal="Figure 3",
+    )
+    session = MagicMock()
+    embedder = _StubEmbedder()
+    result = _run(passage, session=session, embedder=embedder)
+
+    assert result.grounded is True
+    assert [p.chunk_id for p in result.cited_passages] == [doc_chunk_id, neighbor_id]
+    assert result.cited_passages[0].text == "the section surrounding the figure"
+    assert embedder.embedded == ["An attention plot"]
+    fetch_document.assert_called_once_with(
+        session=session, document_id=document_id, limit=_CONFIG.top_k
+    )
+
+
+def test_anchored_diagram_grounds_with_document_context(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A diagram uses the same document-relative grounding path as an image."""
+    document_id = uuid4()
+    doc_chunk_id = uuid4()
+    monkeypatch.setattr(
+        assembly_agent,
+        "fetch_document_chunks",
+        MagicMock(return_value=[_doc_chunk(doc_chunk_id, "a diagram's section")]),
+    )
+    monkeypatch.setattr(assembly_agent, "search_dense_neighbors", MagicMock(return_value=[]))
+
+    passage = DiagramPassage(
+        content=b"\x00",
+        media_type="image/png",
+        caption="The attention mechanism",
+        document_id=document_id,
+        ordinal="Figure 2",
+    )
+    result = _run(passage, session=MagicMock(), embedder=_StubEmbedder())
+
+    assert result.grounded is True
+    assert [p.chunk_id for p in result.cited_passages] == [doc_chunk_id]
+
+
+def test_anchored_table_grounds_with_document_context_and_serialized_neighbors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An anchored table embeds its serialized form for the neighbor search."""
+    doc_chunk_id = uuid4()
+    neighbor_id = uuid4()
+    monkeypatch.setattr(
+        assembly_agent,
+        "fetch_document_chunks",
+        MagicMock(return_value=[_doc_chunk(doc_chunk_id, "table context")]),
+    )
     monkeypatch.setattr(
         assembly_agent,
         "search_dense_neighbors",
-        MagicMock(return_value=[_neighbor(close_id, "caption-matching chunk", 0.9)]),
+        MagicMock(return_value=[_neighbor(neighbor_id, "related table chunk", 0.9)]),
     )
+
+    passage = TablePassage(
+        rows=[["a", "1"]],
+        headers=["l", "v"],
+        caption="Scores",
+        document_id=uuid4(),
+        ordinal="Table 1",
+    )
+    embedder = _StubEmbedder()
+    result = _run(passage, session=MagicMock(), embedder=embedder)
+
+    assert result.grounded is True
+    assert [p.chunk_id for p in result.cited_passages] == [doc_chunk_id, neighbor_id]
+    assert embedder.embedded == ["Scores\nl | v\na | 1"]
+
+
+def test_anchored_non_text_unresolvable_document_is_not_grounded(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A document_id the corpus cannot resolve grounds nothing, without embedding."""
+    monkeypatch.setattr(assembly_agent, "fetch_document_chunks", MagicMock(return_value=None))
+    search_neighbors = MagicMock()
+    monkeypatch.setattr(assembly_agent, "search_dense_neighbors", search_neighbors)
 
     passage = ImagePassage(
         content=b"\x00",
@@ -351,11 +450,99 @@ def test_anchored_image_falls_back_to_gate(monkeypatch: pytest.MonkeyPatch) -> N
         document_id=uuid4(),
         ordinal="Figure 3",
     )
+    embedder = _StubEmbedder()
+    result = _run(passage, session=MagicMock(), embedder=embedder)
+
+    assert result.grounded is False
+    assert result.cited_passages == []
+    assert embedder.embedded == []
+    search_neighbors.assert_not_called()
+
+
+def test_anchored_non_text_without_caption_still_grounds_on_document(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A captionless image still grounds on its valid document anchor alone."""
+    doc_chunk_id = uuid4()
+    monkeypatch.setattr(
+        assembly_agent,
+        "fetch_document_chunks",
+        MagicMock(return_value=[_doc_chunk(doc_chunk_id, "the figure's section")]),
+    )
+    search_neighbors = MagicMock()
+    monkeypatch.setattr(assembly_agent, "search_dense_neighbors", search_neighbors)
+
+    passage = ImagePassage(
+        content=b"\x00",
+        media_type="image/png",
+        document_id=uuid4(),
+        ordinal="Figure 4",
+    )
+    embedder = _StubEmbedder()
+    result = _run(passage, session=MagicMock(), embedder=embedder)
+
+    assert result.grounded is True
+    assert [p.chunk_id for p in result.cited_passages] == [doc_chunk_id]
+    assert embedder.embedded == []
+    search_neighbors.assert_not_called()
+
+
+def test_anchored_non_text_deduplicates_document_chunks_from_neighbors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A document chunk that also surfaces as a neighbor is cited once."""
+    doc_chunk_id = uuid4()
+    other_id = uuid4()
+    monkeypatch.setattr(
+        assembly_agent,
+        "fetch_document_chunks",
+        MagicMock(return_value=[_doc_chunk(doc_chunk_id, "shared section")]),
+    )
+    monkeypatch.setattr(
+        assembly_agent,
+        "search_dense_neighbors",
+        MagicMock(
+            return_value=[
+                _neighbor(doc_chunk_id, "the same section as a neighbor", 0.99),
+                _neighbor(other_id, "a distinct neighbor", 0.9),
+            ]
+        ),
+    )
+
+    passage = ImagePassage(
+        content=b"\x00",
+        media_type="image/png",
+        caption="An attention plot",
+        document_id=uuid4(),
+        ordinal="Figure 5",
+    )
     result = _run(passage, session=MagicMock(), embedder=_StubEmbedder())
 
     assert result.grounded is True
-    assert [p.chunk_id for p in result.cited_passages] == [close_id]
-    fetch_parent.assert_not_called()
+    assert [p.chunk_id for p in result.cited_passages] == [doc_chunk_id, other_id]
+
+
+def test_anchored_non_text_empty_document_context_is_not_grounded(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A ready-but-empty document anchors nothing citable, so grounded is False."""
+    monkeypatch.setattr(assembly_agent, "fetch_document_chunks", MagicMock(return_value=[]))
+    search_neighbors = MagicMock()
+    monkeypatch.setattr(assembly_agent, "search_dense_neighbors", search_neighbors)
+
+    passage = ImagePassage(
+        content=b"\x00",
+        media_type="image/png",
+        document_id=uuid4(),
+        ordinal="Figure 6",
+    )
+    embedder = _StubEmbedder()
+    result = _run(passage, session=MagicMock(), embedder=embedder)
+
+    assert result.grounded is False
+    assert result.cited_passages == []
+    assert embedder.embedded == []
+    search_neighbors.assert_not_called()
 
 
 # ============================================================
