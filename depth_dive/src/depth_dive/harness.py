@@ -1,13 +1,14 @@
 """Harness B entrypoint (ADR-0020).
 
 Runs the Depth Dive pipeline for one ``HarnessBRequest`` and returns a
-``HarnessBResponse``. The passage is validated by the Passage Transform stage,
-the framing agent resolves the treatment set and search intent (ticket #242),
-and the assembly agent grounds the passage against the ingested corpus via the
-shared ``core/retrieval/`` primitives (ticket #243), runs the retry-once
-web-search step when the brief carries a ``search_intent`` (ticket #244), and
-runs the LLM generation turn that produces the ``interactive_animation`` scene
-graph (ticket #245).
+``HarnessBResponse``. The passage is validated by the Passage Transform stage
+(whose model-ready carrier is forwarded to the generation turn), the framing
+agent resolves the treatment set and search intent (ticket #242), and the
+assembly agent grounds the passage against the ingested corpus via the shared
+``core/retrieval/`` primitives (ticket #243), runs the retry-once web-search
+step when the brief carries a ``search_intent`` (ticket #244), and runs the
+LLM generation turn that produces the ``interactive_animation`` scene graph
+(ticket #245).
 """
 
 from sqlalchemy.orm import Session
@@ -62,7 +63,7 @@ def run_dive(
             inference API was unreachable during grounding/generation (route
             maps to 503).
     """
-    transform_passage(request.captured_passage)
+    carrier = transform_passage(request.captured_passage)
     brief = run_framing(
         request.captured_passage,
         requested_treatments=request.requested_treatments,
@@ -71,6 +72,7 @@ def run_dive(
     assembly = run_assembly(
         request.captured_passage,
         brief,
+        carrier,
         session=session,
         embedder=embedder,
         config=config,
