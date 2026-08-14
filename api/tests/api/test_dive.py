@@ -371,13 +371,14 @@ def test_dive_image_unsupported_media_type_returns_422(mock_client: TestClient) 
     assert response.status_code == 422
 
 
-def test_dive_table_over_row_bound_returns_422(mock_client: TestClient) -> None:
-    """A table exceeding the row bound returns 422 with a clear message."""
+def test_dive_table_over_row_bound_falls_back_to_image(
+    mock_client: TestClient, patched_dive_grounding: Any
+) -> None:
+    """A table exceeding the row bound falls back to the rendered image and returns 200."""
+    patched_dive_grounding()
     rows = [["x"] for _ in range(TABLE_MAX_ROWS + 1)]
     response = mock_client.post("/dive", json=_table_body(rows=rows))
-    assert response.status_code == 422
-    detail = response.json()["detail"]
-    assert "row limit" in detail
+    assert response.status_code == 200, response.text
 
 
 # ============================================================

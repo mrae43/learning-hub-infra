@@ -193,11 +193,22 @@ def test_animated_gif_is_rejected() -> None:
 
 
 def test_table_passage_returns_table_block() -> None:
-    """A valid table yields a ``TableBlock`` carrying headers and rows."""
+    """A valid table yields a ``TableBlock`` carrying headers, rows, and a render."""
     result = transform_passage(_table(rows=[["a", "1"], ["b", "2"]], headers=["l", "v"]))
     assert isinstance(result, TableBlock)
     assert result.headers == ["l", "v"]
     assert result.rows == [["a", "1"], ["b", "2"]]
+    assert result.image.media_type == "image/png"
+
+
+def test_table_render_is_a_valid_png() -> None:
+    """The rendered table image decodes as a PNG matching its declared dimensions."""
+    result = transform_passage(_table(rows=[["a", "1"], ["b", "2"]], headers=["l", "v"]))
+    assert isinstance(result, TableBlock)
+    png = base64.b64decode(result.image.base64)
+    with Image.open(io.BytesIO(png)) as rendered:
+        assert rendered.format == "PNG"
+        assert rendered.size == (result.image.width, result.image.height)
 
 
 def test_table_passage_accepts_dict_rows() -> None:
@@ -227,33 +238,49 @@ def test_all_empty_rows_are_rejected() -> None:
         transform_passage(_table(rows=[[""], [""]]))
 
 
-def test_table_over_row_bound_is_rejected() -> None:
-    """A table exceeding the row bound is rejected."""
+def test_table_over_row_bound_falls_back_to_image() -> None:
+    """A table exceeding the row bound falls back to the rendered image alone."""
     rows = [["x"] for _ in range(TABLE_MAX_ROWS + 1)]
+    result = transform_passage(_table(rows=rows))
+    assert isinstance(result, ImageBlock)
+    assert result.media_type == "image/png"
+
+
+def test_table_over_column_bound_falls_back_to_image() -> None:
+    """A row exceeding the column bound falls back to the rendered image alone."""
+    row = ["x"] * (TABLE_MAX_COLUMNS + 1)
+    result = transform_passage(_table(rows=[row]))
+    assert isinstance(result, ImageBlock)
+
+
+def test_table_over_column_bound_in_headers_falls_back_to_image() -> None:
+    """Headers exceeding the column bound fall back to the rendered image alone."""
+    headers = ["h"] * (TABLE_MAX_COLUMNS + 1)
+    result = transform_passage(_table(rows=[["x"]], headers=headers))
+    assert isinstance(result, ImageBlock)
+
+
+def test_table_render_exceeding_image_dimension_is_rejected() -> None:
+    """An over-bounds table whose render exceeds the image dimension is rejected."""
+    rows = [["x" * 2000] for _ in range(TABLE_MAX_ROWS + 1)]
     with pytest.raises(PassageTransformError):
         transform_passage(_table(rows=rows))
 
 
-def test_table_over_column_bound_is_rejected() -> None:
-    """A table exceeding the column bound in a row is rejected."""
-    row = ["x"] * (TABLE_MAX_COLUMNS + 1)
-    with pytest.raises(PassageTransformError):
-        transform_passage(_table(rows=[row]))
-
-
-def test_table_over_column_bound_in_headers_is_rejected() -> None:
-    """Headers exceeding the column bound are rejected."""
-    headers = ["h"] * (TABLE_MAX_COLUMNS + 1)
-    with pytest.raises(PassageTransformError):
-        transform_passage(_table(rows=[["x"]], headers=headers))
+def test_table_long_cell_within_bounds_is_accepted() -> None:
+    """An in-bounds table with a wide cell is accepted; image bounds apply only to the fallback."""
+    result = transform_passage(_table(rows=[["x" * 2000]]))
+    assert isinstance(result, TableBlock)
+    assert result.image.media_type == "image/png"
 
 
 def test_table_boundary_shape_is_accepted() -> None:
-    """A table exactly at the row and column bounds is accepted."""
+    """A table exactly at the row and column bounds is accepted with a render."""
     rows = [["x"] * TABLE_MAX_COLUMNS for _ in range(TABLE_MAX_ROWS)]
     result = transform_passage(_table(rows=rows))
     assert isinstance(result, TableBlock)
     assert len(result.rows) == TABLE_MAX_ROWS
+    assert result.image.media_type == "image/png"
 
 
 # ============================================================
