@@ -249,6 +249,43 @@ def test_run_dive_recommends_and_applies_worked_example(patched_assembly: MagicM
     assert response.routing_note is None
 
 
+def test_run_dive_routes_unsupported_output_type_with_note(
+    patched_assembly: MagicMock,
+) -> None:
+    """An unsupported requested_output_type surfaces a routing note, not an error."""
+    response = run_dive(
+        HarnessBRequest(
+            captured_passage=_VALID_TEXT,
+            requested_output_type="carousel",
+        ),
+        session=MagicMock(),
+        embedder=InMemoryEmbedder(),
+        config=_CONFIG,
+        web_search=StubWebSearchClient(),
+        completion_provider=_completion(),
+    )
+    assert response.routing_note is not None
+    assert "carousel" in response.routing_note
+    assert response.output.output_type == "interactive_animation"
+
+
+def test_run_dive_accepts_supported_output_type(patched_assembly: MagicMock) -> None:
+    """A supported interactive_animation request produces no routing note."""
+    response = run_dive(
+        HarnessBRequest(
+            captured_passage=_VALID_TEXT,
+            requested_output_type="interactive_animation",
+        ),
+        session=MagicMock(),
+        embedder=InMemoryEmbedder(),
+        config=_CONFIG,
+        web_search=StubWebSearchClient(),
+        completion_provider=_completion(),
+    )
+    assert response.routing_note is None
+    assert response.output.output_type == "interactive_animation"
+
+
 def test_run_dive_mirrors_the_assembly_animation(monkeypatch: pytest.MonkeyPatch) -> None:
     """The harness returns the assembly agent's generated scene graph as output."""
     first_animation = build_fallback_animation("first dive")

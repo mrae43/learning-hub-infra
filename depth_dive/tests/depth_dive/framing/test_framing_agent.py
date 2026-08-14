@@ -144,6 +144,45 @@ def test_deferred_preferred_treatment_falls_back_with_note() -> None:
 
 
 # ------------------------------------------------------------
+# Output-type routing (spec §6, ticket #256)
+# ------------------------------------------------------------
+
+
+def test_supported_output_type_produces_no_note() -> None:
+    """A requested interactive_animation output type is honored with no note."""
+    brief = run_framing(_VALID_TEXT, requested_output_type="interactive_animation")
+    assert brief.routing_note is None
+    assert brief.applied_treatments == brief.recommended_treatments
+
+
+def test_absent_output_type_produces_no_note() -> None:
+    """Omitting requested_output_type contributes no routing note."""
+    brief = run_framing(_VALID_TEXT)
+    assert brief.routing_note is None
+
+
+def test_unsupported_output_type_falls_back_with_note() -> None:
+    """An unsupported output type falls back to interactive_animation with a note."""
+    brief = run_framing(_VALID_TEXT, requested_output_type="carousel")
+    assert brief.routing_note is not None
+    assert "carousel" in brief.routing_note
+    assert "interactive_animation" in brief.routing_note
+    assert brief.applied_treatments == brief.recommended_treatments
+
+
+def test_unsupported_output_type_combines_with_treatment_note() -> None:
+    """An output-type fallback and a treatment override surface both notes."""
+    brief = run_framing(
+        _VALID_TEXT,
+        requested_output_type="carousel",
+        requested_treatments=[Treatment.SEGMENTED_CAROUSEL],
+    )
+    assert brief.routing_note is not None
+    assert "carousel" in brief.routing_note
+    assert "explicit request" in brief.routing_note
+
+
+# ------------------------------------------------------------
 # Web-search intent decision
 # ------------------------------------------------------------
 

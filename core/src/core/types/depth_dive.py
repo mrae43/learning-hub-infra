@@ -13,6 +13,14 @@ from pydantic import BaseModel, ConfigDict, Field
 from core.types.captured_passage import CapturedPassage
 from core.types.responses import CitedPassage
 
+SUPPORTED_OUTPUT_TYPE = "interactive_animation"
+"""The single output type the MVP can honor (depth-dive spec §6).
+
+``requested_output_type`` is modeled as a free string rather than a
+``Literal`` so an unsupported value reaches the framing agent and is routed
+(with a ``routing_note``) instead of being rejected at the request boundary.
+"""
+
 
 class Treatment(StrEnum):
     """MVP pedagogical patterns layered onto an interactive animation (spec §3).
@@ -154,7 +162,7 @@ class HarnessBRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     captured_passage: CapturedPassage
-    requested_output_type: Literal["interactive_animation"] | None = None
+    requested_output_type: str | None = None
     requested_treatments: list[TreatmentHint] | None = None
     preferred_treatments: list[TreatmentHint] | None = None
     client_passage_id: str | None = None
@@ -177,6 +185,7 @@ class HarnessBResponse(BaseModel):
 
 
 __all__ = [
+    "SUPPORTED_OUTPUT_TYPE",
     "AnimationStep",
     "DeferredTreatment",
     "ElementState",

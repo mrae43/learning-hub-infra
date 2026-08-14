@@ -60,13 +60,27 @@ def test_harness_b_request_rejects_missing_passage() -> None:
         HarnessBRequest()  # type: ignore[call-arg]
 
 
-def test_harness_b_request_rejects_unknown_output_type() -> None:
-    """HarnessBRequest restricts requested_output_type to interactive_animation."""
-    with pytest.raises(ValidationError):
-        HarnessBRequest(
-            captured_passage=TextPassage(content="x"),
-            requested_output_type="carousel",  # type: ignore[arg-type]
-        )
+def test_harness_b_request_accepts_supported_output_type() -> None:
+    """HarnessBRequest accepts the supported interactive_animation output type."""
+    body = HarnessBRequest(
+        captured_passage=TextPassage(content="x"),
+        requested_output_type="interactive_animation",
+    )
+    assert body.requested_output_type == "interactive_animation"
+
+
+def test_harness_b_request_accepts_unknown_output_type() -> None:
+    """An unsupported requested_output_type is accepted at the boundary.
+
+    The framing agent (not request validation) is responsible for honoring it
+    or falling back with a ``routing_note`` (spec §6), so the field is a free
+    string rather than a ``Literal``.
+    """
+    body = HarnessBRequest(
+        captured_passage=TextPassage(content="x"),
+        requested_output_type="carousel",
+    )
+    assert body.requested_output_type == "carousel"
 
 
 def test_harness_b_response_serializes_scene_graph() -> None:
