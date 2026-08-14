@@ -5,6 +5,10 @@ through the shared ``core/retrieval/`` primitives (ADR-0019):
 
 - An anchored ``text``/``code`` passage (``chunk_id``) fetches the enclosing
   Parent Chunk plus up to K semantic neighbors from the global corpus.
+- An anchored ``image``/``diagram``/``table`` passage (``document_id`` +
+  ordinal) fetches document-relative text context near the figure/table plus
+  semantic neighbors on the passage's embeddable representation (spec §8,
+  ticket #253).
 - Every other passage runs the corpus-similarity gate on the passage's
   embeddable representation; the gate's threshold and grounded/unverified
   judgement are Depth Dive harness policy (ADR-0019, ADR-0020).
@@ -17,13 +21,14 @@ step (ticket #245), which builds a scene graph from the brief, the cited
 passages, and any search results.
 """
 
+from collections.abc import Sequence
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from core.clients import CompletionProvider, Embedder
-from core.retrieval import fetch_parent_chunk, search_dense_neighbors
+from core.retrieval import fetch_document_chunks, fetch_parent_chunk, search_dense_neighbors
 from core.types.captured_passage import (
     CapturedPassage,
     CodePassage,
@@ -34,7 +39,7 @@ from core.types.captured_passage import (
     TextPassage,
 )
 from core.types.depth_dive import InteractiveAnimation
-from core.types.responses import CitedPassage
+from core.types.responses import CitedPassage, ScoredChunk
 from core.types.retrieval_config import RetrievalConfig
 from depth_dive.framing.framing_agent import FramingBrief
 from depth_dive.generation.generation_agent import run_generation
@@ -136,6 +141,13 @@ def run_assembly(
         grounding = _ground_anchored(
             passage, passage.chunk_id, session=session, embedder=embedder, config=config
         )
+    elif (
+        isinstance(passage, (ImagePassage, DiagramPassage, TablePassage))
+        and passage.document_id is not None
+    ):
+        grounding = _ground_anchored_document(
+            passage, passage.document_id, session=session, embedder=embedder, config=config
+        )
     else:
         grounding = _ground_via_gate(passage, session=session, embedder=embedder, config=config)
     outcome = _search_outcome(brief, web_search)
@@ -188,13 +200,60 @@ def _ground_anchored(
     query_vector = embedder.embed([passage.content])[0]
     neighbors = search_dense_neighbors(session=session, query_vector=query_vector, config=config)
     cited = [parent]
-    seen = {parent.chunk_id, chunk_id}
+    _append_neighbors(cited, neighbors, seen={parent.chunk_id, chunk_id})
+    return GroundingResult(grounded=True, cited_passages=cited)
+
+
+def _ground_anchored_document(
+    passage: ImagePassage | DiagramPassage | TablePassage,
+    document_id: UUID,
+    *,
+    session: Session,
+    embedder: Embedder,
+    config: RetrievalConfig,
+) -> GroundingResult:
+    """Ground an anchored non-text passage: document context + K neighbors.
+
+    Document-relative text context leads the citations; semantic neighbors on
+    the passage's embeddable representation (caption or serialized table)
+    follow. The anchor is valid whenever the ``document_id`` resolves to a
+    ``status='ready'`` document; the ``ordinal`` is carried as provenance but
+    is not yet resolvable against the text-only store (no non-text storage).
+    """
+    document_chunks = fetch_document_chunks(
+        session=session, document_id=document_id, limit=config.top_k
+    )
+    if document_chunks is None:
+        return GroundingResult(grounded=False, cited_passages=[])
+    cited = list(document_chunks)
+    embeddable = _embeddable_text(passage)
+    if embeddable is not None:
+        query_vector = embedder.embed([embeddable])[0]
+        neighbors = search_dense_neighbors(
+            session=session, query_vector=query_vector, config=config
+        )
+        _append_neighbors(cited, neighbors, seen={c.chunk_id for c in cited})
+    if not cited:
+        return GroundingResult(grounded=False, cited_passages=[])
+    return GroundingResult(grounded=True, cited_passages=cited)
+
+
+def _append_neighbors(
+    cited: list[CitedPassage],
+    neighbors: Sequence[ScoredChunk],
+    *,
+    seen: set[UUID],
+) -> None:
+    """Append neighbors whose chunk id is not already cited, deduplicating.
+
+    Mutates ``cited`` in place. ``seen`` seeds the already-cited id set; every
+    appended neighbor's id is added to it so duplicates are cited once.
+    """
     for neighbor in neighbors:
         if neighbor.chunk_id in seen:
             continue
         seen.add(neighbor.chunk_id)
         cited.append(CitedPassage(chunk_id=neighbor.chunk_id, text=neighbor.text))
-    return GroundingResult(grounded=True, cited_passages=cited)
 
 
 def _ground_via_gate(
