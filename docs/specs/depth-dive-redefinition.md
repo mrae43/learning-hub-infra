@@ -293,7 +293,7 @@ New standalone Pydantic models in `core/types/depth_dive.py`. `CapturedPassage` 
 | Field | Type | Description |
 |---|---|---|
 | `captured_passage` | `CapturedPassage` | One captured passage per request. |
-| `requested_output_type` | `Literal["interactive_animation"] \| None` | Forward-compatible. |
+| `requested_output_type` | `str \| None` | Forward-compatible; unsupported values fall back to `interactive_animation` with a `routing_note` (never a 422). |
 | `requested_treatments` | `list[Treatment] \| None` | Explicit ask. |
 | `preferred_treatments` | `list[Treatment] \| None` | UI-supplied, request-time only. |
 | `client_passage_id` | `str \| None` | UI-only; backend ignores. |

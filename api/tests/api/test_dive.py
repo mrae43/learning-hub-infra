@@ -304,6 +304,32 @@ def test_dive_deferred_treatment_is_accepted_and_routed_not_422(
     assert "analogy_mapping" in data["routing_note"]
 
 
+def test_dive_unsupported_output_type_is_routed_not_422(
+    mock_client: TestClient, patched_dive_grounding: Any
+) -> None:
+    """An unsupported requested_output_type returns 200 with a routing note."""
+    patched_dive_grounding()
+    body = {**_VALID_BODY, "requested_output_type": "carousel"}
+    response = mock_client.post("/dive", json=body)
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["output"]["output_type"] == "interactive_animation"
+    assert data["routing_note"] is not None
+    assert "carousel" in data["routing_note"]
+
+
+def test_dive_supported_output_type_returns_no_routing_note(
+    mock_client: TestClient, patched_dive_grounding: Any
+) -> None:
+    """A supported interactive_animation request routes without a note."""
+    patched_dive_grounding()
+    body = {**_VALID_BODY, "requested_output_type": "interactive_animation"}
+    response = mock_client.post("/dive", json=body)
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["routing_note"] is None
+
+
 # ============================================================
 # 200 + 422 — image, diagram, and table passages
 # ============================================================

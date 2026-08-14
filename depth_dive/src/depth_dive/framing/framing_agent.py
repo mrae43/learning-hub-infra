@@ -25,7 +25,12 @@ from core.types.captured_passage import (
     TablePassage,
     TextPassage,
 )
-from core.types.depth_dive import DeferredTreatment, Treatment, TreatmentHint
+from core.types.depth_dive import (
+    SUPPORTED_OUTPUT_TYPE,
+    DeferredTreatment,
+    Treatment,
+    TreatmentHint,
+)
 
 _SEARCH_INTENT_MAX_CHARS = 200
 """Cap on the length of a derived web-search intent."""
@@ -57,6 +62,7 @@ def run_framing(
     *,
     requested_treatments: Sequence[TreatmentHint] | None = None,
     preferred_treatments: Sequence[TreatmentHint] | None = None,
+    requested_output_type: str | None = None,
 ) -> FramingBrief:
     """Produce the framing brief for one captured passage and request hints.
 
@@ -66,6 +72,9 @@ def run_framing(
             deferred/still-deferred names).
         preferred_treatments: UI-supplied, request-time-only treatment
             preferences.
+        requested_output_type: Explicit, user-typed output-type ask. MVP
+            supports only ``interactive_animation`` (spec §6); any other value
+            falls back with a ``routing_note`` rather than an error.
 
     Returns:
         A ``FramingBrief`` carrying the recommended and applied treatments,
@@ -73,12 +82,15 @@ def run_framing(
         per-request web-search intent.
     """
     recommended = _recommend_treatments(passage)
-    applied, notes = _resolve_treatments(requested_treatments, preferred_treatments, recommended)
+    applied, treatment_notes = _resolve_treatments(
+        requested_treatments, preferred_treatments, recommended
+    )
+    output_notes = _resolve_output_type_notes(requested_output_type)
     return FramingBrief(
         concept=_concept(passage),
         recommended_treatments=recommended,
         applied_treatments=applied,
-        routing_note=_join_notes(notes),
+        routing_note=_join_notes([*output_notes, *treatment_notes]),
         search_intent=_decide_search_intent(passage),
     )
 
@@ -124,6 +136,22 @@ def _resolve_treatments(
                 notes.append(override_note)
             return applied, notes
     return list(recommendation), []
+
+
+def _resolve_output_type_notes(requested: str | None) -> list[str]:
+    """Return a routing note when the requested output type is unsupported.
+
+    MVP supports only ``interactive_animation`` (spec §6), so a request for the
+    supported type — or no request at all — produces no note. Any other value
+    cannot be honored, so it falls back to the supported type with an
+    explanatory note rather than a hard error. The resolved output type is
+    always the supported one; the note records the override. An incompatible
+    output-type/treatment combination cannot arise in MVP because every
+    treatment layers onto the single supported output type.
+    """
+    if requested is None or requested == SUPPORTED_OUTPUT_TYPE:
+        return []
+    return [f"unsupported output type {requested!r}, falling back to {SUPPORTED_OUTPUT_TYPE}"]
 
 
 def _filter_supported(hints: Sequence[TreatmentHint]) -> tuple[list[Treatment], list[str]]:

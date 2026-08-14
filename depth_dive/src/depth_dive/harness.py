@@ -68,6 +68,7 @@ def run_dive(
         request.captured_passage,
         requested_treatments=request.requested_treatments,
         preferred_treatments=request.preferred_treatments,
+        requested_output_type=request.requested_output_type,
     )
     assembly = run_assembly(
         request.captured_passage,
