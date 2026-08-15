@@ -63,3 +63,6 @@ The stand-in that plays the role of the hosted embeddings, inference, and web-se
 
 ## Edge Gate
 The self-hosted reverse proxy placed in front of the deployed service when it becomes reachable outside the local Docker network — the scaffolding for ADR-0018's graduation trigger. Terminates TLS and enforces basic-auth on every route except the health probe, so the api remains auth-less (per ADR-0018) while the public demo URL stays gated. Exists as scaffold only until the public/VPS phase executes it.
+
+## Load Generator
+The Locust-based traffic source that drives load runs against the deployed service, replaying eval-corpus queries against `/query` and `/dive` (with `/health` as a low-rate liveness task). Two run profiles: **volume** (mock upstream, sustained) and **smoke** (real API, budgeted). Success for a run is judged by error-rate and p95-latency ceilings that the alert rules and runbook key on.
