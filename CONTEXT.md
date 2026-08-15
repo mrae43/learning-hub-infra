@@ -60,3 +60,6 @@ Four-stratum classification of eval queries:
 
 ## Mock Upstream
 The stand-in that plays the role of the hosted embeddings, inference, and web-search APIs during volume load runs, so a load test exercises the deployed service without spending real API budget or hitting rate limits. Used only for volume runs; budgeted smoke runs hit the real APIs unchanged.
+
+## Edge Gate
+The self-hosted reverse proxy placed in front of the deployed service when it becomes reachable outside the local Docker network — the scaffolding for ADR-0018's graduation trigger. Terminates TLS and enforces basic-auth on every route except the health probe, so the api remains auth-less (per ADR-0018) while the public demo URL stays gated. Exists as scaffold only until the public/VPS phase executes it.
