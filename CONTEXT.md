@@ -57,3 +57,6 @@ Four-stratum classification of eval queries:
 - *Exact-match / keyword* (sparse-friendly) — API names, error codes, CLI flags
 - *Context-dependent* (parent-child matters) — requires the enclosing section to answer precisely
 - *Multi-hop / reasoning* (decomposition prep) — relates two or more concepts across different parts of the corpus
+
+## Mock Upstream
+The stand-in that plays the role of the hosted embeddings, inference, and web-search APIs during volume load runs, so a load test exercises the deployed service without spending real API budget or hitting rate limits. Used only for volume runs; budgeted smoke runs hit the real APIs unchanged.
