@@ -66,3 +66,9 @@ The self-hosted reverse proxy placed in front of the deployed service when it be
 
 ## Load Generator
 The Locust-based traffic source that drives load runs against the deployed service, replaying eval-corpus queries against `/query` and `/dive` (with `/health` as a low-rate liveness task). Two run profiles: **volume** (mock upstream, sustained) and **smoke** (real API, budgeted). Success for a run is judged by error-rate and p95-latency ceilings that the alert rules and runbook key on.
+
+## Alert Rule
+A threshold-based monitoring condition that fires when a service symptom crosses a defined limit — service down, upstream 502/503 spike, high p95 latency, internal 5xx spike, or ingestion failed-state. Each rule carries a severity and maps to one runbook entry.
+
+## Runbook
+The operator-facing document that maps each alert to its incident response: the symptom that fires it, the diagnosis steps to confirm and localise the failure, and the recovery actions that restore service. Tied 1:1 to the alert rule set, so every alert has exactly one runbook entry.
