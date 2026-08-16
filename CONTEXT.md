@@ -72,3 +72,6 @@ A threshold-based monitoring condition that fires when a service symptom crosses
 
 ## Runbook
 The operator-facing document that maps each alert to its incident response: the symptom that fires it, the diagnosis steps to confirm and localise the failure, and the recovery actions that restore service. Tied 1:1 to the alert rule set, so every alert has exactly one runbook entry.
+
+## Backup Posture
+The standing policy deciding which deployed data is preserved: only the ingested corpus (the app's pgvector database) is backed up, via `pg_dump` of that single database; every observability store (Langfuse, ClickHouse, MinIO, Prometheus, Grafana) is treated as ephemeral and regenerable, never backed up. Locks the what/where of backups now; the scheduling and off-box copy belong to the VPS/hybrid phase.
