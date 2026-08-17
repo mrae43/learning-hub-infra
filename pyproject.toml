@@ -16,10 +16,10 @@ dev = [
     "pytest>=8",
     "import-linter>=2.1",
     "pip-licenses>=5",
-    "httpx2>=2.9.1",
+    "httpx2>=2.10.0",
     "reportlab>=4.0",
     "types-reportlab>=4.5.1.20260807",
-    "deepeval>=4.1.5",
+    "deepeval>=4.1.8",
     "pyyaml>=6.0",
     "types-pyyaml>=6.0.12.20260724",
 ]

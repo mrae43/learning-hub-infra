@@ -13,7 +13,7 @@ dependencies = [
     "ingestion",
     "pyyaml>=6.0",
     "requests>=2.34",
-    "sqlalchemy>=2",
+    "sqlalchemy>=2.0.52",
 ]
 
 [tool.uv.sources]
