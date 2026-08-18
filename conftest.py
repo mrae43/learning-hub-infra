@@ -33,6 +33,7 @@ import depth_dive.transform
 import depth_dive.web_search.client
 import depth_dive.web_search.wrapper  # noqa: F401
 import ingestion.tasks  # noqa: F401
+import mock_upstream.app  # noqa: F401
 import retrieval_qa.chunking.book_chunker
 import retrieval_qa.chunking.documentation_chunker
 import retrieval_qa.chunking.paper_chunker  # noqa: F401

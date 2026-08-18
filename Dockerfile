@@ -16,6 +16,7 @@ COPY depth_dive/pyproject.toml ./depth_dive/
 COPY api/pyproject.toml ./api/
 COPY ingestion/pyproject.toml ./ingestion/
 COPY scripts/pyproject.toml ./scripts/
+COPY mock_upstream/pyproject.toml ./mock_upstream/
 
 # Install third-party dependencies without the workspace members. The cache
 # mount keeps wheels in the local uv cache even when a lockfile change
@@ -32,9 +33,11 @@ COPY ingestion/src ./ingestion/src
 COPY alembic.ini ./
 COPY scripts/*.py ./scripts/
 
-# Install the workspace members on top of the third-party dependencies.
+# Install the workspace members on top of the third-party dependencies. The
+# mock-upstream package is deliberately excluded: it runs as its own compose
+# service (mock_upstream/Dockerfile) and must never enter the api image.
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --all-packages --no-dev --no-editable --frozen
+    uv sync --all-packages --no-dev --no-editable --frozen --no-install-package mock-upstream
 
 FROM python:3.12-slim
 WORKDIR /app

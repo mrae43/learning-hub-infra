@@ -23,6 +23,7 @@ def get_embedder() -> Embedder:
     return EmbeddingsClient(
         api_key=settings.openai_api_key,
         model=settings.embedding_model,
+        base_url=settings.openai_base_url,
     )
 
 
@@ -31,6 +32,7 @@ def get_completion_provider() -> CompletionProvider:
     return LLMClient(
         api_key=settings.openai_api_key,
         model=settings.inference_model,
+        base_url=settings.openai_base_url,
     )
 
 
@@ -47,7 +49,10 @@ def get_reranker() -> Reranker:
 
 def get_web_search_client() -> WebSearchClient:
     """Return the configured web-search provider for Depth Dive."""
-    return OpenAIWebSearchClient(api_key=settings.openai_api_key)
+    return OpenAIWebSearchClient(
+        api_key=settings.openai_api_key,
+        base_url=settings.openai_base_url,
+    )
 
 
 __all__ = [

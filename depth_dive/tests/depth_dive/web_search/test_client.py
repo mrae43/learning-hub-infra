@@ -12,6 +12,8 @@ import pytest
 from openai import APIConnectionError, APIStatusError, OpenAIError
 from openai.types.responses import Response
 
+from core.config.settings import settings
+from depth_dive.web_search import client as web_search_module
 from depth_dive.web_search.client import (
     OpenAIWebSearchClient,
     StubWebSearchClient,
@@ -169,6 +171,45 @@ def test_openai_client_uses_web_search_tool() -> None:
     kwargs = fake.responses.create.call_args.kwargs
     assert kwargs["input"] == "attention is all you need"
     assert kwargs["tools"] == [{"type": "web_search"}]
+
+
+def test_openai_client_threads_explicit_base_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The OpenAI client is constructed with the caller's base_url."""
+    captured: dict[str, object] = {}
+
+    def _fake_openai(**kwargs: object) -> MagicMock:
+        captured.update(kwargs)
+        client = MagicMock()
+        client.responses.create = MagicMock(
+            return_value=Response.model_validate(_response_payload(annotation=None))
+        )
+        return client
+
+    monkeypatch.setattr(web_search_module, "OpenAI", _fake_openai)
+    client = OpenAIWebSearchClient(api_key="sk-test", model="test-model", base_url="http://mock/v1")
+    client.search("attention is all you need")
+
+    assert captured["base_url"] == "http://mock/v1"
+
+
+def test_openai_client_threads_settings_base_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    """With no explicit base_url, settings.openai_base_url is used."""
+    captured: dict[str, object] = {}
+
+    def _fake_openai(**kwargs: object) -> MagicMock:
+        captured.update(kwargs)
+        client = MagicMock()
+        client.responses.create = MagicMock(
+            return_value=Response.model_validate(_response_payload(annotation=None))
+        )
+        return client
+
+    monkeypatch.setattr(settings, "openai_base_url", "http://mock/v1")
+    monkeypatch.setattr(web_search_module, "OpenAI", _fake_openai)
+    client = OpenAIWebSearchClient(api_key="sk-test", model="test-model")
+    client.search("attention is all you need")
+
+    assert captured["base_url"] == "http://mock/v1"
 
 
 def test_stub_client_returns_configured_results() -> None:

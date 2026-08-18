@@ -54,6 +54,11 @@ jobs:
               - 'pyproject.toml'
               - 'uv.lock'
               - '.github/workflows/ci.yml'
+            mock_upstream:
+              - 'mock_upstream/**'
+              - 'pyproject.toml'
+              - 'uv.lock'
+              - '.github/workflows/ci.yml'
 
   # 2. THE QUALITY JOB (DYNAMIC MATRIX)
   quality:

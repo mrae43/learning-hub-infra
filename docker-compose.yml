@@ -15,6 +15,22 @@ services:
       timeout: 5s
       retries: 5
 
+  mock-upstream:
+    build:
+      context: .
+      dockerfile: mock_upstream/Dockerfile
+    profiles: ["load"]
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      MOCK_LATENCY_ENABLED: ${MOCK_LATENCY_ENABLED:-true}
+      MOCK_EMBEDDINGS_LATENCY_MIN_MS: ${MOCK_EMBEDDINGS_LATENCY_MIN_MS:-30}
+      MOCK_EMBEDDINGS_LATENCY_MAX_MS: ${MOCK_EMBEDDINGS_LATENCY_MAX_MS:-80}
+      MOCK_CHAT_LATENCY_MIN_MS: ${MOCK_CHAT_LATENCY_MIN_MS:-150}
+      MOCK_CHAT_LATENCY_MAX_MS: ${MOCK_CHAT_LATENCY_MAX_MS:-400}
+      MOCK_WEB_SEARCH_LATENCY_MIN_MS: ${MOCK_WEB_SEARCH_LATENCY_MIN_MS:-150}
+      MOCK_WEB_SEARCH_LATENCY_MAX_MS: ${MOCK_WEB_SEARCH_LATENCY_MAX_MS:-400}
+
   api:
     build: .
     restart: unless-stopped
@@ -24,6 +40,9 @@ services:
       - .env
     environment:
       DATABASE_URL: postgresql+psycopg2://learning_hub:learning_hub@postgres:5432/learning_hub
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      COHERE_API_KEY: ${COHERE_API_KEY:-}
     depends_on:
       postgres:
         condition: service_healthy

@@ -11,7 +11,7 @@ from typing import Protocol, runtime_checkable
 
 from openai import APIConnectionError, APIStatusError, OpenAI
 
-from core.config.settings import settings
+from core.config.settings import resolve_openai_base_url, settings
 from core.exceptions import UpstreamBadResponse, UpstreamUnavailable
 from core.types.chat import ChatMessage
 
@@ -44,21 +44,32 @@ class LLMClient:
     Harness A's contract is plain text output only (CONTEXT.md).
     """
 
-    def __init__(self, api_key: str | None = None, model: str | None = None) -> None:
+    def __init__(
+        self,
+        api_key: str | None = None,
+        model: str | None = None,
+        base_url: str | None = None,
+    ) -> None:
         """Initialize the client.
 
         Args:
             api_key: OpenAI API key. Defaults to ``settings.openai_api_key``.
             model: Chat-completion model ID. Defaults to
                 ``settings.inference_model``.
+            base_url: Base URL override for the OpenAI endpoint. Defaults to
+                ``settings.openai_base_url``; ``None`` uses the SDK default so
+                the mock upstream can redirect the client for volume load runs.
         """
         self._model = model or settings.inference_model
         self._api_key = api_key or settings.openai_api_key
+        self._base_url = resolve_openai_base_url(base_url)
         self._client: OpenAI | None = None
 
     def _get_client(self) -> OpenAI:
         if self._client is None:
-            self._client = OpenAI(api_key=self._api_key, timeout=60.0, max_retries=2)
+            self._client = OpenAI(
+                api_key=self._api_key, timeout=60.0, max_retries=2, base_url=self._base_url
+            )
         return self._client
 
     def chat(self, messages: Sequence[ChatMessage]) -> str:

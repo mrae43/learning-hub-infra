@@ -23,11 +23,11 @@ A hand-rolled RAG study tool for learning AI/ML from papers, books, and document
 | Post-MVP 1 | **Depth Dive** — richer explanations (text + diagrams + code) with agentic web search | ✅ Operational |
 | Post-MVP 2 | **Concept Linking + Retrieval Practice / Spaced Repetition** — query-independent relationship surfacing and review-style learning triggers | 📅 Planned |
 
-> **Status:** Early implementation — tracer bullet complete. All six packages (`core/`, `retrieval_qa/`, `depth_dive/`, `api/`, `ingestion/`, `scripts/`) have implementation code (~7,800 source lines, plus ~10,700 lines of tests). `depth_dive/` runs the full Harness B: transform → framing → assembly (corpus grounding + retry-once web search) → LLM generation of the `interactive_animation` scene graph. Ingestion pipeline, Harness A query pipeline, five API endpoints (`POST /ingest`, `GET /documents/{id}`, `POST /query`, `POST /dive`, `GET /health`), and the `scripts/` eval & chunk-size-tuning tooling are operational. See [docs/](./docs/) for architecture decisions and plans.
+> **Status:** Early implementation — tracer bullet complete. All seven packages (`core/`, `retrieval_qa/`, `depth_dive/`, `api/`, `ingestion/`, `mock_upstream/`, `scripts/`) have implementation code (~7,800 source lines, plus ~10,700 lines of tests). `depth_dive/` runs the full Harness B: transform → framing → assembly (corpus grounding + retry-once web search) → LLM generation of the `interactive_animation` scene graph. Ingestion pipeline, Harness A query pipeline, five API endpoints (`POST /ingest`, `GET /documents/{id}`, `POST /query`, `POST /dive`, `GET /health`), and the `scripts/` eval & chunk-size-tuning tooling are operational. The `mock_upstream/` package stands in for hosted OpenAI APIs during volume load runs (activated by the `load` compose profile). See [docs/](./docs/) for architecture decisions and plans.
 
 ## Local development
 
-The root `Makefile` wraps the local dev container lifecycle defined in `docker-compose.yml` (Postgres + pgvector): `make up` to start the stack in the background, `make logs` to tail service logs (`make logs SERVICE=postgres` scopes to one service), and `make down` to stop and remove containers/network — `down` never deletes the pgvector data volume. Run `make help` to list every target. Docker's daemon must be running; `up`/`logs`/`down` fail fast with a clear message if it isn't. Per-package checks (`ruff`, `mypy`, `pytest`) stay explicit `uv run` invocations.
+The root `Makefile` wraps the local dev container lifecycle defined in `docker-compose.yml` (Postgres + pgvector): `make up` to start the stack in the background, `make logs` to tail service logs (`make logs SERVICE=postgres` scopes to one service), and `make down` to stop and remove containers/network — `down` never deletes the pgvector data volume. `make load-up` starts the volume-load stack: the `load` compose profile adds the OpenAI-compatible `mock-upstream` service and points the api at it (`OPENAI_BASE_URL`), so `/query` and `/dive` return deterministic answers with no real API key or outbound calls (`make load-down` stops it). Run `make help` to list every target. Docker's daemon must be running; `up`/`logs`/`down` fail fast with a clear message if it isn't. Per-package checks (`ruff`, `mypy`, `pytest`) stay explicit `uv run` invocations.
 
 ## Architecture
 
@@ -40,6 +40,7 @@ Structured monorepo with extractable module boundaries:
 | `depth_dive/`   | Depth Dive generation (post-MVP 1)                             |
 | `api/`          | FastAPI server (thin routes → controllers)                     |
 | `ingestion/`    | Document upload + background ingestion pipeline                |
+| `mock_upstream/`| OpenAI-compatible mock of hosted embeddings/inference/web-search for volume load runs |
 | `scripts/`      | Retrieval eval & chunk-size tuning tooling over `eval_corpus/` |
 | `eval_corpus/`  | Retrieval eval & tuning corpus (books, papers, synthetic)      |
 
@@ -55,7 +56,7 @@ Structured monorepo with extractable module boundaries:
 
 **FastAPI BackgroundTasks for ingestion.** No lost jobs yet — a dedicated queue (arq/Redis) gets added when that becomes a real pain point ([ADR-0006](./docs/adr/0006-backgroundtask-for-mvp-ingestion.md)).
 
-**Structured monorepo.** Six packages with independent `pyproject.toml` files, test suites, and CI jobs — extractable later via `git subtree split` ([ADR-0005](./docs/adr/0005-structured-monorepo.md)). Module boundaries enforced by `import-linter` in CI ([ADR-0011](./docs/adr/0011-import-linter-module-boundaries.md)).
+**Structured monorepo.** Seven packages with independent `pyproject.toml` files, test suites, and CI jobs — extractable later via `git subtree split` ([ADR-0005](./docs/adr/0005-structured-monorepo.md)). Module boundaries enforced by `import-linter` in CI ([ADR-0011](./docs/adr/0011-import-linter-module-boundaries.md)).
 
 ## Challenges solved
 

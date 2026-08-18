@@ -6,7 +6,7 @@ from typing import Protocol, runtime_checkable
 from openai import APIConnectionError, APIStatusError, AsyncOpenAI, OpenAI
 from openai.types.create_embedding_response import CreateEmbeddingResponse
 
-from core.config.settings import settings
+from core.config.settings import resolve_openai_base_url, settings
 from core.exceptions import UpstreamBadResponse, UpstreamUnavailable
 
 
@@ -38,21 +38,32 @@ class EmbeddingsClient:
     uses ``text-embedding-3-small`` producing 1536-dim vectors (ADR-0014).
     """
 
-    def __init__(self, api_key: str | None = None, model: str | None = None) -> None:
+    def __init__(
+        self,
+        api_key: str | None = None,
+        model: str | None = None,
+        base_url: str | None = None,
+    ) -> None:
         """Initialize the client.
 
         Args:
             api_key: OpenAI API key. Defaults to ``settings.openai_api_key``.
             model: Embedding model ID. Defaults to ``settings.embedding_model``.
+            base_url: Base URL override for the OpenAI endpoint. Defaults to
+                ``settings.openai_base_url``; ``None`` uses the SDK default so
+                the mock upstream can redirect the client for volume load runs.
         """
         self._model = model or settings.embedding_model
         self._client: OpenAI | None = None
         self._async_client: AsyncOpenAI | None = None
         self._api_key = api_key or settings.openai_api_key
+        self._base_url = resolve_openai_base_url(base_url)
 
     def _get_client(self) -> OpenAI:
         if self._client is None:
-            self._client = OpenAI(api_key=self._api_key, timeout=30.0, max_retries=2)
+            self._client = OpenAI(
+                api_key=self._api_key, timeout=30.0, max_retries=2, base_url=self._base_url
+            )
         return self._client
 
     def embed(self, texts: Sequence[str]) -> list[list[float]]:
@@ -85,7 +96,9 @@ class EmbeddingsClient:
     async def aembed(self, texts: Sequence[str]) -> list[list[float]]:
         """Embed a batch of texts asynchronously."""
         if self._async_client is None:
-            self._async_client = AsyncOpenAI(api_key=self._api_key, timeout=30.0, max_retries=2)
+            self._async_client = AsyncOpenAI(
+                api_key=self._api_key, timeout=30.0, max_retries=2, base_url=self._base_url
+            )
         try:
             response = await self._async_client.embeddings.create(
                 input=list(texts),

@@ -98,6 +98,14 @@ learning-hub/
 │   ├── tests/ingestion/              # pipeline/splitting/tasks unit tests
 │   ├── tests/integration/            # real-API ingestion tests (integration-marked)
 │   └── pyproject.toml
+├── mock_upstream/                   # OpenAI-compatible mock of hosted APIs for volume load runs
+│   ├── src/mock_upstream/
+│   │   ├── app.py                   # FastAPI app: /v1/embeddings, /v1/chat/completions, /v1/responses
+│   │   ├── settings.py              # MOCK_* latency configuration
+│   │   └── __init__.py
+│   ├── tests/mock_upstream/         # endpoint shape + OpenAI SDK compatibility tests
+│   ├── Dockerfile                   # Standalone image (never enters the api image)
+│   └── pyproject.toml
 ├── scripts/                          # Eval & chunk-size tuning tooling
 │   ├── __init__.py
 │   ├── eval_metrics.py               # Recall@k, MRR, is_hit metrics
@@ -148,7 +156,7 @@ learning-hub/
 ├── docker-entrypoint.sh              # Container entrypoint: alembic upgrade + uvicorn
 ├── commitlint.config.mjs             # Conventional Commits enforcement
 ├── docker-compose.yml                # Local dev: PostgreSQL + pgvector
-├── Dockerfile                        # Multi-stage build (all 6 packages)
+├── Dockerfile                        # Multi-stage build (all 7 packages)
 ├── .env.example
 ├── skills-lock.json                  # Pinned agent skill versions
 ├── tuning_results.json               # Chunk-size tuning run output
