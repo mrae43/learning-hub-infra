@@ -10,6 +10,16 @@ SHELL := /bin/bash
 # Scope `make logs` to a single service, e.g. `make logs SERVICE=postgres`.
 SERVICE ?=
 
+# Image tag pulled by `make deploy`. Defaults to `latest`; override for
+# rollback, e.g. `make deploy IMAGE_TAG=1.2.3` (published semver tags carry no
+# `v` prefix). Exported so the compose.deploy.yml `image:` interpolation sees it.
+IMAGE_TAG ?= latest
+export IMAGE_TAG
+
+# Bounded /health poll used by `make deploy` (via scripts/health-poll.sh).
+HEALTH_POLL_ATTEMPTS ?= 30
+HEALTH_POLL_INTERVAL ?= 2
+
 .PHONY: help
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'
@@ -37,3 +47,10 @@ load-up: check-docker ## Start the volume-load stack (mock upstream + api) in th
 .PHONY: load-down
 load-down: check-docker ## Stop the volume-load stack (never deletes the pgvector data volume)
 	docker compose --profile load down
+
+.PHONY: deploy
+deploy: check-docker ## Deploy the demo stack from the published GHCR image (pull, no-build up, poll /health)
+	docker compose -f docker-compose.yml -f compose.deploy.yml pull
+	docker compose -f docker-compose.yml -f compose.deploy.yml up -d --no-build
+	@bash scripts/health-poll.sh $(HEALTH_POLL_ATTEMPTS) $(HEALTH_POLL_INTERVAL) \
+		|| (docker compose -f docker-compose.yml -f compose.deploy.yml logs api; exit 1)

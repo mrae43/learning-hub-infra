@@ -1,0 +1,21 @@
+# Deploy override: run the demo stack from the published GHCR image instead of
+# a local build. CI (`cd.yml`) is the single build path; this file is how a
+# deployed copy pulls the published artifact. Dev keeps `docker compose up -d`
+# (local `build: .`); deploy always pulls.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f compose.deploy.yml up -d --no-build
+#   IMAGE_TAG=1.2.3 docker compose -f docker-compose.yml -f compose.deploy.yml up -d --no-build
+#
+# IMAGE_TAG defaults to `latest` and is overridable for rollback (re-run with
+# a previous tag, e.g. `IMAGE_TAG=1.2.3`). No digest pinning locally
+# (scaffold-for-hybrid, wayfinder #273).
+#
+# Requires Docker Compose v2.24+ — the `!reset` tag (Compose spec) is what
+# removes the base `build:` key; older compose would keep `build` and `image`
+# both set. `make deploy` never builds, so an image-only result is what deploy
+# wants either way, but this keeps the merged config honest.
+services:
+  api:
+    image: ghcr.io/mrae43/learning-hub-infra:${IMAGE_TAG:-latest}
+    build: !reset null
