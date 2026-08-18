@@ -64,7 +64,7 @@ jobs:
           # compose.deploy.yml's api service uses `.env` as env_file; it is
           # gitignored, so create an empty one (compose defaults supply the rest).
           touch .env
-          if [ "${{ github.event_name }}" = "push" ] && [[ "${{ github.ref }}" == refs/tags/* ]]; then
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
             IMAGE_TAG="${GITHUB_REF_NAME#v}"
           else
             IMAGE_TAG="latest"
