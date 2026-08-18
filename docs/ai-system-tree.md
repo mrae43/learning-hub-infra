@@ -152,13 +152,17 @@ learning-hub/
 ├── pyproject.toml                    # Root: uv workspace, ruff config, import-linter contracts
 ├── conftest.py                       # Root test fixtures (282 lines, shared by all packages)
 ├── alembic.ini                       # Alembic configuration for DB migrations
-├── Makefile                          # Thin docker-compose wrapper for local dev (up/logs/down/deploy/up-edge)
+├── Makefile                          # Thin docker-compose wrapper for local dev (up/logs/down/deploy/up-edge/up-observability/down-observability)
 ├── docker-entrypoint.sh              # Container entrypoint: alembic upgrade + uvicorn
 ├── commitlint.config.mjs             # Conventional Commits enforcement
-├── docker-compose.yml                # Local dev: PostgreSQL + pgvector (+ api)
+├── docker-compose.yml                # Local dev: PostgreSQL + pgvector (+ api); observability/load profiles
 ├── compose.deploy.yml                # Deploy override: pull GHCR image instead of building
 ├── compose.edge.yml                  # Edge gate override (Caddy basic-auth + TLS), inert by default
 ├── Caddyfile                         # Edge gate reverse-proxy config (decision #269), inert by default
+├── observability/                    # Metrics-path configs (issue #289): dashboards-as-code, scrapers, collector
+│   ├── otel-collector/config.yml     # OTLP receiver + span-metrics connector + Prometheus exporter
+│   ├── prometheus/prometheus.yml     # Scrape target: otel-collector:8889
+│   └── grafana/                      # Provisioning (datasource + provider) and committed dashboard JSON
 ├── Dockerfile                        # Multi-stage build (all 7 packages)
 ├── .env.example
 ├── skills-lock.json                  # Pinned agent skill versions

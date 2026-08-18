@@ -48,6 +48,19 @@ load-up: check-docker ## Start the volume-load stack (mock upstream + api) in th
 load-down: check-docker ## Stop the volume-load stack (never deletes the pgvector data volume)
 	docker compose --profile load down
 
+# Observability profile (issue #289, metrics path): OTel Collector + Prometheus +
+# Grafana. `up-observability` starts the metrics trio and points the api's
+# OTLP/HTTP export at the collector; `down-observability` stops the stack but
+# never deletes the named data volumes (matching `down`). The Langfuse traces
+# path is a sibling ticket (issue #291) and joins this profile later.
+.PHONY: up-observability
+up-observability: check-docker ## Start the metrics stack (OTel Collector + Prometheus + Grafana) in the background
+	OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318 docker compose --profile observability up -d
+
+.PHONY: down-observability
+down-observability: check-docker ## Stop the observability stack (never deletes the named data volumes)
+	docker compose --profile observability down
+
 .PHONY: deploy
 deploy: check-docker ## Deploy the demo stack from the published GHCR image (pull, no-build up, poll /health)
 	docker compose -f docker-compose.yml -f compose.deploy.yml pull

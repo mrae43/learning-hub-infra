@@ -1,0 +1,46 @@
+# OTel Collector config for the metrics path (issue #289).
+#
+# The api is the single OTLP/HTTP exporter: every request's spans (the root
+# request span plus the five RAG stage spans) arrive on the `otlp` receiver.
+# The `span_metrics` connector turns those spans into RED metrics (request
+# rate, error rate, duration by span/service) without any in-app metric code,
+# and the `prometheus` exporter serves them on :8889/metrics for Prometheus to
+# scrape. Traces are logged by the `debug` exporter for visibility; the
+# Langfuse traces exporter lands with the traces path (issue #291).
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  memory_limiter:
+    check_interval: 5s
+    limit_mib: 400
+  batch:
+
+connectors:
+  span_metrics:
+    histogram:
+      explicit:
+        buckets: [5ms, 10ms, 25ms, 50ms, 100ms, 250ms, 500ms, 1s, 2.5s, 5s, 10s]
+    dimensions:
+      - name: http.request.method
+      - name: url.path
+
+exporters:
+  debug:
+    verbosity: basic
+  prometheus:
+    endpoint: 0.0.0.0:8889
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [span_metrics, debug]
+    metrics:
+      receivers: [span_metrics]
+      processors: [memory_limiter, batch]
+      exporters: [prometheus]

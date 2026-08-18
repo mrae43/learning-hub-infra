@@ -15,7 +15,10 @@ graceful process shutdown.
 """
 
 from opentelemetry import trace
-from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
+    DEFAULT_TRACES_EXPORT_PATH,
+    OTLPSpanExporter,
+)
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor, SpanExporter
@@ -27,6 +30,20 @@ from core.telemetry import TRACER_NAME
 
 _provider: TracerProvider | None = None
 """The provider this module installed; shut down on process exit."""
+
+
+def _otlp_traces_endpoint(base_url: str) -> str:
+    """Append the OTLP/HTTP traces path to a configured collector endpoint.
+
+    ``OTLPSpanExporter`` treats an explicit ``endpoint`` argument as the full
+    URL and only appends ``/v1/traces`` when the value comes from the
+    ``OTEL_EXPORTER_OTLP_ENDPOINT`` environment-variable fallback. The setting
+    is a base collector URL (``http://collector:4318``), so the signal path is
+    appended here to match the SDK's env-var behaviour.
+    """
+    if base_url.endswith("/"):
+        return f"{base_url}{DEFAULT_TRACES_EXPORT_PATH}"
+    return f"{base_url}/{DEFAULT_TRACES_EXPORT_PATH}"
 
 
 def configure_telemetry(
@@ -54,7 +71,7 @@ def configure_telemetry(
     resource = Resource.create({"service.name": settings.otel_service_name})
     _provider = TracerProvider(resource=resource)
     _provider.add_span_processor(
-        BatchSpanProcessor(exporter or OTLPSpanExporter(endpoint=endpoint))
+        BatchSpanProcessor(exporter or OTLPSpanExporter(endpoint=_otlp_traces_endpoint(endpoint)))
     )
     trace.set_tracer_provider(_provider)
     return True
