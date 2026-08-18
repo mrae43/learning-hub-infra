@@ -1,0 +1,14 @@
+# Prometheus scrape config for the metrics path (issue #289).
+#
+# The only scrape target is the OTel Collector's Prometheus exporter
+# (:8889/metrics), which serves the RED metrics the collector derives from the
+# api's spans. The 15-day retention window is passed as a storage flag on the
+# container command (--storage.tsdb.retention.time=15d), not here.
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: otel-collector
+    static_configs:
+      - targets: ["otel-collector:8889"]

@@ -12,9 +12,26 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from opentelemetry.trace import SpanKind
 
-from api.telemetry import configure_telemetry, shutdown_telemetry
+from api.telemetry import _otlp_traces_endpoint, configure_telemetry, shutdown_telemetry
 from core.config.settings import Settings
 from core.telemetry import stage_span
+
+
+def test_otlp_traces_endpoint_appends_the_signal_path() -> None:
+    """A base collector URL gains the OTLP/HTTP traces path.
+
+    ``OTLPSpanExporter`` treats an explicit ``endpoint`` as the full URL, so
+    the configured base URL must carry ``/v1/traces`` itself — mirroring the
+    SDK's ``OTEL_EXPORTER_OTLP_ENDPOINT`` env-var behaviour (issue #289).
+    """
+    assert (
+        _otlp_traces_endpoint("http://otel-collector:4318")
+        == "http://otel-collector:4318/v1/traces"
+    )
+    assert (
+        _otlp_traces_endpoint("http://otel-collector:4318/")
+        == "http://otel-collector:4318/v1/traces"
+    )
 
 
 def test_configure_telemetry_stays_inert_without_an_endpoint() -> None:

@@ -1,0 +1,13 @@
+# Grafana datasource provisioning (issue #289). Prometheus is the only
+# datasource: the collector's span-derived RED metrics land there, and the
+# Learning Hub dashboard reads them.
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    uid: prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false

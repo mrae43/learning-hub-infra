@@ -75,3 +75,6 @@ The operator-facing document that maps each alert to its incident response: the 
 
 ## Backup Posture
 The standing policy deciding which deployed data is preserved: only the ingested corpus (the app's pgvector database) is backed up, via `pg_dump` of that single database; every observability store (Langfuse, ClickHouse, MinIO, Prometheus, Grafana) is treated as ephemeral and regenerable, never backed up. Locks the what/where of backups now; the scheduling and off-box copy belong to the VPS/hybrid phase.
+
+## Metrics Path
+The service-monitoring arm of the observability stack: the OTel Collector receives the api's OTLP/HTTP spans, derives RED metrics (request rate / error rate / latency by stage) with its span-metrics connector, and serves them on a Prometheus scrape endpoint; Prometheus stores them (15-day retention) and Grafana renders them from dashboards-as-code. Everything lives behind the `observability` compose profile (`make up-observability`), loopback-only host ports, and is inert unless that profile is started. Distinct from the traces arm (Langfuse) — both consume the same single OTLP export from the api.

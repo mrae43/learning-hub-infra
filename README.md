@@ -53,6 +53,8 @@ docker compose -f docker-compose.yml -f compose.deploy.yml -f compose.edge.yml u
 ```
 `EDGE_GATE_AUTH` lives in `.env` (gitignored) — the committed `.env.example` holds only placeholders. Set `EDGE_GATE_TLS="tls internal"` for self-signed local runs (the `make up-edge` default); leave it empty for Let's Encrypt. Passing the credential inline on the shell needs single quotes (`EDGE_GATE_AUTH='demo $2a$...' make up-edge`) so the shell doesn't expand the hash's `$`.
 
+**Metrics path (OTel Collector + Prometheus + Grafana).** `make up-observability` starts the metrics half of the `observability` compose profile (issue #289): an `otel-collector` receiving the api's OTLP/HTTP spans and deriving RED metrics (request rate / error rate / latency by stage) via the span-metrics connector, Prometheus scraping it on `http://localhost:9090` with a 15-day retention window, and Grafana serving dashboards-as-code on `http://localhost:3001` (both loopback-only). The profile also points the api's `OTEL_EXPORTER_OTLP_ENDPOINT` at the collector automatically, so the five RAG stage spans from issue #295 become dashboard panels. `make down-observability` stops the stack without deleting the named data volumes. Grafana's dashboards and Prometheus datasource are provisioned from `observability/` (dashboard JSON is committed as dashboards-as-code); the default Grafana login is `admin`/`admin` on a fresh volume. The profile is additive — `make up` stays untouched — and the traces half (Langfuse + exporters) is a sibling ticket (issue #291).
+
 ## Architecture
 
 Structured monorepo with extractable module boundaries:
