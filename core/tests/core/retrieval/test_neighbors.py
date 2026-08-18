@@ -1,8 +1,10 @@
 """Database-backed tests for the dense semantic-neighbor search primitive."""
 
 from unittest.mock import MagicMock
+from uuid import uuid4
 
 import pytest
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -280,6 +282,31 @@ def test_dense_neighbors_issues_set_local_ef_search_inside_transaction(
         event.remove(test_session.bind, "before_cursor_execute", _before_cursor_execute)
 
     assert 123 in ef_search_params
+
+
+def test_dense_neighbors_records_retrieve_stage_span(
+    in_memory_tracing: InMemorySpanExporter,
+) -> None:
+    """The dense-neighbor retrieve seam records a ``retrieve`` stage span (issue #286)."""
+    fake_session = MagicMock()
+    row = MagicMock()
+    row._mapping = {
+        "chunk_id": uuid4(),
+        "text": "neighbor text",
+        "score": 0.9,
+        "parent_chunk_id": None,
+    }
+    fake_session.execute.return_value.fetchall.return_value = [row]
+
+    neighbors = search_dense_neighbors(
+        session=fake_session,
+        query_vector=[0.5] * 1536,
+        config=RetrievalConfig(model_name="text-embedding-3-small", ef_search=40, top_k=1),
+    )
+
+    assert [n.text for n in neighbors] == ["neighbor text"]
+    spans = in_memory_tracing.get_finished_spans()
+    assert [s.name for s in spans] == ["retrieve"]
 
 
 def test_dense_neighbors_wraps_db_connection_error_as_upstream_unavailable() -> None:

@@ -11,6 +11,7 @@ import httpx
 
 from core.config.settings import settings
 from core.exceptions import RerankerRateLimitError, UpstreamBadResponse, UpstreamUnavailable
+from core.telemetry import stage_span
 from core.types.responses import ScoredChunk
 
 
@@ -74,6 +75,7 @@ class CohereReranker:
             self._client = cohere.ClientV2(api_key=self._api_key, timeout=30.0, max_retries=2)
         return self._client
 
+    @stage_span("rerank")
     def rerank(
         self,
         query: str,

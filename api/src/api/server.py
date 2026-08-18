@@ -1,5 +1,8 @@
 """FastAPI application factory."""
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 
@@ -8,6 +11,8 @@ from api.routes.documents import router as documents_router
 from api.routes.health import router as health_router
 from api.routes.ingest import router as ingest_router
 from api.routes.retrieval_qa import router as query_router
+from api.telemetry import TraceRequestMiddleware, configure_telemetry, shutdown_telemetry
+from core.config.settings import settings
 from core.exceptions import UpstreamBadResponse, UpstreamUnavailable
 
 
@@ -21,9 +26,19 @@ def _retrieval_error_handler(request: Request, exc: Exception, status_code: int)
     return JSONResponse(status_code=status_code, content={"detail": str(exc)})
 
 
+@asynccontextmanager
+async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
+    """Flush the api's span exporter when the process shuts down."""
+    _ = app  # unused; lifespan signature tracks Starlette's contract.
+    yield
+    shutdown_telemetry()
+
+
 def create_app() -> FastAPI:
     """Create and configure the Learning Hub API."""
-    app = FastAPI(title="Learning Hub", version="0.1.0")
+    configure_telemetry(settings)
+    app = FastAPI(title="Learning Hub", version="0.1.0", lifespan=_lifespan)
+    app.add_middleware(TraceRequestMiddleware)
     app.include_router(health_router)
     app.include_router(ingest_router)
     app.include_router(documents_router)

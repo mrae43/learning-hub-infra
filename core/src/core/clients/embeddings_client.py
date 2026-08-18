@@ -8,6 +8,7 @@ from openai.types.create_embedding_response import CreateEmbeddingResponse
 
 from core.config.settings import resolve_openai_base_url, settings
 from core.exceptions import UpstreamBadResponse, UpstreamUnavailable
+from core.telemetry import stage_span
 
 
 @runtime_checkable
@@ -66,6 +67,7 @@ class EmbeddingsClient:
             )
         return self._client
 
+    @stage_span("embed")
     def embed(self, texts: Sequence[str]) -> list[list[float]]:
         """Embed a batch of texts synchronously.
 
@@ -93,6 +95,7 @@ class EmbeddingsClient:
 
         return self._parse_embedding_response(response)
 
+    @stage_span("embed")
     async def aembed(self, texts: Sequence[str]) -> list[list[float]]:
         """Embed a batch of texts asynchronously."""
         if self._async_client is None:

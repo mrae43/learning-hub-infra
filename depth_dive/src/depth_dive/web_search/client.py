@@ -22,6 +22,7 @@ from openai.types.responses.response_output_text import AnnotationURLCitation
 from pydantic import BaseModel, ConfigDict
 
 from core.config.settings import resolve_openai_base_url, settings
+from core.telemetry import stage_span
 
 
 class WebSearchError(Exception):
@@ -112,6 +113,7 @@ class OpenAIWebSearchClient:
             )
         return self._client
 
+    @stage_span("web-search")
     def search(self, query: str) -> list[WebSearchResult]:
         """Search the web and return the cited external material.
 

@@ -20,6 +20,7 @@ from sqlalchemy.exc import InterfaceError, OperationalError
 from sqlalchemy.orm import Session
 
 from core.exceptions import UpstreamUnavailable
+from core.telemetry import stage_span
 from core.types.responses import ScoredChunk
 from core.types.retrieval_config import RetrievalConfig
 
@@ -41,6 +42,7 @@ _DENSE_NEIGHBORS_SQL = text(
 )
 
 
+@stage_span("retrieve")
 def search_dense_neighbors(
     *,
     session: Session,

@@ -11,6 +11,7 @@ from unittest.mock import MagicMock
 import pytest
 from openai import APIConnectionError, APIStatusError, OpenAIError
 from openai.types.responses import Response
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
 from core.config.settings import settings
 from depth_dive.web_search import client as web_search_module
@@ -96,6 +97,19 @@ def test_openai_client_surfaces_cited_urls_as_results() -> None:
     assert result.title == "Attention Is All You Need"
     assert result.url == "https://example.com/paper"
     assert result.snippet == " famous. See the ori"
+
+
+def test_openai_client_records_web_search_stage_span(
+    in_memory_tracing: InMemorySpanExporter,
+) -> None:
+    """The web-search seam records a ``web-search`` stage span (issue #286)."""
+    response = Response.model_validate(_response_payload(annotation=None))
+    client, _ = _client(response)
+
+    client.search("attention is all you need")
+
+    spans = in_memory_tracing.get_finished_spans()
+    assert [s.name for s in spans] == ["web-search"]
 
 
 def test_openai_client_empty_citations_yields_no_results() -> None:

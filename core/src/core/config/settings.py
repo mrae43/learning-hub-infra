@@ -39,6 +39,12 @@ class Settings(BaseSettings):
             (OpenAI Responses API ``web_search`` tool).
         max_upload_bytes: Maximum accepted upload size in bytes.
         allowed_file_extensions: Lower-case file extensions accepted for upload.
+        otel_exporter_otlp_endpoint: OTLP/HTTP collector endpoint for the five
+            RAG stage spans (embed / retrieve / rerank / generate /
+            web-search). Empty means tracing stays inert: no exporter is
+            installed and no spans leave the process.
+        otel_service_name: ``service.name`` resource attribute applied to the
+            exported spans.
     """
 
     model_config = SettingsConfigDict(
@@ -61,6 +67,8 @@ class Settings(BaseSettings):
     allowed_file_extensions: set[str] = {"pdf", "epub", "md", "html"}
     cohere_api_key: str | None = None
     reranker_model: str = "rerank-v3.5"
+    otel_exporter_otlp_endpoint: str | None = None
+    otel_service_name: str = "learning-hub"
 
     @field_validator("openai_api_key", "openai_base_url", "cohere_api_key", mode="before")
     @classmethod
