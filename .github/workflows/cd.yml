@@ -30,13 +30,6 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
 
-      - name: Log in to GHCR
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Image metadata
         id: meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
@@ -48,15 +41,57 @@ jobs:
             type=sha,prefix=,suffix=,format=short,enable=${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_run' }}
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_run' }}
 
-      - name: Build and push
+      - name: Build image (push deferred until smoke test passes)
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: .
-          push: true
+          push: false
+          load: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # SMOKE TEST GATE: boot + postgres + /health must pass before anything is
+      # pushed. The api image is loaded into the daemon (load: true above) and
+      # exercised via the same compose.deploy.yml override the local demo uses,
+      # so the artifact tested here is the exact artifact pushed below. GHCR
+      # login is deliberately AFTER this step: a failed smoke test never touches
+      # the registry. The health poll is scripts/health-poll.sh — the same
+      # script `make deploy` runs locally.
+      - name: Smoke test (boot + postgres + /health)
+        run: |
+          # compose.deploy.yml's api service uses `.env` as env_file; it is
+          # gitignored, so create an empty one (compose defaults supply the rest).
+          touch .env
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            IMAGE_TAG="${GITHUB_REF_NAME#v}"
+          else
+            IMAGE_TAG="latest"
+          fi
+          export IMAGE_TAG
+          echo "Smoke-testing ghcr.io/${{ github.repository }}:${IMAGE_TAG}"
+          docker compose -f docker-compose.yml -f compose.deploy.yml up -d --no-build
+          bash scripts/health-poll.sh 30 2 || {
+            echo "smoke test failed: /health not OK within 60s" >&2
+            docker compose -f docker-compose.yml -f compose.deploy.yml logs api
+            docker compose -f docker-compose.yml -f compose.deploy.yml ps
+            exit 1
+          }
+          echo "smoke test passed: api booted, postgres reachable, /health ok"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push images to GHCR
+        run: |
+          for tag in ${{ steps.meta.outputs.tags }}; do
+            docker push "$tag"
+          done
 
   changelog:
     name: Create GitHub release with changelog

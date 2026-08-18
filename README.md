@@ -29,6 +29,8 @@ A hand-rolled RAG study tool for learning AI/ML from papers, books, and document
 
 The root `Makefile` wraps the local dev container lifecycle defined in `docker-compose.yml` (Postgres + pgvector): `make up` to start the stack in the background, `make logs` to tail service logs (`make logs SERVICE=postgres` scopes to one service), and `make down` to stop and remove containers/network — `down` never deletes the pgvector data volume. `make load-up` starts the volume-load stack: the `load` compose profile adds the OpenAI-compatible `mock-upstream` service and points the api at it (`OPENAI_BASE_URL`), so `/query` and `/dive` return deterministic answers with no real API key or outbound calls (`make load-down` stops it). Run `make help` to list every target. Docker's daemon must be running; `up`/`logs`/`down` fail fast with a clear message if it isn't. Per-package checks (`ruff`, `mypy`, `pytest`) stay explicit `uv run` invocations.
 
+**Deploying the demo.** CI is the single image build path — the deployed stack pulls, never builds. `make deploy` pulls the published image (`ghcr.io/mrae43/learning-hub-infra:latest` by default, via the `compose.deploy.yml` override), starts the stack with `--no-build`, and polls `GET /health` until ready (bounded). Copy `.env.example` to `.env` first and fill in `OPENAI_API_KEY`. Rollback is manual — re-run with a previous tag, `make deploy IMAGE_TAG=1.2.3` (published semver tags carry no `v` prefix). `cd.yml` only pushes an image after a boot + postgres + `/health` smoke test passes. The deploy override uses the Compose `!reset` tag, so Docker Compose v2.24+ is required.
+
 ## Architecture
 
 Structured monorepo with extractable module boundaries:
