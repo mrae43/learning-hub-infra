@@ -10,6 +10,7 @@ import os
 import zipfile
 from collections.abc import Callable, Generator
 from pathlib import Path
+from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
 import pytest
@@ -18,6 +19,9 @@ from reportlab.pdfgen import canvas
 from sqlalchemy import Engine, create_engine, text
 from sqlalchemy.dialects.postgresql import ENUM
 from sqlalchemy.orm import Session, sessionmaker
+
+if TYPE_CHECKING:
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
 # Pre-import workspace packages so their installed (src/) versions are cached
 # in sys.modules before per-package test collection runs.  Without this a test
@@ -256,6 +260,33 @@ def sample_documentation_md() -> bytes:
         b"POST /api/v1/users\n\n"
         b"Creates a new user.\n"
     )
+
+
+@pytest.fixture
+def in_memory_tracing() -> Generator["InMemorySpanExporter", None, None]:
+    """Install an in-memory OpenTelemetry exporter for the test's duration.
+
+    Lets tests assert that the five RAG stage spans (issue #286) were recorded
+    without any network. The global tracer provider is replaced directly —
+    bypassing ``opentelemetry``'s set-once guard so tests can install and
+    restore providers freely — and the previous value is restored afterwards,
+    keeping the instrumentation inert for every other test.
+    """
+    from opentelemetry import trace as otel_trace
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+
+    previous = otel_trace._TRACER_PROVIDER
+    exporter = InMemorySpanExporter()
+    provider = TracerProvider()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    otel_trace._TRACER_PROVIDER = provider
+    try:
+        yield exporter
+    finally:
+        otel_trace._TRACER_PROVIDER = previous
+        provider.shutdown()
 
 
 def _create_enums(engine: Engine) -> None:

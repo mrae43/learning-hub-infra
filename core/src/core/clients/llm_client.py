@@ -13,6 +13,7 @@ from openai import APIConnectionError, APIStatusError, OpenAI
 
 from core.config.settings import resolve_openai_base_url, settings
 from core.exceptions import UpstreamBadResponse, UpstreamUnavailable
+from core.telemetry import stage_span
 from core.types.chat import ChatMessage
 
 
@@ -72,6 +73,7 @@ class LLMClient:
             )
         return self._client
 
+    @stage_span("generate")
     def chat(self, messages: Sequence[ChatMessage]) -> str:
         """Generate a completion synchronously and return the message content.
 

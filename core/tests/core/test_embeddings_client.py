@@ -4,6 +4,7 @@ import asyncio
 from unittest.mock import MagicMock
 
 import pytest
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
 from core.clients import embeddings_client as embeddings_module
 from core.clients.embeddings_client import Embedder, EmbeddingsClient, InMemoryEmbedder
@@ -117,6 +118,24 @@ def test_async_client_threads_explicit_base_url(monkeypatch: pytest.MonkeyPatch)
 
     assert vectors == [[0.1] * 1536]
     assert captured["base_url"] == "http://mock/v1"
+
+
+def test_embed_records_embed_stage_span(
+    monkeypatch: pytest.MonkeyPatch,
+    in_memory_tracing: InMemorySpanExporter,
+) -> None:
+    """The embed seam records an ``embed`` stage span (issue #286)."""
+    fake_response = MagicMock()
+    fake_response.data = [MagicMock(embedding=[0.1] * 1536)]
+    fake_client = MagicMock()
+    fake_client.embeddings.create = MagicMock(return_value=fake_response)
+
+    client = EmbeddingsClient(api_key="sk-test", model="text-embedding-3-small")
+    monkeypatch.setattr(client, "_get_client", lambda: fake_client)
+    client.embed(["hello"])
+
+    spans = in_memory_tracing.get_finished_spans()
+    assert [s.name for s in spans] == ["embed"]
 
 
 def test_in_memory_embedder_returns_one_vector_per_text() -> None:

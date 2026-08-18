@@ -14,6 +14,8 @@ dependencies = [
     "fastapi>=0.141.1",
     "uvicorn>=0.52.3",
     "python-multipart>=0.0.9",
+    "opentelemetry-sdk>=1.24",
+    "opentelemetry-exporter-otlp-proto-http>=1.24",
 ]
 
 [tool.uv.sources]

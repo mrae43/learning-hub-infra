@@ -14,6 +14,7 @@ import cohere.core.api_error
 import cohere.errors
 import httpx
 import pytest
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
 from core.clients.reranker_client import CohereReranker
 from core.exceptions import RerankerRateLimitError, UpstreamBadResponse, UpstreamUnavailable
@@ -32,6 +33,24 @@ def _reranker_with(raise_exc: Exception) -> CohereReranker:
     # the return type is the protocol's client type but we substitute a mock.
     reranker._get_client = lambda: client  # type: ignore[method-assign]
     return reranker
+
+
+def test_rerank_records_rerank_stage_span(in_memory_tracing: InMemorySpanExporter) -> None:
+    """The rerank seam records a ``rerank`` stage span (issue #286)."""
+    reranker = CohereReranker(api_key="test-key", model="rerank-test")
+    fake = MagicMock()
+    result = MagicMock()
+    result.index = 0
+    fake.rerank.return_value = MagicMock(results=[result])
+    # Override the lazy-init accessor so no real Cohere client is constructed.
+    reranker._get_client = lambda: fake  # type: ignore[method-assign]
+
+    passages = _passages()
+    reranked = reranker.rerank("query", passages, top_k=2)
+
+    assert reranked == [passages[0]]
+    spans = in_memory_tracing.get_finished_spans()
+    assert [s.name for s in spans] == ["rerank"]
 
 
 def test_rerank_connection_error_raises_upstream_unavailable() -> None:

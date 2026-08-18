@@ -1,8 +1,10 @@
 """Database-backed tests for the retrieval query module."""
 
 from unittest.mock import MagicMock
+from uuid import uuid4
 
 import pytest
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from sqlalchemy import func, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
@@ -325,6 +327,31 @@ def test_retrieve_wraps_db_connection_error_as_upstream_unavailable() -> None:
             session=fake_session,
             config=RetrievalConfig(model_name="text-embedding-3-small", ef_search=40, top_k=1),
         )
+
+
+def test_retrieve_records_retrieve_stage_span(
+    in_memory_tracing: InMemorySpanExporter,
+) -> None:
+    """The retrieve seam records a ``retrieve`` stage span (issue #286)."""
+    fake_session = MagicMock()
+    row = MagicMock()
+    row._mapping = {"chunk_id": uuid4(), "text": "chunk text", "parent_chunk_id": None}
+    fake_session.execute.return_value.fetchall.return_value = [row]
+
+    result = retrieve_relevant_chunks(
+        query_vector=[0.5] * 1536,
+        session=fake_session,
+        config=RetrievalConfig(
+            model_name="text-embedding-3-small",
+            ef_search=40,
+            top_k=1,
+            hybrid_search=False,
+        ),
+    )
+
+    assert [c.text for c in result.fused] == ["chunk text"]
+    spans = in_memory_tracing.get_finished_spans()
+    assert [s.name for s in spans] == ["retrieve"]
 
 
 # ── ScoredChunk building (shared helper) ─────────────────────────────────────

@@ -4,6 +4,7 @@ from unittest.mock import MagicMock
 
 import pytest
 from openai import APIConnectionError, APIStatusError
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
 from core.clients import llm_client as llm_module
 from core.clients.llm_client import CompletionProvider, LLMClient, MockCompletionProvider
@@ -97,6 +98,23 @@ def test_chat_serializes_multimodal_content_parts(monkeypatch: pytest.MonkeyPatc
             }
         ],
     )
+
+
+def test_chat_records_generate_stage_span(
+    monkeypatch: pytest.MonkeyPatch,
+    in_memory_tracing: InMemorySpanExporter,
+) -> None:
+    """The generate seam records a ``generate`` stage span (issue #286)."""
+    client = LLMClient(api_key="sk-test", model="gpt-4o-mini")
+
+    fake_openai = MagicMock()
+    fake_openai.chat.completions.create = MagicMock(return_value=_fake_completion("answer"))
+    monkeypatch.setattr(client, "_get_client", lambda: fake_openai)
+
+    client.chat([ChatMessage(role="user", content="x")])
+
+    spans = in_memory_tracing.get_finished_spans()
+    assert [s.name for s in spans] == ["generate"]
 
 
 def test_chat_uses_default_model_from_settings() -> None:

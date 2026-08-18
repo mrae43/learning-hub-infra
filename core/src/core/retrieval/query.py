@@ -57,6 +57,7 @@ from sqlalchemy.orm import Session
 
 from core.clients.reranker_client import Reranker
 from core.exceptions import RerankerRateLimitError, UpstreamUnavailable
+from core.telemetry import stage_span
 from core.types.responses import RetrievalResult, ScoredChunk
 from core.types.retrieval_config import RetrievalConfig
 
@@ -279,6 +280,7 @@ def _parent_swap(
     return passages
 
 
+@stage_span("retrieve")
 def retrieve_relevant_chunks(
     *,
     query_vector: list[float],
