@@ -54,3 +54,28 @@ deploy: check-docker ## Deploy the demo stack from the published GHCR image (pul
 	docker compose -f docker-compose.yml -f compose.deploy.yml up -d --no-build
 	@bash scripts/health-poll.sh $(HEALTH_POLL_ATTEMPTS) $(HEALTH_POLL_INTERVAL) \
 		|| (docker compose -f docker-compose.yml -f compose.deploy.yml logs api; exit 1)
+
+# Edge gate (decision #269): Caddy reverse proxy + basic-auth + TLS in front of
+# the demo stack. Explicitly opt-in only — never part of `up`/`deploy`, so the
+# dev stack is unchanged by default. EDGE_GATE_AUTH is read from `.env`
+# (required; compose fails fast without it). These targets are the LOCAL
+# scaffold path (localhost + self-signed TLS); the public phase layers
+# compose.deploy.yml too — see the README "edge gate" section for that command.
+EDGE_GATE_DOMAIN ?= localhost
+EDGE_GATE_TLS ?= tls internal
+export EDGE_GATE_DOMAIN EDGE_GATE_TLS
+# Dummy value for teardown: `stop`/`rm` don't recreate the container, so a
+# placeholder satisfies the compose interpolation requirement for the
+# EDGE_GATE_AUTH `:?` check without needing real credentials.
+EDGE_GATE_AUTH_TEARDOWN := teardown-dummy
+
+.PHONY: up-edge
+up-edge: check-docker ## Start the edge gate (Caddy) in front of the local dev stack
+	docker compose -f docker-compose.yml -f compose.edge.yml up -d edge-gate
+
+.PHONY: down-edge
+down-edge: check-docker ## Stop and remove only the edge gate (dev stack untouched)
+	EDGE_GATE_AUTH="$(EDGE_GATE_AUTH_TEARDOWN)" \
+	docker compose -f docker-compose.yml -f compose.edge.yml stop edge-gate
+	EDGE_GATE_AUTH="$(EDGE_GATE_AUTH_TEARDOWN)" \
+	docker compose -f docker-compose.yml -f compose.edge.yml rm -f edge-gate
