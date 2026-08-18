@@ -29,3 +29,11 @@ logs: check-docker ## Tail logs (all services, or SERVICE=<name> for one)
 .PHONY: down
 down: check-docker ## Stop and remove containers/network (never deletes the pgvector data volume)
 	docker compose down
+
+.PHONY: load-up
+load-up: check-docker ## Start the volume-load stack (mock upstream + api) in the background
+	OPENAI_API_KEY=sk-load OPENAI_BASE_URL=http://mock-upstream:8080/v1 COHERE_API_KEY= docker compose --profile load up -d
+
+.PHONY: load-down
+load-down: check-docker ## Stop the volume-load stack (never deletes the pgvector data volume)
+	docker compose --profile load down

@@ -21,7 +21,7 @@ from openai.types.responses import (
 from openai.types.responses.response_output_text import AnnotationURLCitation
 from pydantic import BaseModel, ConfigDict
 
-from core.config.settings import settings
+from core.config.settings import resolve_openai_base_url, settings
 
 
 class WebSearchError(Exception):
@@ -84,21 +84,32 @@ class OpenAIWebSearchClient:
     answer text, which keeps external material quote-safe (ADR-0012).
     """
 
-    def __init__(self, api_key: str | None = None, model: str | None = None) -> None:
+    def __init__(
+        self,
+        api_key: str | None = None,
+        model: str | None = None,
+        base_url: str | None = None,
+    ) -> None:
         """Initialize the client.
 
         Args:
             api_key: OpenAI API key. Defaults to ``settings.openai_api_key``.
             model: Model used for the search response. Defaults to
                 ``settings.web_search_model``.
+            base_url: Base URL override for the OpenAI endpoint. Defaults to
+                ``settings.openai_base_url``; ``None`` uses the SDK default so
+                the mock upstream can redirect the client for volume load runs.
         """
         self._model = model or settings.web_search_model
         self._api_key = api_key or settings.openai_api_key
+        self._base_url = resolve_openai_base_url(base_url)
         self._client: OpenAI | None = None
 
     def _get_client(self) -> OpenAI:
         if self._client is None:
-            self._client = OpenAI(api_key=self._api_key, timeout=30.0, max_retries=0)
+            self._client = OpenAI(
+                api_key=self._api_key, timeout=30.0, max_retries=0, base_url=self._base_url
+            )
         return self._client
 
     def search(self, query: str) -> list[WebSearchResult]:

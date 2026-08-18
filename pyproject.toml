@@ -7,7 +7,7 @@ requires-python = ">=3.12"
 package = false
 
 [tool.uv.workspace]
-members = ["core", "retrieval_qa", "depth_dive", "api", "ingestion", "scripts"]
+members = ["core", "retrieval_qa", "depth_dive", "api", "ingestion", "scripts", "mock_upstream"]
 
 [dependency-groups]
 dev = [
@@ -32,12 +32,12 @@ target-version = "py312"
 select = ["E", "F", "I", "UP", "B", "SIM", "C4", "RUF"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["core", "retrieval_qa", "depth_dive", "api", "ingestion", "scripts"]
+known-first-party = ["core", "retrieval_qa", "depth_dive", "api", "ingestion", "scripts", "mock_upstream"]
 
 [tool.mypy]
 python_version = "3.12"
 strict = true
-mypy_path = ["core/src", "retrieval_qa/src", "depth_dive/src", "api/src", "ingestion/src"]
+mypy_path = ["core/src", "retrieval_qa/src", "depth_dive/src", "api/src", "ingestion/src", "mock_upstream/src"]
 explicit_package_bases = true
 
 [tool.pytest.ini_options]
@@ -50,7 +50,7 @@ filterwarnings = [
 ]
 
 [tool.importlinter]
-root_packages = ["core", "retrieval_qa", "depth_dive", "api", "ingestion"]
+root_packages = ["core", "retrieval_qa", "depth_dive", "api", "ingestion", "mock_upstream"]
 
 [[tool.importlinter.contracts]]
 name = "retrieval_qa and depth_dive must not import each other"

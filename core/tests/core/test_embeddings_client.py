@@ -1,10 +1,13 @@
 """Unit tests for the embeddings client (hosted API mocked)."""
 
+import asyncio
 from unittest.mock import MagicMock
 
 import pytest
 
+from core.clients import embeddings_client as embeddings_module
 from core.clients.embeddings_client import Embedder, EmbeddingsClient, InMemoryEmbedder
+from core.config.settings import DEFAULT_OPENAI_BASE_URL, settings
 
 
 def test_embed_returns_one_vector_per_input(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -36,6 +39,84 @@ def test_embeddings_client_satisfies_embedder_protocol() -> None:
     """EmbeddingsClient is a structural ``Embedder`` implementation."""
     client = EmbeddingsClient(api_key="sk-test", model="text-embedding-3-small")
     assert isinstance(client, Embedder)
+
+
+def test_sync_client_threads_explicit_base_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The sync OpenAI client is constructed with the caller's base_url."""
+    fake_response = MagicMock()
+    fake_response.data = [MagicMock(embedding=[0.1] * 1536)]
+    captured: dict[str, object] = {}
+
+    def _fake_openai(**kwargs: object) -> MagicMock:
+        captured.update(kwargs)
+        client = MagicMock()
+        client.embeddings.create = MagicMock(return_value=fake_response)
+        return client
+
+    monkeypatch.setattr(embeddings_module, "OpenAI", _fake_openai)
+    client = EmbeddingsClient(
+        api_key="sk-test", model="text-embedding-3-small", base_url="http://mock/v1"
+    )
+    client.embed(["hello"])
+
+    assert captured["base_url"] == "http://mock/v1"
+
+
+def test_sync_client_threads_settings_base_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    """With no explicit base_url, settings.openai_base_url is used."""
+    fake_response = MagicMock()
+    fake_response.data = [MagicMock(embedding=[0.1] * 1536)]
+    captured: dict[str, object] = {}
+
+    def _fake_openai(**kwargs: object) -> MagicMock:
+        captured.update(kwargs)
+        client = MagicMock()
+        client.embeddings.create = MagicMock(return_value=fake_response)
+        return client
+
+    monkeypatch.setattr(settings, "openai_base_url", "http://mock/v1")
+    monkeypatch.setattr(embeddings_module, "OpenAI", _fake_openai)
+    client = EmbeddingsClient(api_key="sk-test", model="text-embedding-3-small")
+    client.embed(["hello"])
+
+    assert captured["base_url"] == "http://mock/v1"
+
+
+def test_client_ignores_empty_base_url_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An empty OPENAI_BASE_URL env (compose ${VAR:-}) falls back to the SDK default.
+
+    The OpenAI SDK would otherwise treat the empty env value as the endpoint
+    and break every request, so the client resolves the default itself.
+    """
+    monkeypatch.setenv("OPENAI_BASE_URL", "")
+    monkeypatch.setattr(settings, "openai_base_url", None)
+    client = EmbeddingsClient(api_key="sk-test", model="text-embedding-3-small")
+    assert client._base_url == DEFAULT_OPENAI_BASE_URL
+
+
+def test_async_client_threads_explicit_base_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The async OpenAI client is constructed with the caller's base_url."""
+    fake_response = MagicMock()
+    fake_response.data = [MagicMock(embedding=[0.1] * 1536)]
+    captured: dict[str, object] = {}
+
+    async def _fake_create(*args: object, **kwargs: object) -> MagicMock:
+        return fake_response
+
+    def _fake_async_openai(**kwargs: object) -> MagicMock:
+        captured.update(kwargs)
+        client = MagicMock()
+        client.embeddings.create = _fake_create
+        return client
+
+    monkeypatch.setattr(embeddings_module, "AsyncOpenAI", _fake_async_openai)
+    client = EmbeddingsClient(
+        api_key="sk-test", model="text-embedding-3-small", base_url="http://mock/v1"
+    )
+    vectors = asyncio.run(client.aembed(["hello"]))
+
+    assert vectors == [[0.1] * 1536]
+    assert captured["base_url"] == "http://mock/v1"
 
 
 def test_in_memory_embedder_returns_one_vector_per_text() -> None:

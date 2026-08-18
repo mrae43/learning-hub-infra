@@ -5,7 +5,17 @@ All infra-internal knobs (database URL, active embedding model, HNSW tuning,
 upload limits) live here so the API contract stays stable as infra choices evolve.
 """
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1"
+"""The OpenAI SDK's default endpoint, used when no base URL is configured.
+
+Clients resolve ``settings.openai_base_url or DEFAULT_OPENAI_BASE_URL`` to a
+concrete value so the SDK never falls back to an empty ``OPENAI_BASE_URL``
+environment variable (compose sets ``${VAR:-}`` to an empty string when the
+variable is unset, which would otherwise break every OpenAI call).
+"""
 
 
 class Settings(BaseSettings):
@@ -14,6 +24,11 @@ class Settings(BaseSettings):
     Attributes:
         database_url: Postgres+pgvector connection URL.
         openai_api_key: API key for the OpenAI embeddings client.
+        openai_base_url: Optional base URL redirecting every OpenAI-backed
+            client (embeddings, chat completions, web search) to another
+            endpoint. The ``load`` compose profile points it at the mock
+            upstream so volume runs spend no real API budget (ADR-0014 area;
+            see ``CONTEXT.md`` "Mock Upstream").
         embedding_model: Active embedding model ID. All models used during MVP
             must produce 1536-dim vectors (ADR-0014).
         hnsw_ef_search: Query-time HNSW search candidate list size.
@@ -36,6 +51,7 @@ class Settings(BaseSettings):
         "postgresql+psycopg2://learning_hub:learning_hub@localhost:5432/learning_hub"
     )
     openai_api_key: str | None = None
+    openai_base_url: str | None = None
     embedding_model: str = "text-embedding-3-small"
     hnsw_ef_search: int = 40
     query_top_k: int = 5
@@ -45,6 +61,41 @@ class Settings(BaseSettings):
     allowed_file_extensions: set[str] = {"pdf", "epub", "md", "html"}
     cohere_api_key: str | None = None
     reranker_model: str = "rerank-v3.5"
+
+    @field_validator("openai_api_key", "openai_base_url", "cohere_api_key", mode="before")
+    @classmethod
+    def _empty_string_is_none(cls, value: object) -> object:
+        """Coerce empty/whitespace env values to ``None``.
+
+        Compose substitutes unset variables as empty strings (``${VAR:-}``);
+        an empty ``OPENAI_BASE_URL`` or ``OPENAI_API_KEY`` must mean "not
+        configured" (``None``) rather than a literal empty value that the
+        OpenAI SDK would choke on.
+        """
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
+
+
+def resolve_openai_base_url(override: str | None) -> str:
+    """Resolve a client's effective OpenAI base URL.
+
+    Every OpenAI-backed client (embeddings, chat completions, web search)
+    resolves its endpoint the same way: an explicit override wins, then
+    ``settings.openai_base_url``, then the SDK default. Resolving to a
+    concrete value (never ``None``) stops the SDK from falling back to an
+    empty ``OPENAI_BASE_URL`` environment variable, which compose produces
+    for unset ``${VAR:-}`` and which would break every OpenAI call.
+
+    Args:
+        override: A caller-supplied base URL, or ``None`` to use the setting.
+
+    Returns:
+        The concrete base URL for the OpenAI client.
+    """
+    return (
+        override if override is not None else (settings.openai_base_url or DEFAULT_OPENAI_BASE_URL)
+    )
 
 
 # Global singleton used by the application. Tests override via monkeypatch or

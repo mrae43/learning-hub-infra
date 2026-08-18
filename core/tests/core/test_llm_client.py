@@ -5,7 +5,9 @@ from unittest.mock import MagicMock
 import pytest
 from openai import APIConnectionError, APIStatusError
 
+from core.clients import llm_client as llm_module
 from core.clients.llm_client import CompletionProvider, LLMClient, MockCompletionProvider
+from core.config.settings import settings
 from core.exceptions import UpstreamBadResponse, UpstreamUnavailable
 from core.types.chat import (
     ChatContentImagePart,
@@ -101,6 +103,41 @@ def test_chat_uses_default_model_from_settings() -> None:
     """LLMClient picks up settings.inference_model by default."""
     client = LLMClient(api_key="sk-test")
     assert client._model == "gpt-4o-mini"
+
+
+def test_sync_client_threads_explicit_base_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The OpenAI client is constructed with the caller's base_url."""
+    captured: dict[str, object] = {}
+
+    def _fake_openai(**kwargs: object) -> MagicMock:
+        captured.update(kwargs)
+        client = MagicMock()
+        client.chat.completions.create = MagicMock(return_value=_fake_completion("answer"))
+        return client
+
+    monkeypatch.setattr(llm_module, "OpenAI", _fake_openai)
+    client = LLMClient(api_key="sk-test", model="gpt-4o-mini", base_url="http://mock/v1")
+    client.chat([ChatMessage(role="user", content="x")])
+
+    assert captured["base_url"] == "http://mock/v1"
+
+
+def test_sync_client_threads_settings_base_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    """With no explicit base_url, settings.openai_base_url is used."""
+    captured: dict[str, object] = {}
+
+    def _fake_openai(**kwargs: object) -> MagicMock:
+        captured.update(kwargs)
+        client = MagicMock()
+        client.chat.completions.create = MagicMock(return_value=_fake_completion("answer"))
+        return client
+
+    monkeypatch.setattr(settings, "openai_base_url", "http://mock/v1")
+    monkeypatch.setattr(llm_module, "OpenAI", _fake_openai)
+    client = LLMClient(api_key="sk-test", model="gpt-4o-mini")
+    client.chat([ChatMessage(role="user", content="x")])
+
+    assert captured["base_url"] == "http://mock/v1"
 
 
 def test_chat_raises_upstream_unavailable_on_connection_error(
