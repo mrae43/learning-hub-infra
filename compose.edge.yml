@@ -1,0 +1,60 @@
+# Edge gate override: add the Caddy reverse proxy (basic-auth + TLS) in front
+# of the demo stack, per decision #269. INERT BY DEFAULT — nothing in this
+# file runs unless it is explicitly layered on, so local dev (`docker compose
+# up` / `make up`) is completely unchanged.
+#
+# Usage (public phase):
+#   docker compose -f docker-compose.yml -f compose.deploy.yml \
+#     -f compose.edge.yml up -d --no-build
+#
+# Local scaffold run (self-signed TLS, no domain purchased):
+#   EDGE_GATE_AUTH='demo $2a$...' EDGE_GATE_DOMAIN=localhost EDGE_GATE_TLS="tls internal" \
+#   docker compose -f docker-compose.yml -f compose.edge.yml up -d
+#
+# Requirements (both cases fail fast if missing):
+#   - EDGE_GATE_AUTH    "<user> <bcrypt-hash>" — generate the hash with
+#                       `docker run --rm caddy:2-alpine caddy hash-password`;
+#                       normally set in .env (see .env.example for the `$$`
+#                       escaping compose requires)
+#   - EDGE_GATE_DOMAIN  the public demo URL hostname
+#
+# ADR-0018 stays intact: the api remains auth-less; gating happens only at the
+# edge. The observability UIs (langfuse-web/grafana/prometheus) are path-routed
+# here and keep their own native login; they join this network when the
+# observability profile (issues #289/#291) is added.
+services:
+  edge-gate:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "${EDGE_GATE_HTTP_PORT:-80}:80"
+      - "${EDGE_GATE_HTTPS_PORT:-443}:443"
+    environment:
+      EDGE_GATE_DOMAIN: ${EDGE_GATE_DOMAIN:?EDGE_GATE_DOMAIN must be set (e.g. demo.example.com) in .env}
+      EDGE_GATE_AUTH: ${EDGE_GATE_AUTH:?EDGE_GATE_AUTH must be set ("<user> <bcrypt-hash>") in .env}
+      # Empty = automatic HTTPS (Let's Encrypt) for the public phase; set to
+      # "tls internal" for a self-signed local run (see Caddyfile header).
+      EDGE_GATE_TLS: ${EDGE_GATE_TLS:-}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+    healthcheck:
+      # The Caddy admin endpoint binds IPv4 only, so probe 127.0.0.1 (not
+      # `localhost`, which may resolve to ::1 first and fail the check).
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:2019/config/"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # When the edge gate is active, the api is only reachable through Caddy —
+  # its host port binding is removed so nothing bypasses the gate (decision
+  # #269: the edge basic-auth covers the api, the only auth-less service).
+  api:
+    ports: !reset []
+
+volumes:
+  caddy_data:
+  caddy_config:

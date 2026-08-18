@@ -1,0 +1,55 @@
+# Edge Gate — Caddy reverse proxy + basic-auth + TLS scaffold for the public
+# demo URL (decision #269).
+#
+# INERT BY DEFAULT: this file is only live when the edge-gate service is
+# explicitly started via the compose.edge.yml override. Local dev (`make up`)
+# never loads it, so nothing here changes the dev stack.
+#
+# Public phase:
+#   docker compose -f docker-compose.yml -f compose.deploy.yml \
+#     -f compose.edge.yml up -d --no-build
+#
+# ADR-0018 stays intact: the api remains auth-less; gating happens only at the
+# edge. The observability UIs keep their own native login (decision #269); the
+# edge basic-auth covers the api, the single auth-less service.
+
+{$EDGE_GATE_DOMAIN} {
+	# TLS scaffold (decision #269). Public phase: automatic HTTPS via Caddy's
+	# default ACME issuer (Let's Encrypt) — the empty {$EDGE_GATE_TLS} default
+	# below keeps that. Local run without a real domain: set
+	# EDGE_GATE_TLS="tls internal" for self-signed certs. Plain HTTP is also
+	# possible by adding the global `auto_https off` option and a `http://`
+	# prefix on the site address; both are deliberate, documented switches.
+	{$EDGE_GATE_TLS}
+
+	# Health probe is open — the compose healthcheck, cd.yml smoke test, and
+	# `make deploy` poll all call it unauthenticated. Leaks only {"status":"ok"}.
+	@health path /health
+	handle @health {
+		reverse_proxy api:8000
+	}
+
+	# Observability UIs are path-routed under the demo domain and keep their
+	# own native login; no edge basic-auth on top.
+	handle_path /langfuse* {
+		reverse_proxy langfuse-web:3000
+	}
+	handle_path /grafana* {
+		reverse_proxy grafana:3000
+	}
+	handle_path /prometheus* {
+		reverse_proxy prometheus:9090
+	}
+
+	# Everything else is the api, behind edge basic-auth — including the API
+	# docs routes /docs and /redoc (exposed, but protected). Credentials come
+	# from the EDGE_GATE_AUTH env var as "<user> <bcrypt-hash>"; no plaintext
+	# and no committed htpasswd file. Generate the hash with:
+	#   docker run --rm caddy:2-alpine caddy hash-password
+	handle {
+		basic_auth * {
+			{$EDGE_GATE_AUTH}
+		}
+		reverse_proxy api:8000
+	}
+}

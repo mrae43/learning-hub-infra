@@ -31,6 +31,28 @@ The root `Makefile` wraps the local dev container lifecycle defined in `docker-c
 
 **Deploying the demo.** CI is the single image build path — the deployed stack pulls, never builds. `make deploy` pulls the published image (`ghcr.io/mrae43/learning-hub-infra:latest` by default, via the `compose.deploy.yml` override), starts the stack with `--no-build`, and polls `GET /health` until ready (bounded). Copy `.env.example` to `.env` first and fill in `OPENAI_API_KEY`. Rollback is manual — re-run with a previous tag, `make deploy IMAGE_TAG=1.2.3` (published semver tags carry no `v` prefix). `cd.yml` only pushes an image after a boot + postgres + `/health` smoke test passes. The deploy override uses the Compose `!reset` tag, so Docker Compose v2.24+ is required.
 
+**The edge gate (Caddy).** For a public demo URL there is a scaffolded edge gate (decision #269): a `Caddyfile` + `compose.edge.yml` override that path-routes one domain to the api (and the Langfuse/Grafana/Prometheus UIs once the observability profile lands), terminates TLS, and enforces basic-auth on every api route except `GET /health` — the API docs routes (`/docs`, `/redoc`) are exposed but sit behind the auth wall. ADR-0018 stays intact: the api is still auth-less; gating happens only at the edge. **It is inert by default** — `make up` / `make deploy` never load it.
+
+To activate locally (self-signed TLS, no domain needed):
+```bash
+# one-time: generate a bcrypt hash for the demo credential
+docker run --rm caddy:2-alpine caddy hash-password
+# then put the credential in .env (compose doubles every `$` in the hash):
+#   EDGE_GATE_AUTH="demo $$2a$$10$$..."        (see .env.example)
+#   EDGE_GATE_DOMAIN=localhost
+#   EDGE_GATE_TLS=tls internal
+make up-edge
+# https://localhost/health stays open; everything else needs the credentials
+make down-edge
+```
+For the public phase, layer the override on the deploy files and let Caddy provision a Let's Encrypt certificate for the real domain:
+```bash
+# in .env: EDGE_GATE_DOMAIN=demo.example.com and a real EDGE_GATE_AUTH
+# (leave EDGE_GATE_TLS empty so automatic HTTPS issues a Let's Encrypt cert)
+docker compose -f docker-compose.yml -f compose.deploy.yml -f compose.edge.yml up -d --no-build
+```
+`EDGE_GATE_AUTH` lives in `.env` (gitignored) — the committed `.env.example` holds only placeholders. Set `EDGE_GATE_TLS="tls internal"` for self-signed local runs (the `make up-edge` default); leave it empty for Let's Encrypt. Passing the credential inline on the shell needs single quotes (`EDGE_GATE_AUTH='demo $2a$...' make up-edge`) so the shell doesn't expand the hash's `$`.
+
 ## Architecture
 
 Structured monorepo with extractable module boundaries:

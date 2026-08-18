@@ -152,10 +152,13 @@ learning-hub/
 ├── pyproject.toml                    # Root: uv workspace, ruff config, import-linter contracts
 ├── conftest.py                       # Root test fixtures (282 lines, shared by all packages)
 ├── alembic.ini                       # Alembic configuration for DB migrations
-├── Makefile                          # Thin docker-compose wrapper for local dev (up/logs/down)
+├── Makefile                          # Thin docker-compose wrapper for local dev (up/logs/down/deploy/up-edge)
 ├── docker-entrypoint.sh              # Container entrypoint: alembic upgrade + uvicorn
 ├── commitlint.config.mjs             # Conventional Commits enforcement
-├── docker-compose.yml                # Local dev: PostgreSQL + pgvector
+├── docker-compose.yml                # Local dev: PostgreSQL + pgvector (+ api)
+├── compose.deploy.yml                # Deploy override: pull GHCR image instead of building
+├── compose.edge.yml                  # Edge gate override (Caddy basic-auth + TLS), inert by default
+├── Caddyfile                         # Edge gate reverse-proxy config (decision #269), inert by default
 ├── Dockerfile                        # Multi-stage build (all 7 packages)
 ├── .env.example
 ├── skills-lock.json                  # Pinned agent skill versions
