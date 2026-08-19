@@ -14,7 +14,7 @@ A hand-rolled RAG study tool for learning AI/ML from papers, books, and document
 
 **Query (MVP).** Send `{query: str}` to `POST /query`. The system retrieves candidate chunks from your entire corpus using a hybrid dense + sparse retrieval pipeline, reranks the top candidates with a cross-encoder, and assembles the most relevant grounded context for model generation. The response is a structured `HarnessAResponse` — answer text, cited passages, and a `grounded: bool` flag so you know whether the answer actually came from your documents.
 
-**Depth Dive (post-MVP 1).** Send a `CapturedPassage` to `POST /dive`. The framing agent resolves the treatment set and search intent, the assembly agent grounds the passage against the corpus (with retry-once web search when the brief calls for it), and the LLM generates an `interactive_animation` scene graph — the richer, multi-modal explanation format ([ADR-0020](./docs/adr/0020-depth-dive-harness-b-architecture.md)).
+**Depth Dive (post-MVP 1).** Send a `CapturedPassage` to `POST /dive`. The framing agent resolves the treatment set and search intent, the assembly agent grounds the passage against the corpus (with retry-once web search when the brief calls for it), and the harness produces an `interactive_animation` scene graph — the richer, multi-modal explanation format ([ADR-0020](./docs/adr/0020-depth-dive-harness-b-architecture.md)). The scene graph moves to deterministic template generation, rendered to self-contained HTML delivered through a Claude Code plugin ([ADR-0022](./docs/adr/0022-deterministic-scene-graph-and-self-contained-html.md), [ADR-0023](./docs/adr/0023-claude-code-plugin-as-mvp-client.md)).
 
 **Roadmap.**
 | Phase | What | Status |

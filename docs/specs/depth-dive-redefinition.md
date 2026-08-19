@@ -3,6 +3,8 @@
 > Contract-altitude spec for the redefined Depth Dive harness. No code, no migration design — this is the destination artifact handed to implementation planning.
 >
 > Assembled from decisions in the [Wayfinder Map: Depth Dive Redefinition](https://github.com/mrae43/learning-hub-infra/issues/215) child tickets.
+>
+> **Superseding decisions:** ADR-0022 makes the scene graph template-generated (not LLM-generated) and adds self-contained HTML rendering; ADR-0023 makes a Claude Code plugin the MVP client instead of a separate UI repo. §7's `interactive_animation` contract is unchanged.
 
 ## 1. Destination
 
@@ -26,7 +28,7 @@ This spec supersedes the dual-coding MVP definition in `CONTEXT.md` and provides
 ### Out of scope
 
 - Ingestion pipeline redesign for non-text extraction — its own wayfinder map, consuming §10 of this spec.
-- Client/UI implementation, repo topology, and start timing — the UI lives in a separate repo; contracts here are sufficient to mock against.
+- Client/UI implementation, repo topology, and start timing — the MVP client is a Claude Code plugin (ADR-0023); the scene-graph contract remains mockable against.
 - Backend deployment, auth, multi-tenancy — MVP uses static API keys per `ADR-0018`; per-user auth is a future map.
 - Stateful learner modeling (quizzing, scheduling, spaced repetition, progress history) — post-MVP per `CONTEXT.md`.
 - Retrieval Practice / Spaced Repetition as output types — post-MVP.
@@ -212,7 +214,7 @@ The ratified top-level contract (finalized during implementation, ticket #257):
 | `output_type` | `Literal["interactive_animation"]` | Discriminated union root; the MVP's only output type. |
 | `title` | `str` | Short headline for the animation. |
 | `concept` | `str` | The concept being animated. |
-| `viewport` | `Viewport` (`width`, `height`) | Design-time coordinate space that element `x`/`y` positions are relative to. Screen-size independence is the client's job; these are nominal dimensions (prototype: 800 × 520). |
+| `viewport` | `Viewport` (`width`, `height`) | Design-time coordinate space that element `x`/`y` positions are relative to. Screen-size independence is the renderer's job (ADR-0022); these are nominal dimensions (prototype: 800 × 520). |
 | `elements` | `list[SceneElement]` | Persistent scene primitives with stable IDs (non-empty). |
 | `steps` | `list[AnimationStep]` | Ordered states that mutate `element_states` by element ID (non-empty). |
 | `initial_state` | `dict[str, ElementState]` | Seeds the initial state of every declared element. |
@@ -267,7 +269,7 @@ Depth Dive runs a **two-agent stateless pipeline** in this repo.
 2. **Assembly agent**
    - Consumes the brief.
    - Calls corpus retrieval and/or web search as needed.
-   - Prompts the LLM for the artifact payload.
+   - Prompts the LLM for prose + a bounded semantic spec; a deterministic renderer produces the scene graph and self-contained HTML (ADR-0022).
    - Returns the structured `HarnessBResponse`.
 
 The framing/assembly split makes the output decision visible and auditable before generation starts.
@@ -294,12 +296,12 @@ The parent-child model for `text`/`code` is reused from Harness A / `ADR-0014`. 
 
 **Allowed per request:** retrieval, web search, LLM calls, building the interactive artifact. Deterministic memoization keyed strictly by request content + corpus version + search results is allowed as a performance optimization, but must not accumulate across requests in a way that personalizes future output.
 
-**Owner of learner state:** a separate UI repo. Cross-device sync is v2 for that repo.
+**Owner of learner state:** the MVP client is a Claude Code plugin (ADR-0023); learner state remains unowned and deferred. Cross-device sync is v2.
 
 ### UI-repo / backend boundary
 
 - Document ownership stays in this backend (global ingested corpus).
-- The UI repo may assign a `client_passage_id` at capture time; the backend ignores it.
+- The client may assign a `client_passage_id` at capture time; the backend ignores it.
 - Auth stays at static API keys per `ADR-0018`.
 
 ## 9. `HarnessBRequest` / `HarnessBResponse` contract
