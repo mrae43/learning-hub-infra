@@ -1,3 +1,62 @@
+# Traces path (issue #291): self-hosted Langfuse. The collector fans the api's
+# spans out to langfuse-web via an `otlphttp` exporter (Basic-Auth with the
+# headless-provisioned project keys + `x-langfuse-ingestion-version: 4`).
+# Langfuse gets its own Postgres container/DB/user (decision #270) — the app's
+# pgvector database is untouched. All six services are gated behind the
+# `observability` profile; only langfuse-web binds a host port (loopback).
+#
+# The env block is shared by web + worker (same as the official Langfuse
+# reference); the LANGFUSE_INIT_* vars headless-provision the demo project and
+# user so the collector's keys exist on first boot.
+x-langfuse-env: &langfuse-env
+  NEXTAUTH_URL: http://localhost:3000
+  NEXTAUTH_SECRET: ${LANGFUSE_NEXTAUTH_SECRET:-dev-nextauth-secret}
+  DATABASE_URL: postgresql://langfuse:langfuse@langfuse-postgres:5432/langfuse
+  SALT: ${LANGFUSE_SALT:-dev-salt}
+  ENCRYPTION_KEY: ${LANGFUSE_ENCRYPTION_KEY:-0000000000000000000000000000000000000000000000000000000000000000}
+  CLICKHOUSE_URL: http://clickhouse:8123
+  CLICKHOUSE_MIGRATION_URL: clickhouse://clickhouse:9000
+  CLICKHOUSE_USER: clickhouse
+  CLICKHOUSE_PASSWORD: clickhouse
+  CLICKHOUSE_CLUSTER_ENABLED: "false"
+  REDIS_HOST: redis
+  REDIS_PORT: "6379"
+  REDIS_AUTH: ${LANGFUSE_REDIS_AUTH:-dev-redis-secret}
+  LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse
+  LANGFUSE_S3_EVENT_UPLOAD_REGION: auto
+  LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: minio
+  LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: miniosecret
+  LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://minio:9000
+  LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: "true"
+  LANGFUSE_S3_EVENT_UPLOAD_PREFIX: events/
+  LANGFUSE_S3_MEDIA_UPLOAD_BUCKET: langfuse
+  LANGFUSE_S3_MEDIA_UPLOAD_REGION: auto
+  LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID: minio
+  LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY: miniosecret
+  LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: http://minio:9000
+  LANGFUSE_S3_MEDIA_UPLOAD_FORCE_PATH_STYLE: "true"
+  LANGFUSE_S3_MEDIA_UPLOAD_PREFIX: media/
+  LANGFUSE_INIT_ORG_ID: learning-hub
+  LANGFUSE_INIT_ORG_NAME: Learning Hub
+  LANGFUSE_INIT_PROJECT_ID: learning-hub
+  LANGFUSE_INIT_PROJECT_NAME: learning-hub
+  LANGFUSE_INIT_PROJECT_PUBLIC_KEY: ${LANGFUSE_INIT_PROJECT_PUBLIC_KEY:-pk-lf-00000000-0000-0000-0000-000000000000}
+  LANGFUSE_INIT_PROJECT_SECRET_KEY: ${LANGFUSE_INIT_PROJECT_SECRET_KEY:-sk-lf-00000000-0000-0000-0000-000000000000}
+  LANGFUSE_INIT_USER_EMAIL: ${LANGFUSE_INIT_USER_EMAIL:-demo@learning-hub.local}
+  LANGFUSE_INIT_USER_NAME: demo
+  LANGFUSE_INIT_USER_PASSWORD: ${LANGFUSE_INIT_USER_PASSWORD:-demo-demo-1234}
+
+# Both Langfuse application containers wait on the same four backing stores.
+x-langfuse-depends-on: &langfuse-depends-on
+  langfuse-postgres:
+    condition: service_healthy
+  clickhouse:
+    condition: service_healthy
+  redis:
+    condition: service_healthy
+  minio:
+    condition: service_healthy
+
 services:
   postgres:
     image: pgvector/pgvector:pg16
@@ -61,6 +120,11 @@ services:
     profiles: ["observability"]
     restart: unless-stopped
     command: ["--config=/etc/otelcol/config.yml"]
+    environment:
+      # Basic-Auth header value for the Langfuse traces exporter (issue #291);
+      # consumed by config.yml's ${env:LANGFUSE_OTEL_AUTH}. Default matches the
+      # LANGFUSE_INIT_* dev keypair in the langfuse-env anchor.
+      LANGFUSE_OTEL_AUTH: ${LANGFUSE_OTEL_AUTH:-cGstbGYtMDAwMDAwMDAtMDAwMC0wMDAwLTAwMDAtMDAwMDAwMDAwMDAwOnNrLWxmLTAwMDAwMDAwLTAwMDAtMDAwMC0wMDAwLTAwMDAwMDAwMDAwMA==}
     volumes:
       - ./observability/otel-collector/config.yml:/etc/otelcol/config.yml:ro
 
@@ -93,7 +157,147 @@ services:
     depends_on:
       - prometheus
 
+  # Traces path (issue #291): self-hosted Langfuse. All six services are gated
+  # behind the `observability` profile; only langfuse-web binds a host port
+  # (loopback). Shared env lives in the top-level `x-langfuse-env` anchor.
+  langfuse-postgres:
+    image: postgres:17
+    profiles: ["observability"]
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: langfuse
+      POSTGRES_PASSWORD: langfuse
+      POSTGRES_DB: langfuse
+      TZ: UTC
+      PGTZ: UTC
+    volumes:
+      - langfuse_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U langfuse -d langfuse"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:25.12
+    profiles: ["observability"]
+    restart: unless-stopped
+    user: "101:101"
+    environment:
+      CLICKHOUSE_DB: default
+      CLICKHOUSE_USER: clickhouse
+      CLICKHOUSE_PASSWORD: clickhouse
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8123/ping || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 1s
+
+  redis:
+    image: redis:7
+    profiles: ["observability"]
+    restart: unless-stopped
+    command: ["sh", "-c", "exec redis-server --requirepass \"$${REDIS_AUTH}\" --maxmemory-policy noeviction"]
+    environment:
+      REDIS_AUTH: ${LANGFUSE_REDIS_AUTH:-dev-redis-secret}
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$${REDIS_AUTH}\" ping | grep -q PONG"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    # Image deliberately untagged (resolves to `latest`): this matches the
+    # official Langfuse reference, and the versioned cgr.dev/chainguard tags
+    # require a Chainguard account (documented exception to the no-`latest`
+    # rule — see docs/research/langfuse-self-hosted.md §8).
+    image: cgr.dev/chainguard/minio
+    profiles: ["observability"]
+    restart: unless-stopped
+    entrypoint: sh
+    # Create the 'langfuse' bucket before the server starts; --console-address
+    # is omitted so no console port is exposed (loopback-only posture).
+    command: -c 'mkdir -p /data/langfuse && minio server --address ":9000" /data'
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: miniosecret
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 1s
+
+  langfuse-web:
+    image: langfuse/langfuse:4
+    profiles: ["observability"]
+    restart: unless-stopped
+    environment:
+      <<: *langfuse-env
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on: *langfuse-depends-on
+    healthcheck:
+      # The Langfuse web server binds its container IP, not loopback, so probe
+      # `$(hostname)` rather than localhost/127.0.0.1.
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider \"http://$$(hostname):3000/api/public/health\" || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  langfuse-worker:
+    image: langfuse/langfuse-worker:4
+    profiles: ["observability"]
+    restart: unless-stopped
+    environment:
+      <<: *langfuse-env
+    depends_on: *langfuse-depends-on
+
+  # Host + database exporters (issue #291): node-exporter surfaces the host's
+  # CPU/memory/disk; postgres-exporter queries the app's pgvector database and
+  # exposes both its built-in pg_* metrics and the custom ingestion-failed
+  # counter (decision #272). Neither publishes a host port — Prometheus scrapes
+  # them on the internal network only.
+  node-exporter:
+    image: prom/node-exporter:v1
+    profiles: ["observability"]
+    restart: unless-stopped
+    pid: host
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - --path.procfs=/host/proc
+      - --path.sysfs=/host/sys
+      - --path.rootfs=/rootfs
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.20.1
+    profiles: ["observability"]
+    restart: unless-stopped
+    environment:
+      DATA_SOURCE_NAME: postgresql://learning_hub:learning_hub@postgres:5432/learning_hub?sslmode=disable
+    volumes:
+      - ./observability/postgres-exporter/queries.yml:/etc/postgres_exporter/queries.yml:ro
+    command: ["--extend.query-path=/etc/postgres_exporter/queries.yml"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
 volumes:
   postgres_data:
   prometheus_data:
   grafana_data:
+  langfuse_postgres_data:
+  clickhouse_data:
+  redis_data:
+  minio_data:

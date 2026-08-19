@@ -21,7 +21,7 @@
 # ADR-0018 stays intact: the api remains auth-less; gating happens only at the
 # edge. The observability UIs (langfuse-web/grafana/prometheus) are path-routed
 # here and keep their own native login; they join this network when the
-# observability profile (issues #289/#291) is added.
+# observability profile (issues #289/#291) is up.
 services:
   edge-gate:
     image: caddy:2-alpine

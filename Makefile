@@ -69,13 +69,15 @@ smoke-run: ## Run a budgeted smoke run against the real API (~1 upstream user, <
 	LOAD_PROFILE=smoke uv run --package scripts locust -f scripts/loadgen/locustfile.py \
 		--host $(LOAD_TARGET_URL) --headless --only-summary
 
-# Observability profile (issue #289, metrics path): OTel Collector + Prometheus +
-# Grafana. `up-observability` starts the metrics trio and points the api's
-# OTLP/HTTP export at the collector; `down-observability` stops the stack but
-# never deletes the named data volumes (matching `down`). The Langfuse traces
-# path is a sibling ticket (issue #291) and joins this profile later.
+# Observability profile (issues #289 + #291): OTel Collector + Prometheus +
+# Grafana + self-hosted Langfuse (web/worker + its own Postgres, ClickHouse,
+# Redis, MinIO) + node/postgres exporters. `up-observability` starts the whole
+# stack and points the api's OTLP/HTTP export at the collector, which fans
+# traces out to Langfuse and RED metrics out to Prometheus/Grafana;
+# `down-observability` stops the stack but never deletes the named data volumes
+# (matching `down`).
 .PHONY: up-observability
-up-observability: check-docker ## Start the metrics stack (OTel Collector + Prometheus + Grafana) in the background
+up-observability: check-docker ## Start the observability stack (Langfuse + OTel Collector + Prometheus + Grafana + exporters) in the background
 	OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318 docker compose --profile observability up -d
 
 .PHONY: down-observability

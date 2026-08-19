@@ -1,12 +1,13 @@
-# OTel Collector config for the metrics path (issue #289).
+# OTel Collector config for the observability stack (issues #289 + #291).
 #
 # The api is the single OTLP/HTTP exporter: every request's spans (the root
 # request span plus the five RAG stage spans) arrive on the `otlp` receiver.
-# The `span_metrics` connector turns those spans into RED metrics (request
-# rate, error rate, duration by span/service) without any in-app metric code,
-# and the `prometheus` exporter serves them on :8889/metrics for Prometheus to
-# scrape. Traces are logged by the `debug` exporter for visibility; the
-# Langfuse traces exporter lands with the traces path (issue #291).
+# Traces fan out to self-hosted Langfuse (the `otlphttp/langfuse` exporter, on
+# the v4 OTLP endpoint with the headless-provisioned project keys) while the
+# `span_metrics` connector derives RED metrics (request rate, error rate,
+# duration by span/service) without any in-app metric code, served on
+# :8889/metrics for Prometheus to scrape. The `debug` exporter keeps a local
+# echo of each span in the collector logs.
 receivers:
   otlp:
     protocols:
@@ -33,13 +34,21 @@ exporters:
     verbosity: basic
   prometheus:
     endpoint: 0.0.0.0:8889
+  otlphttp/langfuse:
+    endpoint: http://langfuse-web:3000/api/public/otel
+    headers:
+      # Basic-Auth over the base64 of "<public-key>:<secret-key>" from the
+      # headless-provisioned project (LANGFUSE_OTEL_AUTH, see .env.example).
+      # `x-langfuse-ingestion-version: 4` keeps v4 ingestion real-time.
+      Authorization: "Basic ${env:LANGFUSE_OTEL_AUTH}"
+      x-langfuse-ingestion-version: "4"
 
 service:
   pipelines:
     traces:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [span_metrics, debug]
+      exporters: [span_metrics, otlphttp/langfuse, debug]
     metrics:
       receivers: [span_metrics]
       processors: [memory_limiter, batch]
