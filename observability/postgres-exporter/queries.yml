@@ -1,0 +1,15 @@
+# Custom queries for postgres-exporter (issue #291).
+#
+# Loaded via --extend.query-path (the exporter's documented custom-query
+# mechanism; --config.file only holds auth_modules). The built-in pg_* metrics
+# cover server health (connections, activity, cache hit ratio); this adds the
+# application-level signal the alert rules key on (decision #272): documents
+# whose ingestion ended in the failed state, read straight off the app's
+# `documents` table in the learning_hub database. The metric is a gauge of the
+# failed count at scrape time (name: <query-key>_<column>).
+learning_hub_ingestion:
+  query: "SELECT COUNT(*) AS failed FROM documents WHERE status = 'failed'"
+  metrics:
+    - failed:
+        usage: "GAUGE"
+        description: "Number of documents whose ingestion ended in the failed state."
