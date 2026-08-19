@@ -28,7 +28,7 @@ These docs are **not** auto-loaded into session context. Only this `AGENTS.md` i
 **Before choosing or adding a library, model, or external service:**
 
 - `docs/tech-stack.md` — MVP stack and staged post-MVP milestones.
-- `docs/adr/` — read the ADR(s) most relevant to the area (e.g., ADR-0001 inference, ADR-0002 pgvector, ADR-0003 hand-rolled RAG, ADR-0004 embeddings, ADR-0006 background ingestion, ADR-0007 path-gated retrieval eval (superseded by ADR-0015), ADR-0009 HarnessAResponse shape, ADR-0012 depth-dive-web-search-agentic, ADR-0013 depth-dive-search-failure-retry-fallback, ADR-0014 data-schema-api-contracts-harness-a, ADR-0015 deepeval-for-retrieval-evaluation, ADR-0016 retrieval-qa-critical-gaps-parent-child-hybrid-rerank, ADR-0017 important-but-gatable-retrieval-phase, ADR-0018 no-auth-access-control-for-mvp, ADR-0019 shared-retrieval-primitives-in-core, ADR-0020 depth-dive-harness-b-architecture, ADR-0021 captured-passage-model). Note: ADR-0008 is intentionally skipped in numbering. Treat ADRs as **constraints, not suggestions**. If a decision contradicts an ADR, stop and propose a new/updated ADR rather than silently deviating.
+- `docs/adr/` — read the ADR(s) most relevant to the area (e.g., ADR-0001 inference, ADR-0002 pgvector, ADR-0003 hand-rolled RAG, ADR-0004 embeddings, ADR-0006 background ingestion, ADR-0007 path-gated retrieval eval (superseded by ADR-0015), ADR-0009 HarnessAResponse shape, ADR-0012 depth-dive-web-search-agentic, ADR-0013 depth-dive-search-failure-retry-fallback, ADR-0014 data-schema-api-contracts-harness-a, ADR-0015 deepeval-for-retrieval-evaluation, ADR-0016 retrieval-qa-critical-gaps-parent-child-hybrid-rerank, ADR-0017 important-but-gatable-retrieval-phase, ADR-0018 no-auth-access-control-for-mvp, ADR-0019 shared-retrieval-primitives-in-core, ADR-0020 depth-dive-harness-b-architecture, ADR-0021 captured-passage-model, ADR-0022 deterministic-scene-graph-and-self-contained-html, ADR-0023 claude-code-plugin-as-mvp-client). Note: ADR-0008 is intentionally skipped in numbering. Treat ADRs as **constraints, not suggestions**. If a decision contradicts an ADR, stop and propose a new/updated ADR rather than silently deviating.
 
 **Before writing a commit message:**
 
@@ -75,6 +75,7 @@ These docs are **not** auto-loaded into session context. Only this `AGENTS.md` i
 - **New chunking strategy for a doc type** → `retrieval_qa/src/retrieval_qa/chunking/`
 - **Bug fix in retrieval logic** → `core/src/core/retrieval/`
 - **New Depth Dive generation feature** → `depth_dive/src/depth_dive/generation/`
+- **New Depth Dive renderer/template** → `depth_dive/src/depth_dive/render/`
 - **Web search improvements** → `depth_dive/src/depth_dive/web_search/`
 - **New shared type** → `core/src/core/types/`
 - **New API endpoint** → `api/src/api/routes/`
@@ -117,6 +118,8 @@ Rules:
 
 - **`api/routes/__init__.py`** — route modules are imported directly in `server.py`; no package init file exists.
 - **LLM framing turn** — the framing agent (`depth_dive/src/depth_dive/framing/framing_agent.py`) is still a deterministic tracer-bullet stand-in for the eventual LLM framing turn (ADR-0012); treatment routing and search intent are keyed on the passage's type/content rather than content analysis.
+- **Deterministic scene-graph renderer** — `depth_dive/render/` (ADR-0022) is decided but not yet built; the scene graph is still LLM-generated in `generation_agent.py` until the renderer lands.
+- **Claude Code plugin** — the command + skill + MCP client (ADR-0023) is decided but not yet built.
 
 ## Agent skills
 

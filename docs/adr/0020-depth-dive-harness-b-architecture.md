@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted
+Accepted — partially superseded: the scene-graph generation described here (the assembly agent's LLM turn producing the `interactive_animation` scene graph) is superseded by ADR-0022; the "separate UI repo owns learner state" boundary is amended by ADR-0023. The two-agent pipeline, web-search survival, statelessness boundary, and retrieval rules remain in force.
 
 ## Context
 
