@@ -55,6 +55,12 @@ docker compose -f docker-compose.yml -f compose.deploy.yml -f compose.edge.yml u
 
 **Metrics path (OTel Collector + Prometheus + Grafana).** `make up-observability` starts the metrics half of the `observability` compose profile (issue #289): an `otel-collector` receiving the api's OTLP/HTTP spans and deriving RED metrics (request rate / error rate / latency by stage) via the span-metrics connector, Prometheus scraping it on `http://localhost:9090` with a 15-day retention window, and Grafana serving dashboards-as-code on `http://localhost:3001` (both loopback-only). The profile also points the api's `OTEL_EXPORTER_OTLP_ENDPOINT` at the collector automatically, so the five RAG stage spans from issue #295 become dashboard panels. `make down-observability` stops the stack without deleting the named data volumes. Grafana's dashboards and Prometheus datasource are provisioned from `observability/` (dashboard JSON is committed as dashboards-as-code); the default Grafana login is `admin`/`admin` on a fresh volume. The profile is additive — `make up` stays untouched — and the traces half (Langfuse + exporters) is a sibling ticket (issue #291).
 
+**Load generator (Locust).** A Locust load generator lives in `scripts/loadgen/` (decision #271, issue #290): one locustfile drives `/query` (~75%) and `/dive` (~25%) as weighted user scenarios plus a low-rate `/health` liveness task, replaying the `eval_corpus/eval_set_tuning.yaml` queries against the deployed api. The `LOAD_PROFILE` env var selects the run shape (default `volume`):
+- **volume** — sustained run against the mock upstream (`make load-up` first): 10 users, 1/s spawn, no run-time limit (Ctrl+C to stop). Deterministic mock means the error-rate and p95 ceilings should hold.
+- **smoke** — ~1 upstream user (plus a low-rate liveness user), no ramp-up, against the real API: stops after 50 upstream-backed requests (`/query` + `/dive`) so spend is bounded; 429 rate limits are logged but not counted as errors.
+
+Run with `make load-run` / `make smoke-run` (override the target with `LOAD_TARGET_URL=http://...`, or bound a volume run with `LOAD_RUN_TIME=5m`). Each run evaluates the profile's success gates — run-level error rate ≤1% and per-endpoint p95 ceilings (`/health` <100ms, `/query` <2s volume / <10s smoke, `/dive` <5s volume / <30s smoke) — prints a plain-text report, and exits non-zero if any gate fails. The gates are first-pass placeholders that the alert rules key on and get sharpened against smoke baselines.
+
 ## Architecture
 
 Structured monorepo with extractable module boundaries:
@@ -67,7 +73,7 @@ Structured monorepo with extractable module boundaries:
 | `api/`          | FastAPI server (thin routes → controllers)                     |
 | `ingestion/`    | Document upload + background ingestion pipeline                |
 | `mock_upstream/`| OpenAI-compatible mock of hosted embeddings/inference/web-search for volume load runs |
-| `scripts/`      | Retrieval eval & chunk-size tuning tooling over `eval_corpus/` |
+| `scripts/`      | Retrieval eval & chunk-size tuning tooling over `eval_corpus/`; Locust load generator under `scripts/loadgen/` |
 | `eval_corpus/`  | Retrieval eval & tuning corpus (books, papers, synthetic)      |
 
 ## Why this tech stack

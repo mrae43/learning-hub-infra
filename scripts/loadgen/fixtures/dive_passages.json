@@ -1,0 +1,42 @@
+[
+  {
+    "passage_type": "text",
+    "content": "Replication means keeping a copy of the same data on multiple machines that are connected via a network. Reasons for replication include keeping data geographically close to users, allowing the system to continue working even if some of its parts have failed, and scaling out the number of machines that can serve read queries. Replication is one of the core mechanisms a distributed database uses to provide durability and availability: if one machine is lost, another still holds the data.",
+    "source": "eval_corpus/books/ddia-excerpts.md"
+  },
+  {
+    "passage_type": "text",
+    "content": "In synchronous replication, the leader waits until the follower has confirmed that it received the write before reporting success to the user, and before making the write visible to other clients. In asynchronous replication, the leader sends the message but doesn't wait for a response from the follower. The advantage of synchronous replication is that the follower is guaranteed to have an up-to-date copy of the data that is consistent with the leader. The disadvantage is that if the synchronous follower doesn't respond, the write cannot be processed at all.",
+    "source": "eval_corpus/books/ddia-excerpts.md"
+  },
+  {
+    "passage_type": "text",
+    "content": "One way of partitioning is to assign each key to a partition by taking the hash of the key and then assigning a range of hashes to each partition. This approach is known as hash-based partitioning or consistent hashing. It has the advantage of distributing keys quite evenly across partitions, since a good hash function spreads keys uniformly over the hash space. The downside of hash partitioning is that range queries lose their locality: keys that are adjacent in the key space land in different partitions.",
+    "source": "eval_corpus/books/ddia-excerpts.md"
+  },
+  {
+    "passage_type": "text",
+    "content": "ACID stands for Atomicity, Consistency, Isolation, and Durability. Atomicity means that writes in a transaction are executed as a whole — either all succeed or all fail. Consistency means that the database is in a valid state before and after the transaction. Isolation means that concurrently executing transactions are isolated from each other. Durability means that once a transaction has committed successfully, the data will not be forgotten, even if there is a hardware fault or the database crashes.",
+    "source": "eval_corpus/books/ddia-excerpts.md"
+  },
+  {
+    "passage_type": "text",
+    "content": "Backpropagation is the algorithm for computing gradients of the loss function with respect to the network parameters. It works by applying the chain rule from calculus to propagate error signals backward through the network. Once the gradients are computed, an optimization algorithm such as stochastic gradient descent (SGD) uses them to update the parameters. The backward pass is efficient because it reuses intermediate values computed in the forward pass; each layer's gradient depends only on its local inputs and the gradient flowing back from the layers after it.",
+    "source": "eval_corpus/books/deep-learning-concepts.md"
+  },
+  {
+    "passage_type": "text",
+    "content": "Standard RNNs struggle to capture long-range dependencies because gradients tend to either vanish or explode as they are backpropagated through many time steps. This is known as the vanishing gradient problem. The hidden state of an RNN at early time steps has diminishing influence on the gradients at later time steps. Because the same weights are applied at every time step, the gradient is multiplied by a matrix at each step, so it shrinks (or grows) exponentially with sequence length.",
+    "source": "eval_corpus/books/deep-learning-concepts.md"
+  },
+  {
+    "passage_type": "text",
+    "content": "Hybrid search combines dense (embedding) and sparse (BM25) retrieval via Reciprocal Rank Fusion (RRF). RRF combines the rank positions from each method: RRF_score(d) = 1/(k + rank_dense(d)) + 1/(k + rank_sparse(d)), where k is a constant (typically 60). Hybrid search recovers exact-match queries that pure dense retrieval misses, and when one path returns zero results, the other path's results alone still produce output, keeping the system available during partial index failures.",
+    "source": "eval_corpus/synthetic/rag-system-reference.md"
+  },
+  {
+    "passage_type": "text",
+    "content": "In parent-child chunking, small child chunks (~512 tokens) are embedded and matched by the query, and the parent chunk (the enclosing section) replaces the matched children before being handed to the LLM. This resolves the precision-vs-context tradeoff: small chunks are precise to match, while large parent sections give the generator the surrounding context it needs. Hierarchical parent-child chunking is the most widely adopted production pattern for this reason.",
+    "source": "eval_corpus/synthetic/rag-system-reference.md"
+  }
+]
