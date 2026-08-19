@@ -48,6 +48,27 @@ load-up: check-docker ## Start the volume-load stack (mock upstream + api) in th
 load-down: check-docker ## Stop the volume-load stack (never deletes the pgvector data volume)
 	docker compose --profile load down
 
+# Load generator (decision #271, issue #290): one Locust locustfile driven by
+# the LOAD_PROFILE env var. Volume runs sustained against the mock-upstream
+# stack (`make load-up` first); smoke runs ~1 upstream user (plus a low-rate
+# liveness user) against the real API with a capped upstream-backed budget.
+# Each run evaluates the error-rate and p95 ceilings and exits non-zero when
+# they're breached. LOAD_TARGET_URL overrides the api base URL; LOAD_RUN_TIME
+# bounds a volume run (e.g. LOAD_RUN_TIME=5m).
+LOAD_TARGET_URL ?= http://localhost:8000
+LOAD_RUN_TIME ?=
+
+.PHONY: load-run
+load-run: ## Run a sustained volume load run against the mock-upstream stack
+	LOAD_PROFILE=volume uv run --package scripts locust -f scripts/loadgen/locustfile.py \
+		--host $(LOAD_TARGET_URL) --headless --only-summary \
+		$(if $(LOAD_RUN_TIME),--run-time $(LOAD_RUN_TIME),)
+
+.PHONY: smoke-run
+smoke-run: ## Run a budgeted smoke run against the real API (~1 upstream user, <=50 upstream-backed requests)
+	LOAD_PROFILE=smoke uv run --package scripts locust -f scripts/loadgen/locustfile.py \
+		--host $(LOAD_TARGET_URL) --headless --only-summary
+
 # Observability profile (issue #289, metrics path): OTel Collector + Prometheus +
 # Grafana. `up-observability` starts the metrics trio and points the api's
 # OTLP/HTTP export at the collector; `down-observability` stops the stack but

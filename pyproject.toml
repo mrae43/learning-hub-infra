@@ -22,6 +22,7 @@ dev = [
     "deepeval>=4.1.8",
     "pyyaml>=6.0",
     "types-pyyaml>=6.0.12.20260724",
+    "types-gevent>=26.4.0.20260518",
     "opentelemetry-sdk>=1.24",
 ]
 
