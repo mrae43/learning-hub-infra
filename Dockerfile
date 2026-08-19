@@ -32,6 +32,7 @@ COPY api/src ./api/src
 COPY ingestion/src ./ingestion/src
 COPY alembic.ini ./
 COPY scripts/*.py ./scripts/
+COPY scripts/loadgen ./scripts/loadgen
 
 # Install the workspace members on top of the third-party dependencies. The
 # mock-upstream package is deliberately excluded: it runs as its own compose
