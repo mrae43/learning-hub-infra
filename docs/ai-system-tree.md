@@ -159,9 +159,12 @@ learning-hub/
 ├── compose.deploy.yml                # Deploy override: pull GHCR image instead of building
 ├── compose.edge.yml                  # Edge gate override (Caddy basic-auth + TLS), inert by default
 ├── Caddyfile                         # Edge gate reverse-proxy config (decision #269), inert by default
-├── observability/                    # Observability configs (issues #289/#291): dashboards-as-code, scrapers, collector, exporters
+├── observability/                    # Observability configs (issues #289/#291/#292): dashboards-as-code, scrapers, collector, exporters, alerting
 │   ├── otel-collector/config.yml     # OTLP receiver + span-metrics connector + Langfuse otlphttp + Prometheus exporter
-│   ├── prometheus/prometheus.yml     # Scrape targets: otel-collector, node-exporter, postgres-exporter
+│   ├── prometheus/prometheus.yml     # Scrape targets (incl. blackbox-api probe) + rule_files + alertmanager wiring
+│   ├── prometheus/alerts.yml         # Five alert rules (issue #292), keyed 1:1 by docs/runbook.md
+│   ├── alertmanager/                # Webhook sink receiver (URL from ALERTMANAGER_WEBHOOK_URL, UI-only default) + env-rendering entrypoint
+│   ├── blackbox-exporter/config.yml  # http_any_status probe module for the api's /health (ServiceDown signal)
 │   ├── postgres-exporter/queries.yml # Custom ingestion-failed query (learning_hub_ingestion_failed)
 │   └── grafana/                      # Provisioning (datasource + provider) and committed dashboard JSON
 ├── Dockerfile                        # Multi-stage build (all 7 packages)

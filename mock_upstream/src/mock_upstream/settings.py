@@ -10,6 +10,7 @@ for pure-throughput sweeps). Embedding dimensionality is fixed at 1536
 break pgvector cosine queries against the real-embedded corpus.
 """
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -26,6 +27,11 @@ class MockUpstreamSettings(BaseSettings):
         chat_latency_max_ms: Maximum simulated latency for ``/v1/chat/completions``.
         web_search_latency_min_ms: Minimum simulated latency for ``/v1/responses``.
         web_search_latency_max_ms: Maximum simulated latency for ``/v1/responses``.
+        error_rate: Probability (0.0-1.0) that a request fails with
+            ``error_status`` instead of succeeding. Zero (the default) disables
+            fault injection; load runs set it to induce an upstream error storm.
+        error_status: HTTP status returned when fault injection fires,
+            constrained to a valid status range (100-599).
     """
 
     model_config = SettingsConfigDict(
@@ -42,6 +48,8 @@ class MockUpstreamSettings(BaseSettings):
     chat_latency_max_ms: int = 400
     web_search_latency_min_ms: int = 150
     web_search_latency_max_ms: int = 400
+    error_rate: float = Field(default=0.0, ge=0.0, le=1.0)
+    error_status: int = Field(default=500, ge=100, le=599)
 
 
 # Global singleton used by the app. Tests construct fresh instances or

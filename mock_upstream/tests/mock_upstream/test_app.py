@@ -219,6 +219,38 @@ def test_unknown_endpoint_is_404(client: TestClient) -> None:
     assert response.status_code == 404
 
 
+def test_fault_injection_disabled_returns_200(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A zero error rate never fails a request, whatever the error status."""
+    monkeypatch.setattr(mock_settings, "error_rate", 0.0)
+    monkeypatch.setattr(mock_settings, "error_status", 502)
+
+    response = client.post("/v1/chat/completions", json=_MOCK_CHAT_PROMPT)
+
+    assert response.status_code == 200
+
+
+def test_fault_injection_returns_configured_status(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A 100% error rate returns the configured status on every endpoint.
+
+    Load runs set ``MOCK_ERROR_RATE``/``MOCK_ERROR_STATUS`` to induce an
+    upstream 502/503 storm that the api surfaces back to clients (issue #292).
+    """
+    monkeypatch.setattr(mock_settings, "error_rate", 1.0)
+    monkeypatch.setattr(mock_settings, "error_status", 502)
+
+    response = client.post(
+        "/v1/embeddings",
+        json={"model": "text-embedding-3-small", "input": ["hello"]},
+    )
+
+    assert response.status_code == 502
+    assert "detail" in response.json()
+
+
 def test_determinism_helper_rejects_zero_dimension() -> None:
     """A non-positive dimension degrades to an empty vector, never a crash."""
     assert mock_app_module._embed_vector("x", 0, 0) == []

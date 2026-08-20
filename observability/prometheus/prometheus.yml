@@ -1,14 +1,24 @@
-# Prometheus scrape config for the observability stack (issues #289 + #291).
+# Prometheus scrape config for the observability stack (issues #289 + #291 + #292).
 #
-# Three scrape targets on the internal network: the OTel Collector's Prometheus
+# Four scrape targets on the internal network: the OTel Collector's Prometheus
 # exporter (:8889/metrics) serving the span-derived RED metrics, node-exporter
-# (:9100) serving host metrics, and postgres-exporter (:9187) serving database
-# metrics plus the custom ingestion-failed counter. The 15-day retention window
-# is passed as a storage flag on the container command
-# (--storage.tsdb.retention.time=15d), not here.
+# (:9100) serving host metrics, postgres-exporter (:9187) serving database
+# metrics plus the custom ingestion-failed counter, and blackbox-exporter
+# (:9115) probing the api's /health as the service-down signal. The 15-day
+# retention window is passed as a storage flag on the container command
+# (--storage.tsdb.retention.time=15d), not here. The alert rules (issue #292)
+# live in alerts.yml; firing alerts fan out to the alertmanager service.
 global:
   scrape_interval: 15s
   evaluation_interval: 15s
+
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
 
 scrape_configs:
   - job_name: otel-collector
@@ -22,3 +32,24 @@ scrape_configs:
   - job_name: postgres-exporter
     static_configs:
       - targets: ["postgres-exporter:9187"]
+
+  # Availability probe for the api (issue #292): blackbox-exporter fetches
+  # /health and exposes probe_success. The module accepts ANY HTTP status as a
+  # successful probe, so probe_success drops to 0 only when the api process is
+  # unreachable/unresponsive — a degraded api that still answers /health (e.g.
+  # 503 while the database is down) stays "up" and is caught by the RED-based
+  # alerts instead.
+  - job_name: blackbox-api
+    metrics_path: /probe
+    params:
+      module: [http_any_status]
+    static_configs:
+      - targets:
+          - http://api:8000/health
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115

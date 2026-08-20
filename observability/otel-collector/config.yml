@@ -28,6 +28,10 @@ connectors:
     dimensions:
       - name: http.request.method
       - name: url.path
+      # Set by the api's request root span (api.telemetry.TraceRequestMiddleware)
+      # so the alert rules can tell upstream 502/503 responses apart from
+      # internal 500s (issue #292). Emitted as `http_response_status_code`.
+      - name: http.response.status_code
 
 exporters:
   debug:

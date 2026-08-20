@@ -1,0 +1,21 @@
+# Alertmanager config for the observability stack (issue #292).
+#
+# A single webhook sink receiver. The sink URL is rendered into this file at
+# container start by observability/alertmanager/entrypoint.sh, replacing the
+# __ALERTMANAGER_WEBHOOK_URL__ placeholder with the ALERTMANAGER_WEBHOOK_URL
+# env var (Alertmanager itself cannot expand env vars in its config). Compose
+# defaults that var to a dead loopback port, so alerts are visible in the
+# Alertmanager UI at http://localhost:9093 but nothing is delivered until the
+# operator sets a real webhook URL (see docs/runbook.md).
+route:
+  receiver: webhook
+  group_by: ["alertname"]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+
+receivers:
+  - name: webhook
+    webhook_configs:
+      - url: "__ALERTMANAGER_WEBHOOK_URL__"
+        send_resolved: true

@@ -89,6 +89,11 @@ services:
       MOCK_CHAT_LATENCY_MAX_MS: ${MOCK_CHAT_LATENCY_MAX_MS:-400}
       MOCK_WEB_SEARCH_LATENCY_MIN_MS: ${MOCK_WEB_SEARCH_LATENCY_MIN_MS:-150}
       MOCK_WEB_SEARCH_LATENCY_MAX_MS: ${MOCK_WEB_SEARCH_LATENCY_MAX_MS:-400}
+      # Fault injection (issue #292): MOCK_ERROR_RATE>0 makes a fraction of
+      # requests return MOCK_ERROR_STATUS, so a load run can induce the api's
+      # upstream 502/503 alert on demand (see docs/runbook.md).
+      MOCK_ERROR_RATE: ${MOCK_ERROR_RATE:-0}
+      MOCK_ERROR_STATUS: ${MOCK_ERROR_STATUS:-500}
 
   api:
     build: .
@@ -140,6 +145,7 @@ services:
       - "127.0.0.1:9090:9090"
     volumes:
       - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./observability/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
       - prometheus_data:/prometheus
     depends_on:
       - otel-collector
@@ -156,6 +162,44 @@ services:
       - grafana_data:/var/lib/grafana
     depends_on:
       - prometheus
+
+  # Alerting path (issue #292): Alertmanager receives Prometheus's firing
+  # rules and delivers them to a webhook sink whose URL comes from the
+  # ALERTMANAGER_WEBHOOK_URL env var — defaulted here to a dead loopback port
+  # so alerts are UI-only (http://localhost:9093) until a real URL is set. The
+  # entrypoint renders the env var into the config (Alertmanager cannot expand
+  # env vars itself) before exec-ing the binary.
+  alertmanager:
+    image: prom/alertmanager:v0
+    profiles: ["observability"]
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "/etc/alertmanager/entrypoint.sh"]
+    environment:
+      ALERTMANAGER_WEBHOOK_URL: ${ALERTMANAGER_WEBHOOK_URL:-http://127.0.0.1:65534/}
+    ports:
+      - "127.0.0.1:9093:9093"
+    volumes:
+      - ./observability/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - ./observability/alertmanager/entrypoint.sh:/etc/alertmanager/entrypoint.sh:ro
+      - alertmanager_data:/alertmanager
+    depends_on:
+      - prometheus
+
+  # Availability probe (issue #292): blackbox-exporter fetches the api's
+  # /health on request from Prometheus (job=blackbox-api) so the ServiceDown
+  # alert has a fast, precise signal. No host port — scraped on the internal
+  # network only. The module accepts any HTTP status as success, so a degraded
+  # api that still answers /health is NOT flagged as down.
+  blackbox-exporter:
+    image: prom/blackbox-exporter:v0.28.0
+    profiles: ["observability"]
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/blackbox_exporter/config.yml
+    volumes:
+      - ./observability/blackbox-exporter/config.yml:/etc/blackbox_exporter/config.yml:ro
+    depends_on:
+      - api
 
   # Traces path (issue #291): self-hosted Langfuse. All six services are gated
   # behind the `observability` profile; only langfuse-web binds a host port
@@ -297,6 +341,7 @@ volumes:
   postgres_data:
   prometheus_data:
   grafana_data:
+  alertmanager_data:
   langfuse_postgres_data:
   clickhouse_data:
   redis_data:

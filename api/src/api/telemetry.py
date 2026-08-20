@@ -23,7 +23,7 @@ from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor, SpanExporter
 from opentelemetry.trace import SpanKind
-from starlette.types import ASGIApp, Receive, Scope, Send
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from core.config.settings import Settings
 from core.telemetry import TRACER_NAME
@@ -94,9 +94,12 @@ class TraceRequestMiddleware:
 
     Each request opens a server-kind span (``GET /health``, ``POST /query``,
     ...) under which the five stage spans nest, so a collector renders a
-    single per-request trace instead of five orphaned roots. Inert by default:
-    without a configured provider the span is a no-op and the request is
-    unaffected.
+    single per-request trace instead of five orphaned roots. The span carries
+    the request's ``http.request.method`` / ``url.path`` and the response's
+    ``http.response.status_code`` (recorded as the response start message
+    passes through), which the collector's span-metrics connector turns into
+    the dimensions the alert rules key on. Inert by default: without a
+    configured provider the span is a no-op and the request is unaffected.
     """
 
     def __init__(self, app: ASGIApp) -> None:
@@ -120,7 +123,13 @@ class TraceRequestMiddleware:
         ) as span:
             span.set_attribute("http.request.method", method)
             span.set_attribute("url.path", path)
-            await self._app(scope, receive, send)
+
+            async def _send_with_status(message: Message) -> None:
+                if message["type"] == "http.response.start":
+                    span.set_attribute("http.response.status_code", message["status"])
+                await send(message)
+
+            await self._app(scope, receive, _send_with_status)
 
 
 __all__ = ["TraceRequestMiddleware", "configure_telemetry", "shutdown_telemetry"]
