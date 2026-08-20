@@ -1,0 +1,87 @@
+# Alert rules for the observability stack (issue #292).
+#
+# Five rules, each mapping one-to-one to a runbook entry in docs/runbook.md
+# (the runbook's section heading for each alert is exactly the alert name).
+# Signals come from two sources: the api's span-derived RED metrics on the
+# collector (traces_span_metrics_*, keying upstream- vs internal-failure on
+# the STAGE spans, since the api maps both to 502/503 per ADR-0014) and the
+# availability probe (blackbox-api job) plus the postgres-exporter custom
+# query (learning_hub_ingestion_failed).
+groups:
+  - name: learning-hub
+    rules:
+      - alert: ServiceDown
+        expr: probe_success{job="blackbox-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Learning Hub api is unreachable"
+          description: >-
+            The api's /health probe has failed for over a minute
+            (instance {{ $labels.instance }}). The api process is down,
+            unresponsive, or unreachable on the internal network.
+
+      - alert: Upstream502503
+        expr: >-
+          sum(rate(traces_span_metrics_calls_total{
+            span_name=~"embed|generate|web-search|rerank",
+            status_code="STATUS_CODE_ERROR"}[5m])) > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Upstream stage failures (502/503 to clients)"
+          description: >-
+            The api's upstream-backed stages (embed / generate / web-search /
+            rerank) failed in the last 5 minutes — the hosted (or mock)
+            embeddings/inference/web-search upstream returned errors, was
+            unreachable, or timed out. The api surfaces these to clients as
+            502/503 (ADR-0014).
+
+      - alert: P95LatencyHigh
+        expr: >-
+          histogram_quantile(0.95, sum by (le, span_name) (
+            rate(traces_span_metrics_duration_milliseconds_bucket{
+              span_name=~".* /.*"}[5m]))) > 2000
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "p95 latency above the 2s ceiling"
+          description: >-
+            The client-facing p95 latency of {{ $labels.span_name }} exceeded
+            2000ms over the last 5 minutes (the volume-run /query ceiling from
+            decision #271). The api is serving but slow.
+
+      - alert: Internal5xx
+        expr: >-
+          (sum(rate(traces_span_metrics_calls_total{
+            span_name="retrieve", status_code="STATUS_CODE_ERROR"}[5m])) > 0)
+          or
+          (sum(rate(traces_span_metrics_calls_total{
+            span_name=~".* /.*", http_response_status_code=~"5..",
+            http_response_status_code!~"502|503"}[5m])) > 0)
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Internal failure: retrieval stage or internal 5xx"
+          description: >-
+            The api's own internal component is failing: either the retrieval
+            stage (its pgvector database) errored, or the api returned an
+            internal 5xx (in practice 500) to clients. The api maps a failed
+            retrieval to 502/503 per ADR-0014, so this alert watches the stage
+            directly rather than the client-visible status code.
+
+      - alert: IngestionFailed
+        expr: learning_hub_ingestion_failed > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Documents stuck in the failed ingestion state"
+          description: >-
+            {{ $value }} document(s) in the learning_hub database ended in the
+            'failed' ingestion state (postgres-exporter custom query, decision
+            #272). Background ingestion is failing for those documents.

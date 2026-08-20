@@ -15,6 +15,8 @@ def test_defaults() -> None:
     assert config.chat_latency_max_ms == 400
     assert config.web_search_latency_min_ms == 150
     assert config.web_search_latency_max_ms == 400
+    assert config.error_rate == 0.0
+    assert config.error_status == 500
 
 
 def test_env_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -33,3 +35,12 @@ def test_latency_can_be_zeroed_via_max_only(monkeypatch: pytest.MonkeyPatch) -> 
     monkeypatch.setenv("MOCK_WEB_SEARCH_LATENCY_MAX_MS", "0")
     config = MockUpstreamSettings()
     assert config.web_search_latency_max_ms == 0
+
+
+def test_fault_injection_env_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Fault injection knobs parse from their MOCK_* environment variables."""
+    monkeypatch.setenv("MOCK_ERROR_RATE", "0.5")
+    monkeypatch.setenv("MOCK_ERROR_STATUS", "502")
+    config = MockUpstreamSettings()
+    assert config.error_rate == 0.5
+    assert config.error_status == 502

@@ -6,6 +6,7 @@ process exports nothing; with one, a global ``TracerProvider`` is installed
 that exports every stage span.
 """
 
+import pytest
 from fastapi.testclient import TestClient
 from opentelemetry import trace as otel_trace
 from opentelemetry.sdk.trace import TracerProvider
@@ -95,6 +96,34 @@ def test_create_app_adds_request_root_span(
     assert attributes is not None
     assert attributes["http.request.method"] == "GET"
     assert attributes["url.path"] == "/health"
+
+
+def test_request_root_span_records_response_status_code(
+    mock_client: TestClient,
+    in_memory_tracing: InMemorySpanExporter,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The root span carries ``http.response.status_code`` for alert rules.
+
+    The span-metrics connector dimensions the api's root spans on this
+    attribute, so Prometheus can tell the 502/503 upstream failures apart
+    from internal 500s (issue #292).
+    """
+
+    def _broken() -> None:
+        msg = "could not connect to server: Connection refused"
+        raise ConnectionRefusedError(msg)
+
+    monkeypatch.setattr("api.routes.health.get_engine", _broken)
+
+    response = mock_client.get("/health")
+
+    assert response.status_code == 503
+    spans = in_memory_tracing.get_finished_spans()
+    assert [s.name for s in spans] == ["GET /health"]
+    attributes = spans[0].attributes
+    assert attributes is not None
+    assert attributes["http.response.status_code"] == 503
 
 
 def test_shutdown_telemetry_is_a_noop_without_an_exporter() -> None:

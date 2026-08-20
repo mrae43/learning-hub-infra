@@ -1,0 +1,14 @@
+# Blackbox-exporter config for the observability stack (issue #292).
+#
+# One HTTP module probing the api's /health as the service-down signal. The
+# module accepts ANY HTTP status code as a successful probe, so probe_success
+# drops to 0 only when the api process is unreachable or unresponsive — a
+# degraded api that still answers /health (e.g. 503 while the database is
+# down) stays "up" and is left to the RED-based alert rules.
+modules:
+  http_any_status:
+    prober: http
+    timeout: 5s
+    http:
+      valid_status_codes: []
+      follow_redirects: true

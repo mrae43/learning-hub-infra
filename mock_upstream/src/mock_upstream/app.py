@@ -25,6 +25,7 @@ import math
 import random
 
 from fastapi import APIRouter, FastAPI
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from mock_upstream.settings import settings
@@ -124,8 +125,8 @@ class ResponsesRequest(BaseModel):
     tools: list[dict[str, object]] | None = None
 
 
-@router.post("/embeddings")
-async def embeddings(request: EmbeddingsRequest) -> dict[str, object]:
+@router.post("/embeddings", response_model=None)
+async def embeddings(request: EmbeddingsRequest) -> dict[str, object] | JSONResponse:
     """Return deterministic embedding vectors for the given input(s).
 
     Args:
@@ -136,6 +137,9 @@ async def embeddings(request: EmbeddingsRequest) -> dict[str, object]:
         one deterministic, unit-norm vector per input.
     """
     await _simulate_latency(settings.embeddings_latency_min_ms, settings.embeddings_latency_max_ms)
+    failed = _maybe_fail()
+    if failed is not None:
+        return failed
     inputs = _input_list(request.input)
     data: list[dict[str, object]] = [
         {
@@ -154,8 +158,8 @@ async def embeddings(request: EmbeddingsRequest) -> dict[str, object]:
     }
 
 
-@router.post("/chat/completions")
-async def chat_completions(request: ChatCompletionRequest) -> dict[str, object]:
+@router.post("/chat/completions", response_model=None)
+async def chat_completions(request: ChatCompletionRequest) -> dict[str, object] | JSONResponse:
     """Return a deterministic chat-completions response.
 
     Args:
@@ -168,6 +172,9 @@ async def chat_completions(request: ChatCompletionRequest) -> dict[str, object]:
         turn.
     """
     await _simulate_latency(settings.chat_latency_min_ms, settings.chat_latency_max_ms)
+    failed = _maybe_fail()
+    if failed is not None:
+        return failed
     content = _chat_content(request)
     return {
         "id": "chatcmpl_mock_1",
@@ -185,8 +192,8 @@ async def chat_completions(request: ChatCompletionRequest) -> dict[str, object]:
     }
 
 
-@router.post("/responses")
-async def responses(request: ResponsesRequest) -> dict[str, object]:
+@router.post("/responses", response_model=None)
+async def responses(request: ResponsesRequest) -> dict[str, object] | JSONResponse:
     """Return a completed web-search Responses API payload.
 
     Args:
@@ -199,6 +206,9 @@ async def responses(request: ResponsesRequest) -> dict[str, object]:
         parses into ``WebSearchResult`` items.
     """
     await _simulate_latency(settings.web_search_latency_min_ms, settings.web_search_latency_max_ms)
+    failed = _maybe_fail()
+    if failed is not None:
+        return failed
     text = "The mock upstream stands in for hosted APIs during load runs."
     return {
         "id": "resp_mock_1",
@@ -297,6 +307,25 @@ def _message_text(message: ChatMessage) -> str:
         if isinstance(text, str):
             texts.append(text)
     return " ".join(texts)
+
+
+def _maybe_fail() -> JSONResponse | None:
+    """Return a fault-injected error response when the configured roll hits.
+
+    Load runs set ``MOCK_ERROR_RATE``/``MOCK_ERROR_STATUS`` (issue #292) to
+    make the mock return e.g. 502/503 responses, so the alert rules that key
+    on the api's upstream-error responses can be induced on demand. The roll
+    happens after the simulated latency, mimicking a server that processes
+    then fails; a zero rate never fails.
+    """
+    if settings.error_rate <= 0.0:
+        return None
+    if random.random() >= settings.error_rate:
+        return None
+    return JSONResponse(
+        status_code=settings.error_status,
+        content={"detail": f"Mocked upstream failure ({settings.error_status})."},
+    )
 
 
 async def _simulate_latency(min_ms: int, max_ms: int) -> None:
