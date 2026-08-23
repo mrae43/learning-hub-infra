@@ -233,7 +233,7 @@ Persistent scene primitives with stable IDs. The finalized primitive set (origin
 - `arrow` — connections between elements.
 - `group` — layout containers.
 
-Each element carries an `id`, a `type`, and an `x`/`y` position; type-specific payload lives in optional fields (`text`, `label`, `color`, `value`) and a `highlight` flag, with an optional `style` (`fontSize`, `fontWeight`, `textAnchor`, `fill`).
+Each element carries an `id` and a `type`; type-specific payload lives in optional fields (`text`, `label`, `color`, `value`) and a `highlight` flag, with an optional `style` (`fontSize`, `fontWeight`, `textAnchor`, `fill`). `x`/`y` are optional layout hints owned by the renderer (ADR-0022): an element without a position is laid out by code, and a producer that sets one keeps renderer-independent placement in the `viewport` coordinate space.
 
 ### `steps`
 

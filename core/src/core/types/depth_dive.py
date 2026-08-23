@@ -55,8 +55,9 @@ TreatmentHint = Treatment | DeferredTreatment
 class Viewport(BaseModel):
     """Nominal scene dimensions.
 
-    Screen-size independence is the client's job; ``width``/``height`` are the
-    design-time coordinate space (prototype: 800 x 520).
+    Screen-size independence is the renderer's job (ADR-0022);
+    ``width``/``height`` are the design-time coordinate space (prototype:
+    800 x 520).
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -81,16 +82,18 @@ class SceneElement(BaseModel):
 
     Type-specific payload lives in the optional fields (``text`` for
     ``text``/``token``, ``label`` + ``color`` for ``vector``, ``value`` for
-    ``score``, ``style`` for text rendering). The exact primitive set is
-    finalized during implementation (spec §7).
+    ``score``, ``style`` for text rendering). ``x``/``y`` are optional layout
+    hints owned by the renderer (ADR-0022): an element without a position is
+    laid out by code, and a producer that sets one keeps explicit placement.
+    The exact primitive set is finalized during implementation (spec §7).
     """
 
     model_config = ConfigDict(extra="forbid")
 
     id: str
     type: Literal["text", "token", "vector", "score", "arrow", "group"]
-    x: float
-    y: float
+    x: float | None = None
+    y: float | None = None
     text: str | None = None
     label: str | None = None
     color: str | None = None
