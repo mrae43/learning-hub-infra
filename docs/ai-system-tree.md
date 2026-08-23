@@ -29,12 +29,15 @@ learning-hub/
 │   │   │   ├── generation_agent.py
 │   │   │   ├── fallback_animation.py
 │   │   │   └── __init__.py
-│   │   ├── web_search/                # Web-search wrapper (retry-once + fallback)
+│   │   ├── render/                      # Deterministic renderer (ADR-0022): scene graph → HTML
+│   │   │   ├── html_renderer.py         # render_html: scene graph → self-contained HTML/CSS/JS
+│   │   │   └── __init__.py
+│   │   ├── web_search/                  # Web-search wrapper (retry-once + fallback)
 │   │   │   ├── client.py
 │   │   │   ├── wrapper.py
 │   │   │   └── __init__.py
 │   │   └── __init__.py
-│   ├── tests/depth_dive/              # transform/harness/framing/assembly/generation/web_search tests
+│   ├── tests/depth_dive/                # transform/harness/framing/assembly/generation/render/web_search tests
 │   └── pyproject.toml
 ├── core/                             # Shared (may stay here or move to common/ later)
 │   ├── src/core/

@@ -33,6 +33,7 @@ import core.retrieval.query  # noqa: F401
 import depth_dive.generation.fallback_animation
 import depth_dive.generation.generation_agent
 import depth_dive.harness
+import depth_dive.render.html_renderer
 import depth_dive.transform
 import depth_dive.web_search.client
 import depth_dive.web_search.wrapper  # noqa: F401
