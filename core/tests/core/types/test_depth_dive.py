@@ -162,6 +162,21 @@ def test_interactive_animation_forbids_extra_fields() -> None:
         )
 
 
+def test_scene_element_xy_are_optional_layout_hints() -> None:
+    """SceneElement x/y are optional and default to unset (ADR-0022).
+
+    Layout is renderer-owned: an element without a position is laid out by
+    code, and a producer that sets one keeps explicit placement.
+    """
+    element = SceneElement(id="tok-bank", type="token", text="bank")
+    assert element.x is None
+    assert element.y is None
+
+    placed = SceneElement(id="tok-bank", type="token", x=100.0, y=200.0, text="bank")
+    assert placed.x == 100.0
+    assert placed.y == 200.0
+
+
 def test_element_state_is_sparse() -> None:
     """ElementState accepts only the four mutable fields."""
     state = ElementState(opacity=0.5, value=0.15)
