@@ -16,13 +16,31 @@ from depth_dive.generation.generation_agent import (
     parse_animation,
     run_generation,
 )
+from depth_dive.generation.semantic_spec import (
+    NARRATION_ENTRY_MAX_CHARS,
+    NARRATION_MAX_ENTRIES,
+    RELATIONS_MAX_COUNT,
+    TOKENS_MAX_COUNT,
+    SemanticSpec,
+    SemanticSpecRelation,
+    SemanticSpecToken,
+    parse_semantic_spec,
+)
 
 __all__ = [
     "MALFORMED_OUTPUT_NOTE",
+    "NARRATION_ENTRY_MAX_CHARS",
+    "NARRATION_MAX_ENTRIES",
+    "RELATIONS_MAX_COUNT",
     "SYSTEM_PROMPT",
+    "TOKENS_MAX_COUNT",
     "GenerationResult",
+    "SemanticSpec",
+    "SemanticSpecRelation",
+    "SemanticSpecToken",
     "build_fallback_animation",
     "build_generation_prompt",
     "parse_animation",
+    "parse_semantic_spec",
     "run_generation",
 ]
