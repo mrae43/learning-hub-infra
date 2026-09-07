@@ -11,7 +11,7 @@ dependencies = [
     "core",
     "retrieval-qa",
     "ingestion",
-    "locust>=2.46.3",
+    "locust>=2.46.4",
     "pyyaml>=6.0",
     "requests>=2.34",
     "sqlalchemy>=2.0.52",
