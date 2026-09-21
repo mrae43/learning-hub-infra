@@ -14,7 +14,7 @@ dependencies = [
     "locust>=2.46.3",
     "pyyaml>=6.0",
     "requests>=2.34",
-    "sqlalchemy>=2.0.52",
+    "sqlalchemy>=2.0.54",
 ]
 
 [tool.uv.sources]
