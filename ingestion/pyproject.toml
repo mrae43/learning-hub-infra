@@ -10,7 +10,7 @@ license = "MIT"
 dependencies = [
     "core",
     "retrieval-qa",
-    "fastapi>=0.141.1",
+    "fastapi>=0.142.2",
 ]
 
 [tool.uv.sources]
