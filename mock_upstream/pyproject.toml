@@ -10,7 +10,7 @@ license = "MIT"
 dependencies = [
     "fastapi>=0.141.1",
     "uvicorn>=0.52.3",
-    "pydantic-settings>=2.15.0",
+    "pydantic-settings>=2.16.0",
 ]
 
 [tool.hatch.build.targets.wheel]
